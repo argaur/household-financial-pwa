@@ -4,6 +4,6 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/|sw\\.js|workbox-|registerSW\\.js|manifest\\.webmanifest|favicon\\.ico)(?!.*\\.).*)", "destination": "/index.html" }
   ]
 }
