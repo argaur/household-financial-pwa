@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import { handle } from 'hono/vercel'
 import * as Sentry from '@sentry/node'
 import { sql } from 'drizzle-orm'
-import { db } from './lib/db'
-import { computeHealth } from './lib/health'
+import { db } from './lib/db.js'
+import { computeHealth } from './lib/health.js'
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({

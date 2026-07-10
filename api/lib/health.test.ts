@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { computeHealth } from './health'
+import { computeHealth } from './health.js'
 
 describe('computeHealth', () => {
   it('reports db ok when the ping succeeds', async () => {
