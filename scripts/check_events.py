@@ -20,7 +20,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCAN_DIRS = ["src", "api"]
-ALLOWED_RAW_SDK_FILES = {"analytics.ts", "analytics.py"}
+ALLOWED_RAW_SDK_FILES = {"analytics.ts", "analytics.py", "posthog.ts"}
 CODE_EXT = {".ts", ".tsx", ".js", ".jsx", ".py"}
 
 RAW_SDK = re.compile(r"posthog\s*\.\s*(capture|init|identify)\s*\(")

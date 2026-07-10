@@ -6,23 +6,34 @@ Live: https://household-financial-pwa.vercel.app
 
 ## What it does
 
-A PWA for Indian households to learn what financial instruments exist, record what they actually hold across family members, and see household-level plan gaps via a scored Household Health panel. No feature capabilities exist yet — see Known limitations.
+A PWA for Indian households to learn what financial instruments exist, record what they actually hold across family members, and see household-level plan gaps via a scored Household Health panel. As of Slice 1, you can create an account and create your household — that's the full extent of the product so far.
 
 ## Quick start
 
-Not yet available — onboarding ships in Slice 1–4. Check back after the first feature slices land.
+1. Visit the app. You'll land on a sign-in screen.
+2. No account yet? Click "Don't have an account? Sign up" and create one (email + password, or an OAuth provider if enabled in Clerk).
+3. After signing in, you'll be asked for your household name (e.g. "Gupta Family") — this is Onboarding Step 1 of 3.
+4. Submit it. You'll see a confirmation that your household is set up. Steps 2–3 (family members, holdings) aren't built yet.
 
 ## Capabilities
 
-None yet. Slice 0 is infrastructure only (deploy pipeline, DB connection, analytics, error tracking) — no user-facing capability to document.
+### Signing up and creating your household
+
+Sign up or sign in via Clerk (email/password or OAuth). Once signed in, a household row is created for you, scoped entirely to your account — no other user can see or modify it. If you already have a household, you skip straight past the creation form.
+
+**What's enforced:** every household-related request resolves your identity from the Clerk session server-side; nothing about which household you're operating on is ever taken from the request body or URL. Two different accounts cannot see or affect each other's household, even with a malformed or missing session.
 
 ## FAQ
 
-**Why is there no visible product yet?**
-Slice 0 (Walking Skeleton) exists to prove the deployment pipeline — frontend, database, analytics, error tracking — before any feature code is written. This is deliberate: `IMPLEMENTATION_PLAN.md` orders slices hardest-unknown-first, and infrastructure risk is retired before feature risk.
+**Why is there no dashboard yet?**
+Slice 1 proves out authentication and the per-household data-scoping pattern (the riskiest architectural assumption in the whole build) before building the features that depend on it — family members, holdings, and the dashboard all come after. See `IMPLEMENTATION_PLAN.md`.
+
+**Why is there no visible product yet? (Slice 0 note, still true)**
+Slice 0 (Walking Skeleton) proved the deployment pipeline before any feature code was written — see prior note in git history for context.
 
 ## Known limitations
 
-- No onboarding, dashboard, or library yet — Slice 0 only.
+- No family members, holdings, dashboard, or library yet — those are Slices 2–6.
+- `signup_failed` / `login_failed` analytics events (in `METRICS_PLAN.md`) are not yet instrumented — Clerk's prebuilt sign-in/sign-up UI doesn't expose a failure callback without a fully custom auth form, which was judged out of scope for this slice. `signup_completed` / `login_completed` are instrumented.
 - Server-side (API route) error capture is deferred; only client-side Sentry is wired so far.
-- The home screen you see now (`/`) is a temporary system-status page, not the product's actual home screen — it will be replaced entirely once Slice 4 (onboarding) ships.
+- Clerk/Sentry env vars are set in Vercel's Production environment only — Preview environment addition is a follow-up (the Vercel CLI's non-interactive preview-branch flow didn't cooperate; needs the dashboard).

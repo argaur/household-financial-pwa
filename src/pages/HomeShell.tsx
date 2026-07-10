@@ -24,8 +24,6 @@ export function HomeShell() {
   const { toast } = useToast()
 
   useEffect(() => {
-    track('page_viewed', { path: '/', referrer: document.referrer })
-
     fetch('/api/health')
       .then((res) => {
         if (!res.ok) throw new Error(`/api/health returned ${res.status}`)
