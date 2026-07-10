@@ -1,23 +1,20 @@
 import { Hono } from 'hono'
 import { handle } from 'hono/vercel'
-import * as Sentry from '@sentry/node'
 import { sql } from 'drizzle-orm'
 import { db } from './lib/db.js'
 import { computeHealth } from './lib/health.js'
 
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    release: process.env.VERCEL_GIT_COMMIT_SHA || 'dev',
-    environment: process.env.VERCEL_ENV || 'development',
-    tracesSampleRate: 0.1,
-  })
-}
-
+// hono/vercel's handler is a Web fetch-style function (Request -> Response),
+// which requires the Edge runtime. Setting runtime: 'nodejs' silently drops
+// the Response (Vercel logs "default export returned a Response" and the
+// request hangs until timeout) — this bit us on the first Slice 0 deploy.
 export const config = {
-  runtime: 'nodejs',
+  runtime: 'edge',
 }
 
+// @sentry/node is not Edge-compatible; server-side error capture for API
+// routes is deferred until a slice needs it (Slice 0's Sentry smoke test
+// is satisfied client-side — see src/lib/sentry.ts + HomeShell.tsx).
 const app = new Hono().basePath('/api')
 
 app.get('/health', async (c) => {
@@ -25,14 +22,11 @@ app.get('/health', async (c) => {
     npm_package_version: process.env.npm_package_version,
     commit_sha: process.env.VERCEL_GIT_COMMIT_SHA,
   })
-  if (result.db === 'error') {
-    Sentry.captureMessage('Health check: database ping failed')
-  }
   return c.json(result)
 })
 
 app.onError((err, c) => {
-  Sentry.captureException(err)
+  console.error(err)
   return c.json({ status: 'error', message: err.message }, 500)
 })
 
