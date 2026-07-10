@@ -1,17 +1,17 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../lib/db.js'
-import { requireUserId } from '../lib/auth.js'
+import { verifyUserId } from '../lib/auth.js'
 import { getHouseholdForOwner, createHouseholdForOwner } from '../lib/household.js'
 
 const createHouseholdSchema = z.object({ name: z.string() })
 
-// Mounted under clerkMiddleware() by api/app.ts — every handler here assumes
-// a session may or may not be present and must check requireUserId() itself.
+// Every handler resolves the caller's identity from the Authorization header
+// via verifyUserId() — never from the request body/URL.
 export const householdRoutes = new Hono()
 
 householdRoutes.get('/', async (c) => {
-  const userId = requireUserId(c)
+  const userId = await verifyUserId(c.req.header('authorization'))
   if (!userId) return c.json({ error: 'unauthorized' }, 401)
 
   const household = await getHouseholdForOwner(db, userId)
@@ -19,7 +19,7 @@ householdRoutes.get('/', async (c) => {
 })
 
 householdRoutes.post('/', async (c) => {
-  const userId = requireUserId(c)
+  const userId = await verifyUserId(c.req.header('authorization'))
   if (!userId) return c.json({ error: 'unauthorized' }, 401)
 
   const body = await c.req.json().catch(() => null)

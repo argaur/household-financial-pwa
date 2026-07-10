@@ -19,7 +19,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SCAN_DIRS = ["src", "api"]
+SCAN_DIRS = ["src", "api", "server"]
 ALLOWED_RAW_SDK_FILES = {"analytics.ts", "analytics.py", "posthog.ts"}
 CODE_EXT = {".ts", ".tsx", ".js", ".jsx", ".py"}
 

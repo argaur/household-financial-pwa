@@ -1,5 +1,5 @@
 import { handle } from 'hono/vercel'
-import { app } from './app.js'
+import { app } from '../server/app.js'
 
 // hono/vercel's handler is a Web fetch-style function (Request -> Response),
 // which requires the Edge runtime. Setting runtime: 'nodejs' silently drops

@@ -1,15 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// Fake Clerk middleware: reads userId from a test-only header instead of
-// verifying a real session token, so the isolation test below can drive two
-// distinct "signed in" users through the real Hono app without hitting Clerk.
-vi.mock('@hono/clerk-auth', () => ({
-  clerkMiddleware: () => async (c: { set: (k: string, v: unknown) => void; req: { header: (h: string) => string | undefined } }, next: () => Promise<void>) => {
-    const userId = c.req.header('x-test-user-id') ?? null
-    c.set('clerkAuth', userId ? { userId } : null)
-    await next()
+process.env.VITE_CLERK_PUBLISHABLE_KEY = 'pk_test_ZmFrZS5jbGVyay5hY2NvdW50cy5kZXYk'
+
+// Fake token verification: treat the bearer token as the userId directly,
+// instead of verifying a real Clerk-signed JWT, so the isolation test below
+// can drive two distinct "signed in" users through the real Hono app without
+// hitting Clerk's JWKS endpoint.
+vi.mock('jose', () => ({
+  createRemoteJWKSet: () => ({}),
+  jwtVerify: async (token: string) => {
+    if (token === 'invalid') throw new Error('signature verification failed')
+    return { payload: { sub: token } }
   },
-  getAuth: (c: { get: (k: string) => unknown }) => c.get('clerkAuth'),
 }))
 
 // In-memory household store standing in for Neon — keyed by ownerUserId, same
@@ -71,15 +73,20 @@ describe('household routes — two-user isolation', () => {
     ownerFilter = undefined
   })
 
-  it('rejects a request with no session', async () => {
+  it('rejects a request with no Authorization header', async () => {
     const res = await app.request('/api/household')
+    expect(res.status).toBe(401)
+  })
+
+  it('rejects a request with a token that fails verification', async () => {
+    const res = await app.request('/api/household', { headers: { authorization: 'Bearer invalid' } })
     expect(res.status).toBe(401)
   })
 
   it('creates a household scoped to the requesting user', async () => {
     const res = await app.request('/api/household', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-test-user-id': 'user_a' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
       body: JSON.stringify({ name: 'Gupta Family' }),
     })
     expect(res.status).toBe(201)
@@ -90,24 +97,24 @@ describe('household routes — two-user isolation', () => {
   it('a second user creating a household does not see or affect the first user\'s household', async () => {
     await app.request('/api/household', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-test-user-id': 'user_a' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
       body: JSON.stringify({ name: 'Gupta Family' }),
     })
 
-    const userBGet = await app.request('/api/household', { headers: { 'x-test-user-id': 'user_b' } })
+    const userBGet = await app.request('/api/household', { headers: { authorization: 'Bearer user_b' } })
     const userBBody = (await userBGet.json()) as HouseholdResponse
     expect(userBBody.household).toBeNull()
 
     const userBPost = await app.request('/api/household', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-test-user-id': 'user_b' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_b' },
       body: JSON.stringify({ name: 'Sharma Family' }),
     })
     const userBCreated = (await userBPost.json()) as HouseholdResponse
     expect(userBCreated.household?.ownerUserId).toBe('user_b')
     expect(userBCreated.household?.name).toBe('Sharma Family')
 
-    const userAGet = await app.request('/api/household', { headers: { 'x-test-user-id': 'user_a' } })
+    const userAGet = await app.request('/api/household', { headers: { authorization: 'Bearer user_a' } })
     const userABody = (await userAGet.json()) as HouseholdResponse
     expect(userABody.household?.name).toBe('Gupta Family')
   })
@@ -115,7 +122,7 @@ describe('household routes — two-user isolation', () => {
   it('rejects a malformed request body', async () => {
     const res = await app.request('/api/household', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-test-user-id': 'user_a' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
       body: JSON.stringify({ notName: 'oops' }),
     })
     expect(res.status).toBe(400)
@@ -124,7 +131,7 @@ describe('household routes — two-user isolation', () => {
   it('rejects a whitespace-only name with 400 (name-validation failure)', async () => {
     const res = await app.request('/api/household', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-test-user-id': 'user_a' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
       body: JSON.stringify({ name: '   ' }),
     })
     expect(res.status).toBe(400)
@@ -133,7 +140,7 @@ describe('household routes — two-user isolation', () => {
   it('surfaces a DB error as 500, not as a mislabeled 400 invalid_name', async () => {
     const res = await app.request('/api/household', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-test-user-id': 'user_db_error' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_db_error' },
       body: JSON.stringify({ name: 'Gupta Family' }),
     })
     expect(res.status).toBe(500)

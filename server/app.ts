@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { sql } from 'drizzle-orm'
-import { clerkMiddleware } from '@hono/clerk-auth'
 import { db } from './lib/db.js'
 import { computeHealth } from './lib/health.js'
 import { householdRoutes } from './routes/household.js'
@@ -18,7 +17,6 @@ app.get('/health', async (c) => {
   return c.json(result)
 })
 
-app.use('/household/*', clerkMiddleware())
 app.route('/household', householdRoutes)
 
 app.onError((err, c) => {
