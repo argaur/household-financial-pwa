@@ -55,3 +55,31 @@
 - [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as Slice 0
 
 **Result:** PASS — 2026-07-10, verified live at https://household-financial-pwa.vercel.app. Sign-up, household creation, and household-scoped persistence across refresh/sign-out-sign-in all confirmed working. One deploy-time gotcha found and fixed along the way: a stale PWA service worker (installed during the Slice 0 visit) served the old cached shell after this deploy went live, masking the new code until the service worker was unregistered and the page hard-refreshed — worth remembering for every future slice's live smoke-test, not just this one. Accessibility checklist not walked this pass — deferred to Slice 10 per Slice 0's precedent.
+
+---
+
+## Capability: Slice 2 — Family members CRUD (Onboarding Step 2)
+
+**Setup:** Sign in with an account that already has a household (from Slice 1) but no family members yet.
+
+**Steps:**
+1. Load the page — you should land on "Who are we planning for?" (Onboarding Step 2 of 3).
+2. Try clicking "Continue" with no members added — it should be disabled.
+3. Click "Add a family member." A bottom sheet opens.
+4. Fill in name, relationship, date of birth (risk profile optional) and click "Add to plan."
+5. The sheet closes and a member card appears with the name and relationship/DOB.
+6. "Continue" should now be enabled.
+7. Click "Continue" — you should land on a confirmation screen mentioning holdings come next.
+8. Refresh the page — you should land directly on that same confirmation screen, not back at Step 2.
+
+**Expected:** No step requires a household ID or member ID to be typed or visible anywhere in the UI or URL — both are resolved from the session server-side. A second account never sees another household's members.
+
+**Pass criteria:** All 8 steps behave as described; no console errors related to `/api/family-members` calls.
+
+**Accessibility check (from Constraints Contract in `SPEC.md`):**
+- [ ] Usable at mobile breakpoint (390px)
+- [ ] Focus states visible when tabbing through the add-member form
+- [ ] Touch targets ≥44px on Continue / Add to plan
+- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as Slice 0/1
+
+**Result:** Automated verification complete and passing: 55 tests (unit + two-user isolation integration tests for both `/api/household` and `/api/family-members`, plus component tests for the add-member form including the disabled/enabled Continue transitions), `npm run typecheck` clean, `check_events.py` clean. A full automated browser click-through (Playwright, matching how Slice 0/1 were verified) was attempted but blocked at the Clerk sign-up screen by a Cloudflare Turnstile bot-check that gates account creation on this Clerk instance — the same class of environmental limitation as Slice 0's PostHog headless-detection issue, not a code defect. Did not attempt to defeat the bot-check (a legitimate third-party security control). **This capability has not yet had a human click-through** — needs Gaurav to do the 8 steps above once, live, before this is fully signed off (should take under 2 minutes; the underlying code paths are identical in shape to Slice 1's, which did pass a full human-verified live test).

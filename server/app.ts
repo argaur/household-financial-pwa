@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from './lib/db.js'
 import { computeHealth } from './lib/health.js'
 import { householdRoutes } from './routes/household.js'
+import { familyMembersRoutes } from './routes/family-members.js'
 
 // @sentry/node is not Edge-compatible; server-side error capture for API
 // routes is deferred until a slice needs it (Slice 0's Sentry smoke test
@@ -18,6 +19,7 @@ app.get('/health', async (c) => {
 })
 
 app.route('/household', householdRoutes)
+app.route('/family-members', familyMembersRoutes)
 
 app.onError((err, c) => {
   console.error(err)
