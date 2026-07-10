@@ -7,9 +7,11 @@ A public PWA for Indian households to learn what financial instruments exist, re
 
 ## Framework state
 - **Framework:** Blueprint (rubric 3/5, locked 2026-06-13 — see `FRAMEWORK.md`)
-- **Current phase:** 3 Plan — complete ("Plan approved" 2026-07-10, Gaurav authorized session-level autonomous decision-making)
-- **Gate status:** Plan approved 2026-07-10 — next gate is Phase 4 Slice execution (`/slice`), starting with Slice 0 (Walking Skeleton)
-- **Kill criterion:** If Slice 0 (onboarding → dashboard, deployed end-to-end) isn't deployed by **2026-07-23** → descope to Builder OS
+- **Current phase:** 4 Slice execution — Slice 0 (Walking Skeleton) shipped and deployed 2026-07-10
+- **Gate status:** Slice 0 live at https://household-financial-pwa.vercel.app — next up is Slice 1 (Auth + household creation), blocked on Clerk credentials (see Blockers below)
+- **Kill criterion:** Slice 0 deployed 2026-07-10 — **met**, 13 days ahead of the 2026-07-23 deadline
+- **Live infra:** GitHub `argaur/household-financial-pwa` (public) · Vercel project `household-financial-pwa` (team `argaurs-projects`) · Neon Postgres (auto-provisioned via Vercel Marketplace, 7-table schema migrated) · PostHog (shared "Default project" in org `personal-lab-0p` — see Blockers re: dedicated project) · Sentry (org `personal-lab-0p`, project not yet created — see Blockers)
+- **Blockers for Slice 1+:** (1) Clerk account + application needed — publishable + secret key required before auth work starts. (2) Sentry project creation is blocked by an org permission ("members can't create projects") on `personal-lab-0p` — Gaurav needs to either flip that setting or create the `household-financial-pwa` project himself and hand over the DSN.
 
 ## Architecture
 Vite + React SPA ↔ Hono API (Vercel Functions) ↔ Drizzle ORM ↔ Neon Postgres. Clerk for auth. PWA shell via vite-plugin-pwa (precached library + last-known dashboard, read-only offline). PostHog + internal `analytics_events` table for analytics; Sentry for errors.
