@@ -12,3 +12,4 @@ coverage/
 
 .vercel
 .env*.local
+.claude/worktrees/
