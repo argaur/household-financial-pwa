@@ -54,4 +54,4 @@
 - [ ] Touch targets ≥44px on the Continue button
 - [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as Slice 0
 
-**Result:** _pending live smoke-run — filled in after deployment._
+**Result:** PASS — 2026-07-10, verified live at https://household-financial-pwa.vercel.app. Sign-up, household creation, and household-scoped persistence across refresh/sign-out-sign-in all confirmed working. One deploy-time gotcha found and fixed along the way: a stale PWA service worker (installed during the Slice 0 visit) served the old cached shell after this deploy went live, masking the new code until the service worker was unregistered and the page hard-refreshed — worth remembering for every future slice's live smoke-test, not just this one. Accessibility checklist not walked this pass — deferred to Slice 10 per Slice 0's precedent.
