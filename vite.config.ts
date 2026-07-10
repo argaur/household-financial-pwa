@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico'],
+      includeAssets: ['favicon.png'],
       manifest: {
         name: 'Household Financial Planning',
         short_name: 'FamilyPlan',
