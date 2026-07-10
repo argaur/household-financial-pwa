@@ -1,0 +1,52 @@
+"""
+Typed event registry — backend (app/analytics.py in your project).
+
+THE RULE: this track() wrapper is the only public analytics surface.
+No raw posthog.capture() calls in feature code — CI (check_events.py) fails the build.
+
+Every event maps 1:1 to a row in Documentation/solution/METRICS_PLAN.md.
+Adding an event = add the METRICS_PLAN row, then the registry entry, same commit.
+
+Note: the posthog Python SDK is sync — never add `await` to capture calls.
+"""
+
+import os
+
+import posthog
+
+posthog.project_api_key = os.environ.get("POSTHOG_API_KEY", "")
+posthog.host = os.environ.get("POSTHOG_HOST", "https://app.posthog.com")
+
+# ── Universal event baseline (every project — do not remove) ────────────────
+UNIVERSAL_EVENTS: frozenset[str] = frozenset({
+    "page_viewed",
+    "session_started",
+    "signup_completed",
+    "signup_failed",
+    "login_completed",
+    "login_failed",
+    "feature_used",
+    "error_shown",
+    "cta_clicked",
+})
+
+# ── Project-specific events (one per v1 feature in SOLUTION_BRIEF.md) ───────
+PROJECT_EVENTS: frozenset[str] = frozenset({
+    # "habit_created",
+})
+
+REGISTERED_EVENTS: frozenset[str] = UNIVERSAL_EVENTS | PROJECT_EVENTS
+
+
+class UnregisteredEventError(ValueError):
+    """Raised when an event name is not in the registry. Fix the name or register it."""
+
+
+def track(distinct_id: str, event: str, properties: dict | None = None) -> None:
+    """Send an analytics event. Raises on unregistered event names — never silently."""
+    if event not in REGISTERED_EVENTS:
+        raise UnregisteredEventError(
+            f"Event '{event}' is not in REGISTERED_EVENTS. "
+            f"Add it to METRICS_PLAN.md and analytics.py in the same commit."
+        )
+    posthog.capture(distinct_id=distinct_id, event=event, properties=properties or {})

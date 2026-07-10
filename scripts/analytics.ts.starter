@@ -1,0 +1,45 @@
+/**
+ * Typed event registry — frontend (lib/analytics.ts in your project).
+ *
+ * THE RULE: this `track()` wrapper is the only public analytics surface.
+ * No raw posthog.capture() calls in feature code — CI (check_events.py) fails the build.
+ *
+ * Why: without a registry, the AI invents slightly different event names in each
+ * slice ("signup_complete" vs "signup_completed"), which silently fragments
+ * PostHog funnels. The union type makes an unregistered name a compile error.
+ *
+ * Workflow: every event here maps 1:1 to a row in Documentation/solution/METRICS_PLAN.md.
+ * Adding an event = add the METRICS_PLAN row, then the type, in the same commit.
+ */
+
+import posthog from "posthog-js";
+
+// ── Universal event baseline (every project — do not remove) ────────────────
+type UniversalEvent =
+  | "page_viewed"          // path, referrer
+  | "session_started"      // utm_source, utm_medium, device_type
+  | "signup_completed"     // method, source
+  | "signup_failed"        // method, error_reason
+  | "login_completed"      // method
+  | "login_failed"         // method, error_reason
+  | "feature_used"         // feature_name
+  | "error_shown"          // error_type, surface, message
+  | "cta_clicked";         // cta_name, surface, destination
+
+// ── Project-specific events (one per v1 feature in SOLUTION_BRIEF.md) ───────
+type ProjectEvent =
+  | "REPLACE_ME_feature_event"; // delete this line when you add real events
+
+export type AnalyticsEvent = UniversalEvent | ProjectEvent;
+
+export function track(
+  event: AnalyticsEvent,
+  properties: Record<string, string | number | boolean | null> = {}
+): void {
+  posthog.capture(event, properties);
+}
+
+// Initialise in Slice 0 (app entry):
+//   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
+//     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://app.posthog.com",
+//   });

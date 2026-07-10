@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Design system — Household Financial Planning PWA
+  Voice: CFP one-pager on a vertical canvas. Warm editorial × calm minimal.
+  All values in HSL so Tailwind CSS variable bridge works correctly.
+*/
+
+@layer base {
+  :root {
+    /* ── Backgrounds ─────────────────────────────────────────── */
+    --background:     40 20% 97%;   /* #F7F5F1  warm off-white — the "paper" */
+    --card:           40 15% 99%;   /* #FDFCFA  card surface, barely warmer than white */
+    --popover:        40 15% 99%;
+
+    /* ── Foregrounds ─────────────────────────────────────────── */
+    --foreground:          30 10% 10%;   /* #1A1814  near-black with warmth */
+    --card-foreground:     30 10% 10%;
+    --popover-foreground:  30 10% 10%;
+
+    /* ── Primary — deep teal ─────────────────────────────────── */
+    --primary:            180 60% 26%;   /* #1B6B6B */
+    --primary-foreground:  40 20% 97%;   /* warm white on teal */
+
+    /* ── Secondary / Muted ───────────────────────────────────── */
+    --secondary:            30  8% 93%;   /* #EDEBE6  warm light gray */
+    --secondary-foreground: 30 10% 20%;
+    --muted:                30  8% 93%;
+    --muted-foreground:     30  6% 45%;   /* #6B6660  secondary text */
+
+    /* ── Accent — teal tint (subtle highlight bg) ────────────── */
+    --accent:            180 40% 93%;   /* #E8F3F2 */
+    --accent-foreground: 180 60% 26%;
+
+    /* ── Destructive ─────────────────────────────────────────── */
+    --destructive:            0 70% 35%;   /* #991B1B */
+    --destructive-foreground: 40 20% 97%;
+
+    /* ── Borders / Inputs / Ring ─────────────────────────────── */
+    --border: 35 12% 88%;   /* #E8E5E0  warm light border */
+    --input:  35 12% 88%;
+    --ring:  180 60% 26%;   /* teal focus ring */
+
+    /* ── Radius ──────────────────────────────────────────────── */
+    --radius: 0.5rem;       /* 8px — restrained, not bubbly */
+  }
+
+  .dark {
+    /* ── Backgrounds ─────────────────────────────────────────── */
+    --background:  30 15%  8%;   /* #141210  warm near-black */
+    --card:        30 12% 11%;   /* #1E1C19 */
+    --popover:     30 12% 11%;
+
+    /* ── Foregrounds ─────────────────────────────────────────── */
+    --foreground:          40 20% 97%;
+    --card-foreground:     40 20% 97%;
+    --popover-foreground:  40 20% 97%;
+
+    /* ── Primary — lighter teal on dark ─────────────────────── */
+    --primary:            180 50% 42%;   /* #3D9B9B */
+    --primary-foreground:  30 15%  8%;
+
+    /* ── Secondary / Muted ───────────────────────────────────── */
+    --secondary:            30 10% 16%;   /* #2C2925 */
+    --secondary-foreground: 40 15% 80%;
+    --muted:                30 10% 16%;
+    --muted-foreground:     30  8% 60%;   /* #A09A94 */
+
+    /* ── Accent ──────────────────────────────────────────────── */
+    --accent:            180 30% 18%;
+    --accent-foreground: 180 50% 70%;
+
+    /* ── Destructive ─────────────────────────────────────────── */
+    --destructive:            0 62% 50%;
+    --destructive-foreground: 40 20% 97%;
+
+    /* ── Borders / Inputs / Ring ─────────────────────────────── */
+    --border: 30 10% 18%;   /* #2C2A26 */
+    --input:  30 10% 18%;
+    --ring:  180 50% 42%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Tabular figures for all monetary displays */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* Section label — the CFP document section header pattern */
+  .section-label {
+    @apply text-xs font-semibold tracking-widest uppercase text-muted-foreground;
+  }
+}
