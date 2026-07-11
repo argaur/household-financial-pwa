@@ -5,6 +5,7 @@ import { computeHealth } from './lib/health.js'
 import { householdRoutes } from './routes/household.js'
 import { familyMembersRoutes } from './routes/family-members.js'
 import { instrumentsRoutes } from './routes/instruments.js'
+import { holdingsRoutes } from './routes/holdings.js'
 
 // @sentry/node is not Edge-compatible; server-side error capture for API
 // routes is deferred until a slice needs it (Slice 0's Sentry smoke test
@@ -22,6 +23,7 @@ app.get('/health', async (c) => {
 app.route('/household', householdRoutes)
 app.route('/family-members', familyMembersRoutes)
 app.route('/instruments', instrumentsRoutes)
+app.route('/holdings', holdingsRoutes)
 
 app.onError((err, c) => {
   console.error(err)

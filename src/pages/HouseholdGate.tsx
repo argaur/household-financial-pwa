@@ -6,25 +6,36 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { track } from '@/lib/analytics'
 import { fetchHousehold, HouseholdApiError, type Household } from '@/lib/household-api'
-import { listFamilyMembers } from '@/lib/family-members-api'
+import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
+import { listHoldings } from '@/lib/holdings-api'
 import { OnboardingStep1 } from './OnboardingStep1'
 import { OnboardingStep2 } from './OnboardingStep2'
+import { OnboardingStep3 } from './OnboardingStep3'
 
-type State = 'loading' | 'no-household' | 'onboarding-members' | 'has-household' | 'error' | 'session-expired'
+type State =
+  | 'loading'
+  | 'no-household'
+  | 'onboarding-members'
+  | 'onboarding-holdings'
+  | 'has-household'
+  | 'error'
+  | 'session-expired'
 
 /**
  * Resolves the signed-in user's onboarding position purely from data (no
  * separate "current step" flag persisted): no household -> Step 1; household
- * but no family members yet -> Step 2; household with >=1 member -> holdings
- * (Step 3, a later slice) is next. A household with members is deliberately
- * shown as a plain confirmation, not a full dashboard (that's Slice 6).
+ * but no family members yet -> Step 2; members but no holdings yet -> Step 3;
+ * household with >=1 holding -> onboarded. A fully onboarded household is
+ * deliberately shown as a plain confirmation, not a full dashboard (that's
+ * Slice 6).
  */
 export function HouseholdGate() {
   const { getToken } = useAuth()
   const { signOut } = useClerk()
   const [state, setState] = useState<State>('loading')
   const [household, setHousehold] = useState<Household | null>(null)
-  const onboardingStartedFired = useRef(new Set<'household' | 'members'>())
+  const [members, setMembers] = useState<FamilyMember[]>([])
+  const onboardingStartedFired = useRef(new Set<'household' | 'members' | 'holdings'>())
 
   useEffect(() => {
     let cancelled = false
@@ -38,9 +49,16 @@ export function HouseholdGate() {
           return
         }
         setHousehold(result)
-        const members = await listFamilyMembers(token)
+        const memberList = await listFamilyMembers(token)
         if (cancelled) return
-        setState(members.length === 0 ? 'onboarding-members' : 'has-household')
+        if (memberList.length === 0) {
+          setState('onboarding-members')
+          return
+        }
+        setMembers(memberList)
+        const holdings = await listHoldings(token)
+        if (cancelled) return
+        setState(holdings.length === 0 ? 'onboarding-holdings' : 'has-household')
       } catch (err) {
         if (cancelled) return
         setState(err instanceof HouseholdApiError && err.status === 401 ? 'session-expired' : 'error')
@@ -59,6 +77,10 @@ export function HouseholdGate() {
     if (state === 'onboarding-members' && !onboardingStartedFired.current.has('members')) {
       onboardingStartedFired.current.add('members')
       track('onboarding_started', { step: 'members' })
+    }
+    if (state === 'onboarding-holdings' && !onboardingStartedFired.current.has('holdings')) {
+      onboardingStartedFired.current.add('holdings')
+      track('onboarding_started', { step: 'holdings' })
     }
   }, [state])
 
@@ -110,7 +132,20 @@ export function HouseholdGate() {
   }
 
   if (state === 'onboarding-members') {
-    return <OnboardingStep2 onContinue={() => setState('has-household')} />
+    return (
+      <OnboardingStep2
+        onContinue={async () => {
+          const token = await getToken()
+          const memberList = await listFamilyMembers(token)
+          setMembers(memberList)
+          setState('onboarding-holdings')
+        }}
+      />
+    )
+  }
+
+  if (state === 'onboarding-holdings') {
+    return <OnboardingStep3 members={members} onContinue={() => setState('has-household')} />
   }
 
   return (
@@ -121,10 +156,10 @@ export function HouseholdGate() {
           <h1 className="font-display text-display">{household?.name}</h1>
         </header>
         <Separator />
-        <p className="text-body text-muted-foreground">
-          Your household and family members are set up. Recording your holdings comes next — that part of
-          onboarding ships in an upcoming slice.
-        </p>
+        <p className="text-body text-muted-foreground">Your plan is set up with its first holding recorded.</p>
+        <Link to="/portfolio" className="text-body underline">
+          View your holdings →
+        </Link>
         <Link to="/explore" className="text-body underline">
           Explore what you can invest in →
         </Link>

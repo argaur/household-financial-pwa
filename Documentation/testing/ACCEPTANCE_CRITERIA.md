@@ -112,3 +112,39 @@
 **Real bug found and fixed along the way, not a local-tooling fluke:** the original design used a `/api/instruments/:slug` path parameter for instrument detail. This 404'd under local `vercel dev`, then 404'd identically on a real production deploy — `vercel build`'s generated `.vercel/output/config.json` showed Vercel's zero-config routing for this project (`framework: "vite"`, not Next.js) only maps single-path-segment requests under `/api/` to the catch-all function; anything with a second segment hits a hardcoded 404 rule the platform generates itself. Confirmed this isn't specific to the new route — `/api/family-members/anything` 404s the same way on the already-shipped Slice 2 code, it just never happened to be exercised. Fixed by switching instrument-detail lookup to a query param (`/api/instruments?slug=...`), the same fix-pattern this project already used twice for Vercel platform limitations (manual JWT verification instead of `@hono/clerk-auth`; moving server code out of `api/`). Re-verified live on production after the fix — see below.
 
 **Live verification:** confirmed on production (https://household-financial-pwa.vercel.app) after the query-param fix: `/api/instruments` (list, 30 rows), `/api/instruments?category=N` (filtered, 5 rows), and `/api/instruments?slug=equity-direct-stocks` (single instrument, 200) all return real data; `/api/instruments?slug=does-not-exist` returns 404. Browser click-through of the Explore → section → detail flow and the offline/airplane-mode check are still owed to Gaurav, same as Slice 2's pending human click-through — Playwright automation isn't attempted here since this capability doesn't touch Clerk/PostHog's bot-detection walls, but a live human pass hasn't been done yet.
+
+---
+
+## Capability: Slice 4 — Holdings entry (Onboarding Step 3 + Portfolio tab)
+
+**Setup:** Sign in with an account that already has a household and at least one family member (from Slices 1/2) but no holdings yet.
+
+**Steps:**
+1. Load the page — you should land on "What do you currently hold?" (Onboarding Step 3 of 3).
+2. Try clicking "See my plan" with nothing filled in — it should be disabled.
+3. Select a family member under "For," then select any instrument under "Instrument" — an "Asset class" field appears, auto-filled and disabled (e.g. "Equity" for a stock fund).
+4. Type an amount invested and a current value.
+5. Click "Optional fields" — units held, monthly SIP, start date, maturity date, and nominee appear; leave them blank.
+6. Check "Mark as emergency fund," then click "See my plan."
+7. You should land on a confirmation screen with a "View your holdings →" link and an "Explore what you can invest in →" link.
+8. Tap "View your holdings →". You should see "Your holdings" with a 1-holding summary line and your holding grouped under the member's name.
+9. Tap the holding row — a sheet opens titled "Update holding," pre-filled with everything you entered (including the emergency-fund checkbox and current value).
+10. Change the current value and click "Save changes" — the sheet closes and the updated value shows in the list.
+11. Tap the "+" button (bottom-right) — an empty "Record a holding" sheet opens; add a second holding for the same or a different member and confirm it appears as a second row/group as appropriate.
+12. Refresh the page — you should land directly on Portfolio's holdings list (not back at onboarding).
+
+**Expected:** No step requires a member ID, instrument ID, or holding ID to be typed or visible anywhere in the UI or URL — all resolved from the session server-side or from what you picked in the form. A second account never sees or can edit another household's holdings, even by guessing a holding ID in the edit sheet's `?id=` query param.
+
+**Pass criteria:** All 12 steps behave as described; no console errors related to `/api/holdings` calls; `onboarding_step_completed` (step=holdings), `onboarding_completed`, `holding_created`, and `holding_updated` events fire (visible in PostHog) at the appropriate steps.
+
+**Accessibility check (from Constraints Contract in `SPEC.md`):**
+- [ ] Usable at mobile breakpoint (390px)
+- [ ] Focus states visible when tabbing through the holding form and Portfolio rows
+- [ ] Touch targets ≥44px on the "+" FAB and holding rows
+- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+
+**Result:** Automated verification complete and passing: unit tests for the `holdings` lib (asset-class derivation, cross-household member rejection, negative-amount rejection), two-user isolation integration tests for `/api/holdings` (list/create/update, including a test that caught a real filter bug in the test's own mock — see below), and component tests for the shared `HoldingForm`, `OnboardingStep3`, and `Portfolio` pages (empty state, grouped list, add-sheet, edit-sheet pre-fill). `npm run typecheck` and `scripts/check_events.py` both clean.
+
+**A real bug caught by the isolation test itself, not shipped code:** while writing the `/api/holdings` integration test's in-memory mock, the `and(eq(a), eq(b))` composition initially lost the column names for the second condition, silently turning the household-ownership filter into a no-op inside the *test's own fake database* — the test for "reject a holding referencing a member from a different household" passed with a false green (201 instead of 400) until this was traced and fixed. The production code in `server/lib/holdings.ts` was correct throughout; this was a lesson about verifying a new test helper's filtering logic actually filters, not just returning the right shape, before trusting a passing isolation test — worth remembering for the next slice that introduces `and()`-composed queries in a hand-rolled mock.
+
+**Live verification:** owed to Gaurav — human click-through of the 12 steps above, plus the still-pending Slice 2/3 click-throughs, before this slice is fully signed off.
