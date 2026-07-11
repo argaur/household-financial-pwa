@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth, useClerk } from '@clerk/clerk-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
@@ -124,6 +125,9 @@ export function HouseholdGate() {
           Your household and family members are set up. Recording your holdings comes next — that part of
           onboarding ships in an upcoming slice.
         </p>
+        <Link to="/explore" className="text-body underline">
+          Explore what you can invest in →
+        </Link>
       </div>
     </main>
   )

@@ -83,3 +83,28 @@
 - [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as Slice 0/1
 
 **Result:** Automated verification complete and passing: 55 tests (unit + two-user isolation integration tests for both `/api/household` and `/api/family-members`, plus component tests for the add-member form including the disabled/enabled Continue transitions), `npm run typecheck` clean, `check_events.py` clean. A full automated browser click-through (Playwright, matching how Slice 0/1 were verified) was attempted but blocked at the Clerk sign-up screen by a Cloudflare Turnstile bot-check that gates account creation on this Clerk instance — the same class of environmental limitation as Slice 0's PostHog headless-detection issue, not a code defect. Did not attempt to defeat the bot-check (a legitimate third-party security control). **This capability has not yet had a human click-through** — needs Gaurav to do the 8 steps above once, live, before this is fully signed off (should take under 2 minutes; the underlying code paths are identical in shape to Slice 1's, which did pass a full human-verified live test).
+
+---
+
+## Capability: Slice 3 — Instrument library (seed + browse)
+
+**Setup:** Visit https://household-financial-pwa.vercel.app. No sign-in needed — this capability is public. Fastest path: append `/explore` to the URL directly, or sign in and tap "Explore what you can invest in" from the post-onboarding confirmation screen.
+
+**Steps:**
+1. Load `/explore`. You should see "What can you invest in?" with 6 section cards: Equity, Debt, Gold, Hybrid & Guaranteed, Real Estate, Alternative.
+2. Tap "Equity." You should see a list of 5 instruments, each showing its name, typical returns, and risk level.
+3. Tap "Direct Stocks" (or any instrument). You should see the full detail: summary, typical returns, tax treatment, liquidity, risk level, who can invest, and minimum investment.
+4. Go back to Debt and open "Public Provident Fund (PPF)" — it should show a "Current rate: 7.1%" line with a "Rate as of 2026-07-01. Verify before investing" note. An instrument like "Direct Stocks" should have no rate line at all (market-linked, no fixed rate).
+5. Visit this same section/instrument once, then put the device in airplane mode and reload — the page should still render from the PWA's offline cache rather than showing an error.
+
+**Expected:** No sign-in prompt at any point in this flow. Every section has exactly 5 instruments (30 total across all 6).
+
+**Pass criteria:** All 5 steps behave as described; no console errors related to `/api/instruments` calls; `library_section_viewed` and `instrument_viewed` events fire (visible in PostHog) when opening a section/instrument.
+
+**Accessibility check (from Constraints Contract in `SPEC.md`):**
+- [ ] Usable at mobile breakpoint (390px)
+- [ ] Focus states visible when tabbing through section cards and instrument rows
+- [ ] Touch targets ≥44px on section/instrument rows
+- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+
+**Result:** Automated verification complete and passing: 80 tests total (12 new — seed-data validation, instrument route integration tests with no-auth-required assertions, and component tests for all 3 new pages including the rate/no-rate detail branches), `npm run typecheck` clean, `check_events.py` clean (27 registered events). 30 instruments seeded into the live Neon database via `npm run db:seed` (idempotent upsert by slug). **Live verification in progress**: `/api/instruments` and `/api/instruments?category=N` confirmed working via `vercel dev` locally; `/api/instruments/:slug` (the first nested-path-parameter route in the app) 404s under local `vercel dev` specifically — reproduced after a clean restart, with Vercel's own routing headers on the 404, meaning the request never reached the Hono function. Could not confirm from a preview deployment either, since preview deployments are behind this team's Vercel SSO wall with no bypass secret configured. Pushing to `main` (auto-deploys to production, same unprotected URL every prior slice was verified against) to confirm whether this is a `vercel dev`-only local quirk or a real routing bug — see `PROGRESS.md` for the outcome.

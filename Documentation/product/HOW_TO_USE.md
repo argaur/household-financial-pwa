@@ -6,7 +6,7 @@ Live: https://household-financial-pwa.vercel.app
 
 ## What it does
 
-A PWA for Indian households to learn what financial instruments exist, record what they actually hold across family members, and see household-level plan gaps via a scored Household Health panel. As of Slice 2, you can create an account, create your household, and add the family members you're planning for — that's the full extent of the product so far.
+A PWA for Indian households to learn what financial instruments exist, record what they actually hold across family members, and see household-level plan gaps via a scored Household Health panel. As of Slice 3, you can create an account, create your household, add the family members you're planning for, and browse a 30-instrument library across 6 asset classes — holdings entry (Step 3 of onboarding) is the next slice.
 
 ## Quick start
 
@@ -14,7 +14,7 @@ A PWA for Indian households to learn what financial instruments exist, record wh
 2. No account yet? Click "Don't have an account? Sign up" and create one (email + password, or an OAuth provider if enabled in Clerk).
 3. After signing in, you'll be asked for your household name (e.g. "Gupta Family") — this is Onboarding Step 1 of 3.
 4. Submit it, then add at least one family member — this is Onboarding Step 2 of 3.
-5. Once you've added someone, "Continue" unlocks. Step 3 (holdings) isn't built yet.
+5. Once you've added someone, tap "Explore what you can invest in →" to browse the instrument library — no sign-in needed for this part, and it works offline once you've visited a section.
 
 ## Capabilities
 
@@ -30,6 +30,12 @@ On Onboarding Step 2 ("Who are we planning for?"), tap "Add a family member" to 
 
 **What's enforced:** the same server-side scoping pattern as households — every member is resolved and created against your own household only, never a client-supplied ID. A second account never sees or can add to your household's member list.
 
+### Browsing the instrument library
+
+Tap "Explore what you can invest in" (or visit `/explore` directly) to see 6 section cards — Equity, Debt, Gold, Hybrid & Guaranteed, Real Estate, Alternative — each holding 5 curated instruments (30 total). Tap a section to see its instruments (name, typical returns, and risk level at a glance); tap an instrument for the full picture: returns, tax treatment, liquidity, risk, who can invest, minimum investment, and — where a government-declared rate applies (e.g. PPF, SSY, EPF) — the current rate with a "verify before investing" note, since these change quarterly.
+
+**What's enforced:** this is public, read-only content — no sign-in required, and there are no write routes for it at all (only a seed script populates it). It's precached by the PWA on first visit, so it keeps working with the phone in airplane mode afterward.
+
 ## FAQ
 
 **Why is there no dashboard yet?**
@@ -40,7 +46,7 @@ Slice 0 (Walking Skeleton) proved the deployment pipeline before any feature cod
 
 ## Known limitations
 
-- No holdings, dashboard, or library yet — those are Slices 3–6.
+- No holdings or dashboard yet — those are Slices 4 and 6. There is no bottom tab bar yet either; the library is reached via a plain link from the post-onboarding confirmation screen until Slice 6+ adds full navigation.
 - `signup_failed` / `login_failed` analytics events (in `METRICS_PLAN.md`) are not yet instrumented — Clerk's prebuilt sign-in/sign-up UI doesn't expose a failure callback without a fully custom auth form, which was judged out of scope for this slice. `signup_completed` / `login_completed` are instrumented.
 - Server-side (API route) error capture is deferred; only client-side Sentry is wired so far.
 - Clerk/Sentry env vars are set in Vercel's Production environment only — Preview environment addition is a follow-up (the Vercel CLI's non-interactive preview-branch flow didn't cooperate; needs the dashboard).

@@ -23,9 +23,23 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Library content (instruments) is static and safe to precache at build time.
+        // App shell (JS/CSS/HTML) is static and safe to precache at build time.
         // Dashboard data is fetched dynamically — see src/lib/pwa-cache.ts (Slice 8).
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        runtimeCaching: [
+          {
+            // Instrument library content is read-only and public — safe to
+            // serve from cache first so browsing works fully offline once
+            // visited once, falling back to network only on a cache miss.
+            urlPattern: /^\/api\/instruments(\/.*)?$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'instrument-library',
+              expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],
