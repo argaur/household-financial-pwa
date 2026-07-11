@@ -47,7 +47,9 @@ export async function listInstruments(category?: number): Promise<Instrument[]> 
 }
 
 export async function getInstrument(slug: string): Promise<Instrument> {
-  const res = await publicFetch(`/api/instruments/${slug}`)
+  // Query param, not a /:slug path segment — see server/routes/instruments.ts
+  // for why (Vercel zero-config routing only matches single-segment /api/* paths).
+  const res = await publicFetch(`/api/instruments?slug=${encodeURIComponent(slug)}`)
   const body = (await res.json()) as InstrumentResponse
   return body.instrument
 }

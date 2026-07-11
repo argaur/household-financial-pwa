@@ -89,15 +89,15 @@ describe('instruments routes — public read', () => {
     expect(res.status).toBe(400)
   })
 
-  it('fetches a single instrument by slug', async () => {
-    const res = await app.request('/api/instruments/equity-direct-stocks')
+  it('fetches a single instrument by slug via query param', async () => {
+    const res = await app.request('/api/instruments?slug=equity-direct-stocks')
     expect(res.status).toBe(200)
     const body = (await res.json()) as { instrument: InstrumentRow }
     expect(body.instrument.slug).toBe('equity-direct-stocks')
   })
 
   it('returns 404 for an unknown slug', async () => {
-    const res = await app.request('/api/instruments/does-not-exist')
+    const res = await app.request('/api/instruments?slug=does-not-exist')
     expect(res.status).toBe(404)
   })
 })

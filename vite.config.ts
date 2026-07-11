@@ -31,7 +31,11 @@ export default defineConfig({
             // Instrument library content is read-only and public — safe to
             // serve from cache first so browsing works fully offline once
             // visited once, falling back to network only on a cache miss.
-            urlPattern: /^\/api\/instruments(\/.*)?$/,
+            // Matches both the list (/api/instruments) and detail
+            // (/api/instruments?slug=...) requests — no trailing path
+            // segment, since /:slug path params 404 on this project's
+            // Vercel zero-config routing (see server/routes/instruments.ts).
+            urlPattern: /\/api\/instruments(\?.*)?$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'instrument-library',
