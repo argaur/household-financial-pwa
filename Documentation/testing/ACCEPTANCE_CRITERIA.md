@@ -148,3 +148,36 @@
 **A real bug caught by the isolation test itself, not shipped code:** while writing the `/api/holdings` integration test's in-memory mock, the `and(eq(a), eq(b))` composition initially lost the column names for the second condition, silently turning the household-ownership filter into a no-op inside the *test's own fake database* — the test for "reject a holding referencing a member from a different household" passed with a false green (201 instead of 400) until this was traced and fixed. The production code in `server/lib/holdings.ts` was correct throughout; this was a lesson about verifying a new test helper's filtering logic actually filters, not just returning the right shape, before trusting a passing isolation test — worth remembering for the next slice that introduces `and()`-composed queries in a hand-rolled mock.
 
 **Live verification:** owed to Gaurav — human click-through of the 12 steps above, plus the still-pending Slice 2/3 click-throughs, before this slice is fully signed off.
+
+---
+
+## Capability: Slice 5 — Protection tracking (Profile screen)
+
+**Setup:** Sign in with an account that already has a household, at least one family member, and at least one holding (from Slices 1/2/4).
+
+**Steps:**
+1. From the post-onboarding confirmation screen, tap "Manage your protection cover →". You should land on "Profile" with a "Protection" card showing "No protection cover on record." and an "Add protection cover" button.
+2. Tap "Add protection cover" (or the "Add" link in the card header) — a sheet titled "Add protection cover" opens.
+3. Try clicking "Add cover" with nothing filled in — it should be disabled.
+4. Select a family member under "For." Leave "Type" and "Status" at their defaults (Term life / Active).
+5. Type a cover amount (e.g. 5000000).
+6. Click "Optional fields" — annual premium and provider appear; fill in a provider name (e.g. "HDFC Life").
+7. Click "Add cover." The sheet closes and the record appears in the Protection card under the member's name, showing the cover amount, status, and provider.
+8. Tap the record row — a sheet opens titled "Update protection cover," pre-filled with everything you entered.
+9. Change the status to "Lapsed" and click "Save changes" — the sheet closes and the updated status shows in the card.
+10. Tap "Add" again and add a second protection record for the same or a different member (e.g. type "Health") — confirm it appears as a second row/group as appropriate.
+11. Refresh the page — the Protection card should still show both records (no re-fetch flicker to empty state).
+
+**Expected:** No step requires a member ID or protection-record ID to be typed or visible anywhere in the UI or URL — all resolved from the session server-side or from what you picked in the form. A second account never sees or can edit another household's protection records, even by guessing a record ID in the edit sheet's `?id=` query param.
+
+**Pass criteria:** All 11 steps behave as described; no console errors related to `/api/protection` calls; `feature_used` (feature_name="add_protection") fires on both add and edit (visible in PostHog).
+
+**Accessibility check (from Constraints Contract in `SPEC.md`):**
+- [ ] Usable at mobile breakpoint (390px)
+- [ ] Focus states visible when tabbing through the protection form and Profile rows
+- [ ] Touch targets ≥44px on the "Add" link and protection rows
+- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+
+**Result:** Automated verification complete and passing: unit tests for the `protection` lib (cross-household member rejection, negative cover-amount rejection, invalid type/status enum rejection), two-user isolation integration tests for `/api/protection` (list/create/update), and component tests for the shared `ProtectionForm` and `Profile` pages (empty state, grouped list, add-sheet, edit-sheet pre-fill). `npm run typecheck` and `scripts/check_events.py` both clean.
+
+**Live verification:** owed to Gaurav — human click-through of the 11 steps above, plus the still-pending Slice 2/3/4 click-throughs, before this slice is fully signed off.

@@ -6,7 +6,7 @@ Live: https://household-financial-pwa.vercel.app
 
 ## What it does
 
-A PWA for Indian households to learn what financial instruments exist, record what they actually hold across family members, and see household-level plan gaps via a scored Household Health panel. As of Slice 4, you can create an account, create your household, add the family members you're planning for, browse a 30-instrument library across 6 asset classes, and record and edit your household's holdings — the dashboard (Slice 6) is next.
+A PWA for Indian households to learn what financial instruments exist, record what they actually hold across family members, and see household-level plan gaps via a scored Household Health panel. As of Slice 5, you can create an account, create your household, add the family members you're planning for, browse a 30-instrument library across 6 asset classes, record and edit your household's holdings, and record and edit each member's insurance/protection coverage — the dashboard (Slice 6) is next.
 
 ## Quick start
 
@@ -45,6 +45,14 @@ After onboarding, the **Portfolio tab** (`/portfolio`) lists every holding group
 
 **What's enforced:** the same server-side household scoping as members — every holding is created/edited/listed against your own household only. The family member a holding is assigned to is verified server-side to belong to your household too (not just any member ID that exists somewhere in the database) — this is checked with its own isolation test, since the plain foreign key alone doesn't enforce it. `asset_class` is derived from the instrument you pick, not accepted from the client. Editing a holding uses a `?id=` query parameter rather than a `/holdings/:id` path segment — this project's Vercel zero-config build only routes single-path-segment `/api/*` requests to the catch-all function (see `app/CLAUDE.md`).
 
+### Recording insurance and protection
+
+The **Profile** screen (`/profile`) hosts a "Protection" card for recording insurance/protection coverage per family member: type (term life, health, disability, other), cover amount, status (active, lapsed, pending), and optionally annual premium and provider. Reached via the "Manage your protection cover →" link on the post-onboarding confirmation screen, alongside the existing Portfolio and Explore links.
+
+Tap "Add" to open a form (member, type, cover amount, and status are required; premium and provider are optional fields collapsed until expanded). Records are grouped by member; tap any existing record to edit it in the same form, pre-filled.
+
+**What's enforced:** the same server-side household scoping as holdings and members — every protection record is created/edited/listed against your own household only, with the assigned family member verified server-side to belong to that household (its own isolation test, same pattern as holdings). Editing uses a `?id=` query parameter rather than a `/protection/:id` path segment, for the same Vercel routing reason as holdings. There is no "remove protection" flow yet, matching Slice 4's precedent of shipping add/edit only. The Profile page is deliberately minimal in this slice — just the Protection card; household/member editing, sign-out, and account deletion land in a later slice on this same page.
+
 ## FAQ
 
 **Why is there no dashboard yet?**
@@ -57,6 +65,8 @@ Slice 0 (Walking Skeleton) proved the deployment pipeline before any feature cod
 
 - No dashboard yet — that's Slice 6 (Completeness Score + AllocationDonut). There is no bottom tab bar yet either; Portfolio and the library are both reached via plain links from the post-onboarding confirmation screen until Slice 6+ adds full navigation.
 - No "remove holding" flow yet — the Portfolio tab supports add and edit only, per Slice 4's scoped capability (`IMPLEMENTATION_PLAN.md`); `COPY_DECK.md`'s remove-holding copy is written ahead for a later slice.
+- No "remove protection" flow yet — the Profile page's Protection card supports add and edit only, same scoped-capability precedent as Slice 4's holdings.
+- Profile is minimal (Protection card only) — household/member editing, sign-out, and account deletion are Slice 9.
 - `signup_failed` / `login_failed` analytics events (in `METRICS_PLAN.md`) are not yet instrumented — Clerk's prebuilt sign-in/sign-up UI doesn't expose a failure callback without a fully custom auth form, which was judged out of scope for this slice. `signup_completed` / `login_completed` are instrumented.
 - Server-side (API route) error capture is deferred; only client-side Sentry is wired so far.
 - Clerk/Sentry env vars are set in Vercel's Production environment only — Preview environment addition is a follow-up (the Vercel CLI's non-interactive preview-branch flow didn't cooperate; needs the dashboard).

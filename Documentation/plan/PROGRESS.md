@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-13 — after Slice 5
+
+1. **Slices done:** Slice 5 (Protection tracking) — built locally, not yet deployed/pushed (per standing instruction, no autonomous push to `origin/main`). 143 tests total (32 new: 20 backend, 12 frontend), `npm run typecheck`, `scripts/check_events.py`, and `npm run build` all clean. **Human click-through owed** (11-step script added to `ACCEPTANCE_CRITERIA.md`), plus still-owed Slices 2/3/4 click-throughs.
+2. **Current state:** `protection` table CRUD (list/create/update — no delete, matching the Slice 4 holdings precedent) at `/api/protection`, scoped to the caller's household with the same member-ownership isolation check as holdings (`server/lib/protection.ts`, mirrors `server/lib/holdings.ts` almost exactly — structurally near-identical as the plan predicted, no novel risk). Update uses `?id=` query param, not a path segment. Frontend: new minimal `Profile.tsx` page (`/profile` route) hosting a single "Protection" card (list grouped by member + add/edit bottom sheet via `ProtectionForm`, reusing `HoldingForm`'s progressive-disclosure pattern for the optional premium/provider fields) — deliberately structured with a comment marking where Slice 9's household/member-editing, sign-out, and account-deletion cards will land as siblings, not a restructure. No bottom tab bar yet — linked from `HouseholdGate.tsx`'s post-onboarding confirmation screen alongside `/portfolio` and `/explore`, same precedent as every prior slice. `feature_used` (feature_name="add_protection") fires on both add and edit, routed through the existing Universal Baseline event per the plan (no new event registered). **Environment note (not code):** local WSL vitest run initially failed with a `Cannot find module @rollup/rollup-linux-x64-gnu` error — the checked-in `node_modules` only had Windows-platform optional deps (project was last installed from a Windows shell); fixed non-destructively with `npm install --no-save @rollup/rollup-linux-x64-gnu` rather than deleting/reinstalling `node_modules`. Worth a note for the next agent running tests from WSL on this repo.
+3. **Next slice:** Slice 6 — Completeness Score + AllocationDonut (dashboard). Depends on holdings (Slice 4), protection (Slice 5), and members (Slice 2) all being populated to compute all 5 checks; the cross-table score-query risk is flagged in `SPEC.md` §7 with a named simpler fallback (read-time-only computation).
+4. **Open decisions:** Live human click-through owed for Slices 2, 3, 4, and now 5 — needs Gaurav. No "remove protection" flow this slice, matching holdings' precedent. Same standing items as Slice 4: Vercel Preview-env vars Production-only; `signup_failed`/`login_failed` events unimplemented.
+5. **Kill criterion check:** Slice 0 deployed 2026-07-10, well within the 2026-07-23 deadline. Slices 1–5 all built (5 not yet deployed pending Gaurav's go-ahead). OK.
+
+---
+
 ## 2026-07-11 — after Slice 4
 
 1. **Slices done:** Slice 4 (Holdings entry — Onboarding Step 3 + Portfolio tab) — deployed to production (`9e5d02f`), pushed with Gaurav's explicit go-ahead. Live-verified via curl: `/api/holdings` 401s without auth, `/portfolio` and `/explore` both 200. **Human click-through for Slices 2/3/4 still owed.**
