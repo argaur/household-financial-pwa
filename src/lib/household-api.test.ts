@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fetchHousehold, createHousehold, HouseholdApiError } from './household-api'
+import { fetchHousehold, createHousehold, updateHousehold, HouseholdApiError } from './household-api'
 
 describe('household-api', () => {
   beforeEach(() => {
@@ -29,5 +29,20 @@ describe('household-api', () => {
   it('throws HouseholdApiError with the server error code on failure', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: 'invalid_name' }), { status: 400 }))
     await expect(createHousehold('token', '')).rejects.toBeInstanceOf(HouseholdApiError)
+  })
+
+  it('updateHousehold sends a PATCH and returns the renamed household', async () => {
+    const household = { id: '1', ownerUserId: 'u1', name: 'New Name', createdAt: '', updatedAt: '' }
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ household }), { status: 200 }))
+    const result = await updateHousehold('token', 'New Name')
+    expect(result).toEqual(household)
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/api/household')
+    expect(init?.method).toBe('PATCH')
+  })
+
+  it('updateHousehold throws HouseholdApiError on failure', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: 'invalid_name' }), { status: 400 }))
+    await expect(updateHousehold('token', '')).rejects.toBeInstanceOf(HouseholdApiError)
   })
 })

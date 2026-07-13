@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listFamilyMembers, createFamilyMember, FamilyMembersApiError } from './family-members-api'
+import {
+  listFamilyMembers,
+  createFamilyMember,
+  updateFamilyMember,
+  removeFamilyMember,
+  FamilyMembersApiError,
+} from './family-members-api'
 
 describe('family-members-api', () => {
   beforeEach(() => {
@@ -43,5 +49,35 @@ describe('family-members-api', () => {
     await expect(
       createFamilyMember('token', { name: '', relationship: 'self', dateOfBirth: '1990-01-01' }),
     ).rejects.toBeInstanceOf(FamilyMembersApiError)
+  })
+
+  it('updateFamilyMember sends a PATCH to the ?id= query-param URL and returns the updated member', async () => {
+    const member = {
+      id: 'm1',
+      householdId: 'h1',
+      name: 'Gaurav G. Gupta',
+      relationship: 'self' as const,
+      dateOfBirth: '1990-01-01',
+      createdAt: '',
+      updatedAt: '',
+    }
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ member }), { status: 200 }))
+    const result = await updateFamilyMember('token', 'm1', {
+      name: 'Gaurav G. Gupta',
+      relationship: 'self',
+      dateOfBirth: '1990-01-01',
+    })
+    expect(result).toEqual(member)
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/api/family-members?id=m1')
+    expect(init?.method).toBe('PATCH')
+  })
+
+  it('removeFamilyMember sends a DELETE to the ?id= query-param URL', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    await removeFamilyMember('token', 'm1')
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/api/family-members?id=m1')
+    expect(init?.method).toBe('DELETE')
   })
 })

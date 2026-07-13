@@ -6,7 +6,7 @@ Live: https://household-financial-pwa.vercel.app
 
 ## What it does
 
-A PWA for Indian households to learn what financial instruments exist, record what they actually hold across family members, and see household-level plan gaps via a scored Household Health panel. As of Slice 6, you can create an account, create your household, add the family members you're planning for, browse a 30-instrument library across 6 asset classes, record and edit your household's holdings, record and edit each member's insurance/protection coverage, and see it all summarized on your personal dashboard — a Household Health score and an allocation chart. The nudge system (Slice 7) is next.
+A PWA for Indian households to learn what financial instruments exist, record what they actually hold across family members, and see household-level plan gaps via a scored Household Health panel. As of Slices 6 and 9, you can create an account, create and rename your household, add/edit/remove the family members you're planning for, browse a 30-instrument library across 6 asset classes, record and edit your household's holdings, record and edit each member's insurance/protection coverage, see it all summarized on your personal dashboard — a Household Health score and an allocation chart — sign out, and permanently delete your account. The nudge system (Slice 7) is next.
 
 ## Quick start
 
@@ -51,7 +51,21 @@ The **Profile** screen (`/profile`) hosts a "Protection" card for recording insu
 
 Tap "Add" to open a form (member, type, cover amount, and status are required; premium and provider are optional fields collapsed until expanded). Records are grouped by member; tap any existing record to edit it in the same form, pre-filled.
 
-**What's enforced:** the same server-side household scoping as holdings and members — every protection record is created/edited/listed against your own household only, with the assigned family member verified server-side to belong to that household (its own isolation test, same pattern as holdings). Editing uses a `?id=` query parameter rather than a `/protection/:id` path segment, for the same Vercel routing reason as holdings. There is no "remove protection" flow yet, matching Slice 4's precedent of shipping add/edit only. The Profile page is deliberately minimal in this slice — just the Protection card; household/member editing, sign-out, and account deletion land in a later slice on this same page.
+**What's enforced:** the same server-side household scoping as holdings and members — every protection record is created/edited/listed against your own household only, with the assigned family member verified server-side to belong to that household (its own isolation test, same pattern as holdings). Editing uses a `?id=` query parameter rather than a `/protection/:id` path segment, for the same Vercel routing reason as holdings. There is no "remove protection" flow yet, matching Slice 4's precedent of shipping add/edit only.
+
+### Managing your account
+
+The **Profile** screen (`/profile`, also called "Your account") now hosts your full account management: a household card (tap "Edit" to rename it), a family members card (tap "Add a family member" to add one, tap any existing member row to edit them, or "Remove" to delete a member), the Protection card above, and an account card with your sign-in email, a "Sign out" link, and a "Delete account" link.
+
+"Sign out" ends your Clerk session immediately — your data is untouched, sign back in anytime.
+
+"Delete account" opens a confirmation sheet: *"Delete your account? This will permanently delete your household, family members, and all holdings. This cannot be undone."* Confirming triggers Clerk to delete your account, which fires a `user.deleted` webhook to this app's backend — that webhook hard-deletes your `households` row, and Postgres cascades that delete to every child row (family members, holdings, protection, goals) via the foreign keys already declared in `drizzle/schema.ts`. Your `analytics_events` rows are the one deliberate exception — they're retained (orphaned, no longer linked to a live account), per this project's data retention policy (`Documentation/design/DATA_MODEL.md`).
+
+Removing an individual family member (without deleting the whole account) has the same cascading effect scoped to that member: any holdings or protection recorded for them are deleted along with them — the confirmation dialog says so before you confirm.
+
+**What's enforced:** household rename and member edit/remove use the same server-side household-scoping pattern as every other route in this app — a member ID that doesn't belong to your household 404s rather than 400s, so a guessed ID never leaks whether it exists elsewhere. The account-deletion webhook is **not** a normal session-authed route (there's no user session — Clerk calls it server-to-server) — it verifies a Svix HMAC signature over the raw request body against a secret only this app and Clerk know, and rejects anything unsigned, wrongly signed, or older than 5 minutes (replay protection) before touching the database. It's mounted at a flat `/api/clerk-webhook` path (not `/api/webhooks/clerk`) for the same Vercel single-path-segment routing reason as every other `?id=`-style route in this app — verified against a real `vercel build` output, not assumed.
+
+**Manual step needed before this works in production:** the Clerk dashboard needs (1) a webhook endpoint registered pointing at `https://household-financial-pwa.vercel.app/api/clerk-webhook`, subscribed to the `user.deleted` event, with its signing secret set as the `CLERK_WEBHOOK_SECRET` environment variable in Vercel, and (2) "Allow users to delete their own account" enabled under User & Authentication settings (Clerk's self-service account deletion is off by default) — neither of these was done as part of this slice, per the standing rule that live third-party dashboard changes and deploys need Gaurav's explicit go-ahead.
 
 ### Understanding your Household Health score
 
@@ -76,7 +90,7 @@ Slice 0 (Walking Skeleton) proved the deployment pipeline before any feature cod
 - No bottom tab bar yet — Portfolio, Explore, and Profile are all reached via plain links from the dashboard until a later slice adds full navigation.
 - No "remove holding" flow yet — the Portfolio tab supports add and edit only, per Slice 4's scoped capability (`IMPLEMENTATION_PLAN.md`); `COPY_DECK.md`'s remove-holding copy is written ahead for a later slice.
 - No "remove protection" flow yet — the Profile page's Protection card supports add and edit only, same scoped-capability precedent as Slice 4's holdings.
-- Profile is minimal (Protection card only) — household/member editing, sign-out, and account deletion are Slice 9.
+- Account deletion works end to end in code (webhook signature-verified, cascade tested against a populated fixture) but is **not yet live in production** — the Clerk dashboard webhook registration + `CLERK_WEBHOOK_SECRET` env var and the "allow self-service account deletion" toggle are manual steps still owed (see "Managing your account" above).
 - `signup_failed` / `login_failed` analytics events (in `METRICS_PLAN.md`) are not yet instrumented — Clerk's prebuilt sign-in/sign-up UI doesn't expose a failure callback without a fully custom auth form, which was judged out of scope for this slice. `signup_completed` / `login_completed` are instrumented.
 - Server-side (API route) error capture is deferred; only client-side Sentry is wired so far.
 - Clerk/Sentry env vars are set in Vercel's Production environment only — Preview environment addition is a follow-up (the Vercel CLI's non-interactive preview-branch flow didn't cooperate; needs the dashboard).

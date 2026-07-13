@@ -8,6 +8,7 @@ import { instrumentsRoutes } from './routes/instruments.js'
 import { holdingsRoutes } from './routes/holdings.js'
 import { protectionRoutes } from './routes/protection.js'
 import { dashboardRoutes } from './routes/dashboard.js'
+import { clerkWebhookRoutes } from './routes/clerk-webhook.js'
 
 // @sentry/node is not Edge-compatible; server-side error capture for API
 // routes is deferred until a slice needs it (Slice 0's Sentry smoke test
@@ -28,6 +29,7 @@ app.route('/instruments', instrumentsRoutes)
 app.route('/holdings', holdingsRoutes)
 app.route('/protection', protectionRoutes)
 app.route('/dashboard', dashboardRoutes)
+app.route('/clerk-webhook', clerkWebhookRoutes)
 
 app.onError((err, c) => {
   console.error(err)
