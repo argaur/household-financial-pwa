@@ -181,3 +181,36 @@
 **Result:** Automated verification complete and passing: unit tests for the `protection` lib (cross-household member rejection, negative cover-amount rejection, invalid type/status enum rejection), two-user isolation integration tests for `/api/protection` (list/create/update), and component tests for the shared `ProtectionForm` and `Profile` pages (empty state, grouped list, add-sheet, edit-sheet pre-fill). `npm run typecheck` and `scripts/check_events.py` both clean.
 
 **Live verification:** owed to Gaurav — human click-through of the 11 steps above, plus the still-pending Slice 2/3/4 click-throughs, before this slice is fully signed off.
+
+---
+
+## Capability: Slice 6 — Dashboard: Completeness Score + AllocationDonut
+
+**Setup:** Sign in with an account that already has a household and at least one family member (from Slices 1/2). Test both a fresh account (no holdings/protection yet) and the account built up through Slices 4/5 (holdings + protection recorded).
+
+**Steps:**
+1. Complete onboarding (household → members → first holding) as a brand-new account. Instead of a plain confirmation screen, you should land directly on `/dashboard` — "Your plan" with your household name above it.
+2. The "Household health" card should show a tier name ("Getting Started," "On Track," or "Strong" depending on how much you set up during onboarding), an "N of 5 checks complete" line, and a short line of context copy underneath a divider.
+3. The "Where your money lives" card should show either: a ghost/outline donut ring with "Nothing recorded yet." and a "Record a holding" link (if you have zero holdings), or a colored donut with a legend (asset class name + percentage per segment) and a "Total recorded value" line (if you have at least one holding).
+4. Tap "Record a holding" (empty state) or "View your holdings →" (populated state) — you should land on the Portfolio tab, same as before.
+5. From Portfolio, add a second and third holding spanning at least 3 different asset classes, flag one as your emergency fund, and (from Profile) add active protection cover for at least one "self"/"spouse" member.
+6. Navigate back to `/dashboard` (or refresh it) — the tier, score, and donut should reflect the new data: more checks complete, a higher score, more segments in the donut with updated percentages.
+7. Refresh the page directly on `/dashboard` — you should land there again immediately (not bounced back through onboarding), with a brief loading skeleton (3-card layout: header, health card, donut card) before the real data appears.
+8. With your browser's network tab open, confirm the dashboard makes exactly one request to `/api/dashboard` per load (no polling, no duplicate requests).
+9. Tap "Explore what you can invest in →" and "Manage your protection cover →" at the bottom of the dashboard — both should navigate to `/explore` and `/profile` respectively, same links as the old confirmation screen used to offer.
+
+**Expected:** No step requires a household ID to be typed or visible anywhere in the UI or URL — resolved from the session server-side. A second account never sees or can affect another household's score or allocation, even indirectly (there's no ID in the request at all — `/api/dashboard` takes no parameters, everything comes from the session). There is no nudge card on the dashboard yet (Slice 7) and no bottom tab bar yet (later slice).
+
+**Pass criteria:** All 9 steps behave as described; no console errors related to `/api/dashboard` calls; `dashboard_viewed` fires once per page load (visible in PostHog) with an `allocation_summary` reflecting the current allocation; `completeness_score_changed` fires only when the tier actually differs from the last tier seen for that household in this browser (verify by loading the dashboard twice in a row with no changes in between — it should not fire the second time).
+
+**Accessibility check (from Constraints Contract in `SPEC.md`):**
+- [ ] Usable at mobile breakpoint (390px)
+- [ ] Focus states visible when tabbing through the dashboard's links and retry button
+- [ ] Touch targets ≥44px on the "Record a holding" CTA and the bottom nav links
+- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+
+**Result:** Automated verification complete and passing: unit tests for `computeCompleteness` against fixture households (0 members; 1 member, no holdings; partial coverage; full 5-of-5 coverage; tier boundary cases), unit tests for `getDashboard`'s allocation aggregation (totals, percentages, fixed asset-class ordering), two-user isolation integration tests for `/api/dashboard`, and component tests for `HealthTierCard`, `AllocationDonut` (loading/empty/populated states), and `Dashboard` (empty vs. populated rendering, `dashboard_viewed` firing once, `completeness_score_changed` firing only on an actual tier change, error state with retry). `npm run typecheck`, `scripts/check_events.py`, and `npm run build` all clean.
+
+**A design decision worth flagging for the next slice:** the Completeness Score is read-time-only per `SPEC.md` §7's named simpler fallback — there's no server-side "previous score" to diff against for `completeness_score_changed`, so this event is detected client-side by comparing the freshly-fetched tier against the last tier this browser saw for this household (`localStorage`, keyed per household ID). This means the event won't fire on a different device/browser that hasn't seen the household's dashboard before, and clearing browser storage resets the baseline. Acceptable for v1 (PostHog is the analytics destination, not a source of truth for the score itself), but worth remembering if `completeness_score_changed` volume looks lower than expected in PostHog.
+
+**Live verification:** owed to Gaurav — human click-through of the 9 steps above, plus the still-pending Slice 2/3/4/5 click-throughs, before this slice is fully signed off.

@@ -8,6 +8,7 @@ import { LibrarySection } from '@/pages/LibrarySection'
 import { InstrumentDetail } from '@/pages/InstrumentDetail'
 import { Portfolio } from '@/pages/Portfolio'
 import { Profile } from '@/pages/Profile'
+import { Dashboard } from '@/pages/Dashboard'
 
 export default function App() {
   return (
@@ -18,6 +19,19 @@ export default function App() {
         <Route path="/explore" element={<Explore />} />
         <Route path="/explore/:sectionSlug" element={<LibrarySection />} />
         <Route path="/explore/:sectionSlug/:instrumentSlug" element={<InstrumentDetail />} />
+        <Route
+          path="/dashboard"
+          element={
+            <>
+              <SignedIn>
+                <Dashboard />
+              </SignedIn>
+              <SignedOut>
+                <Navigate to="/" replace />
+              </SignedOut>
+            </>
+          }
+        />
         <Route
           path="/portfolio"
           element={

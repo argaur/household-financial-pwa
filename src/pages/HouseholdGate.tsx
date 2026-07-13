@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth, useClerk } from '@clerk/clerk-react'
-import { Link } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Separator } from '@/components/ui/separator'
 import { track } from '@/lib/analytics'
-import { fetchHousehold, HouseholdApiError, type Household } from '@/lib/household-api'
+import { fetchHousehold, HouseholdApiError } from '@/lib/household-api'
 import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
 import { listHoldings } from '@/lib/holdings-api'
 import { OnboardingStep1 } from './OnboardingStep1'
@@ -25,15 +24,15 @@ type State =
  * Resolves the signed-in user's onboarding position purely from data (no
  * separate "current step" flag persisted): no household -> Step 1; household
  * but no family members yet -> Step 2; members but no holdings yet -> Step 3;
- * household with >=1 holding -> onboarded. A fully onboarded household is
- * deliberately shown as a plain confirmation, not a full dashboard (that's
- * Slice 6).
+ * household with >=1 holding -> onboarded, redirected to /dashboard (Slice 6)
+ * — the personal dashboard is the primary post-onboarding destination per
+ * CLAUDE.md's "Core loop", replacing the plain-links confirmation screen
+ * every prior slice used as a placeholder.
  */
 export function HouseholdGate() {
   const { getToken } = useAuth()
   const { signOut } = useClerk()
   const [state, setState] = useState<State>('loading')
-  const [household, setHousehold] = useState<Household | null>(null)
   const [members, setMembers] = useState<FamilyMember[]>([])
   const onboardingStartedFired = useRef(new Set<'household' | 'members' | 'holdings'>())
 
@@ -48,7 +47,6 @@ export function HouseholdGate() {
           setState('no-household')
           return
         }
-        setHousehold(result)
         const memberList = await listFamilyMembers(token)
         if (cancelled) return
         if (memberList.length === 0) {
@@ -123,8 +121,7 @@ export function HouseholdGate() {
   if (state === 'no-household') {
     return (
       <OnboardingStep1
-        onHouseholdCreated={(h) => {
-          setHousehold(h)
+        onHouseholdCreated={() => {
           setState('onboarding-members')
         }}
       />
@@ -148,25 +145,5 @@ export function HouseholdGate() {
     return <OnboardingStep3 members={members} onContinue={() => setState('has-household')} />
   }
 
-  return (
-    <main className="min-h-screen bg-background text-foreground font-sans">
-      <div className="container max-w-lg py-12 space-y-4">
-        <header className="space-y-1">
-          <p className="section-label">Household Financial Planning</p>
-          <h1 className="font-display text-display">{household?.name}</h1>
-        </header>
-        <Separator />
-        <p className="text-body text-muted-foreground">Your plan is set up with its first holding recorded.</p>
-        <Link to="/portfolio" className="text-body underline">
-          View your holdings →
-        </Link>
-        <Link to="/explore" className="text-body underline">
-          Explore what you can invest in →
-        </Link>
-        <Link to="/profile" className="text-body underline">
-          Manage your protection cover →
-        </Link>
-      </div>
-    </main>
-  )
+  return <Navigate to="/dashboard" replace />
 }
