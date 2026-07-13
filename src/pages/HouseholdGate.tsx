@@ -163,6 +163,9 @@ export function HouseholdGate() {
         <Link to="/explore" className="text-body underline">
           Explore what you can invest in →
         </Link>
+        <Link to="/profile" className="text-body underline">
+          Manage your protection cover →
+        </Link>
       </div>
     </main>
   )

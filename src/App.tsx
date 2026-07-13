@@ -7,6 +7,7 @@ import { Explore } from '@/pages/Explore'
 import { LibrarySection } from '@/pages/LibrarySection'
 import { InstrumentDetail } from '@/pages/InstrumentDetail'
 import { Portfolio } from '@/pages/Portfolio'
+import { Profile } from '@/pages/Profile'
 
 export default function App() {
   return (
@@ -23,6 +24,19 @@ export default function App() {
             <>
               <SignedIn>
                 <Portfolio />
+              </SignedIn>
+              <SignedOut>
+                <Navigate to="/" replace />
+              </SignedOut>
+            </>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <>
+              <SignedIn>
+                <Profile />
               </SignedIn>
               <SignedOut>
                 <Navigate to="/" replace />
