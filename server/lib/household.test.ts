@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { z } from 'zod'
-import { getHouseholdForOwner, createHouseholdForOwner } from './household.js'
+import { getHouseholdForOwner, createHouseholdForOwner, updateHouseholdName } from './household.js'
 
 function fakeDb(existingRows: unknown[]) {
   const insertedRows: unknown[] = []
+  const updatedPatches: unknown[] = []
   return {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
@@ -20,7 +21,20 @@ function fakeDb(existingRows: unknown[]) {
         }),
       })),
     })),
+    update: vi.fn(() => ({
+      set: vi.fn((patch: unknown) => ({
+        where: vi.fn(() => ({
+          returning: vi.fn(() => {
+            updatedPatches.push(patch)
+            const existing = existingRows[0] as Record<string, unknown> | undefined
+            if (!existing) return Promise.resolve([])
+            return Promise.resolve([{ ...existing, ...(patch as object) }])
+          }),
+        })),
+      })),
+    })),
     _insertedRows: insertedRows,
+    _updatedPatches: updatedPatches,
   }
 }
 
@@ -64,5 +78,26 @@ describe('createHouseholdForOwner', () => {
     const db = fakeDb([])
     await expect(createHouseholdForOwner(db as never, 'user_a', 'x'.repeat(101))).rejects.toBeInstanceOf(z.ZodError)
     expect(db._insertedRows).toHaveLength(0)
+  })
+})
+
+describe('updateHouseholdName', () => {
+  it('renames an existing household', async () => {
+    const db = fakeDb([{ id: 'h1', ownerUserId: 'user_a', name: 'Old Name' }])
+    const result = await updateHouseholdName(db as never, 'h1', 'New Name')
+    expect(result?.name).toBe('New Name')
+    expect(db._updatedPatches).toHaveLength(1)
+  })
+
+  it('rejects a blank name with a ZodError', async () => {
+    const db = fakeDb([{ id: 'h1', ownerUserId: 'user_a', name: 'Old Name' }])
+    await expect(updateHouseholdName(db as never, 'h1', '   ')).rejects.toBeInstanceOf(z.ZodError)
+    expect(db._updatedPatches).toHaveLength(0)
+  })
+
+  it('rejects a name over 100 characters', async () => {
+    const db = fakeDb([{ id: 'h1', ownerUserId: 'user_a', name: 'Old Name' }])
+    await expect(updateHouseholdName(db as never, 'h1', 'x'.repeat(101))).rejects.toBeInstanceOf(z.ZodError)
+    expect(db._updatedPatches).toHaveLength(0)
   })
 })

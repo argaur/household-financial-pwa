@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { familyMembers, relationshipEnum, riskProfileEnum } from '../../drizzle/schema.js'
 import type { db as Db } from './db.js'
@@ -20,6 +20,13 @@ const createFamilyMemberSchema = z.object({
 })
 
 export type CreateFamilyMemberInput = z.input<typeof createFamilyMemberSchema>
+
+/** Thrown when a member referenced by id doesn't belong to the caller's household (or doesn't exist). */
+export class FamilyMemberError extends Error {
+  constructor(public code: 'member_not_found') {
+    super(code)
+  }
+}
 
 /**
  * Every query here filters by householdId (resolved server-side from the
@@ -50,4 +57,61 @@ export async function createFamilyMember(
     })
     .returning()
   return row as FamilyMember
+}
+
+/**
+ * Slice 9 — edit a member's own fields (name/relationship/DOB/risk profile).
+ * Scoped by householdId + memberId together (mirrors holdings.ts's
+ * resolveMemberAndInstrument cross-household check) — a memberId alone
+ * doesn't prove ownership, the FK doesn't enforce it either.
+ */
+export async function updateFamilyMember(
+  db: Pick<typeof Db, 'select' | 'update'>,
+  householdId: string,
+  memberId: string,
+  input: CreateFamilyMemberInput,
+): Promise<FamilyMember | null> {
+  const existingRows = await db
+    .select()
+    .from(familyMembers)
+    .where(and(eq(familyMembers.id, memberId), eq(familyMembers.householdId, householdId)))
+    .limit(1)
+  if (!existingRows[0]) return null
+
+  const parsed = createFamilyMemberSchema.parse(input)
+  const [row] = await db
+    .update(familyMembers)
+    .set({
+      name: parsed.name,
+      relationship: parsed.relationship,
+      dateOfBirth: parsed.dateOfBirth,
+      riskProfile: parsed.riskProfile ?? null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(familyMembers.id, memberId), eq(familyMembers.householdId, householdId)))
+    .returning()
+  return (row as FamilyMember | undefined) ?? null
+}
+
+/**
+ * Slice 9 — remove a member. `holdings.member_id` and `protection.member_id`
+ * both have ON DELETE CASCADE to family_members (drizzle/schema.ts) — the DB
+ * itself removes that member's holdings/protection rows when this delete
+ * runs, no separate cleanup needed here. The route surfaces this consequence
+ * to the user via the confirm-dialog copy before calling this.
+ */
+export async function removeFamilyMember(
+  db: Pick<typeof Db, 'select' | 'delete'>,
+  householdId: string,
+  memberId: string,
+): Promise<boolean> {
+  const existingRows = await db
+    .select()
+    .from(familyMembers)
+    .where(and(eq(familyMembers.id, memberId), eq(familyMembers.householdId, householdId)))
+    .limit(1)
+  if (!existingRows[0]) return false
+
+  await db.delete(familyMembers).where(and(eq(familyMembers.id, memberId), eq(familyMembers.householdId, householdId)))
+  return true
 }

@@ -38,28 +38,59 @@ interface MemberRow {
 let households: HouseholdRow[] = []
 let members: MemberRow[] = []
 
-// Side channel: the mocked drizzle-orm eq() below records which column/value
-// pair each query intends to filter by, since we don't reproduce drizzle's
-// real query builder here.
-let lastEqColumnKey: string | undefined
-let lastEqValue: string | undefined
+// Normalizes a single eq() or an and(eq(), eq(), ...) condition (see the
+// drizzle-orm mock below) into a flat list of [columnName, value] filters —
+// same generic pattern as protection.integration.test.ts, needed here now
+// that update/removeFamilyMember filter by two columns (id + household_id)
+// at once, which the old single-filter side channel couldn't express.
+function conditionFilters(cond: { __eq?: [{ name?: string }, string]; __and?: Array<[{ name?: string }, string]> }) {
+  const raw: Array<[{ name?: string }, string]> = cond.__and ?? (cond.__eq ? [cond.__eq] : [])
+  return raw.map(([col, value]) => [col?.name, value] as const)
+}
+
+function rowMatches(row: object, filters: ReadonlyArray<readonly [string | undefined, string]>, fieldMap: Record<string, string>) {
+  const record = row as Record<string, unknown>
+  return filters.every(([colName, value]) => {
+    const field = colName ? fieldMap[colName] : undefined
+    return field ? record[field] === value : true
+  })
+}
 
 vi.mock('./lib/db.js', () => ({
   db: {
     select: () => ({
       from: (table: { _tableName?: string }) => ({
-        where: (_cond: unknown) => {
-          // household lookups end in .limit(1); family-member lookups don't.
+        where: (cond: { __eq?: [{ name?: string }, string]; __and?: Array<[{ name?: string }, string]> }) => {
+          const filters = conditionFilters(cond)
           const isHouseholdTable = table === householdsTableRef
-          if (isHouseholdTable) {
-            return {
-              limit: () =>
-                Promise.resolve(households.filter((h) => lastEqColumnKey === 'ownerUserId' && h.ownerUserId === lastEqValue)),
-            }
-          }
-          return Promise.resolve(members.filter((m) => lastEqColumnKey === 'householdId' && m.householdId === lastEqValue))
+          const rows = isHouseholdTable
+            ? households.filter((h) => rowMatches(h, filters, { owner_user_id: 'ownerUserId' }))
+            : members.filter((m) => rowMatches(m, filters, { id: 'id', household_id: 'householdId' }))
+          const result = Promise.resolve(rows) as Promise<unknown[]> & { limit: (n: number) => Promise<unknown[]> }
+          result.limit = (n: number) => Promise.resolve(rows.slice(0, n))
+          return result
         },
       }),
+    }),
+    update: (_table: { _tableName?: string }) => ({
+      set: (patch: Record<string, unknown>) => ({
+        where: (cond: { __eq?: [{ name?: string }, string]; __and?: Array<[{ name?: string }, string]> }) => ({
+          returning: () => {
+            const filters = conditionFilters(cond)
+            const idx = members.findIndex((m) => rowMatches(m, filters, { id: 'id', household_id: 'householdId' }))
+            if (idx === -1) return Promise.resolve([])
+            members[idx] = { ...members[idx], ...(patch as Partial<MemberRow>) }
+            return Promise.resolve([members[idx]])
+          },
+        }),
+      }),
+    }),
+    delete: (_table: { _tableName?: string }) => ({
+      where: (cond: { __eq?: [{ name?: string }, string]; __and?: Array<[{ name?: string }, string]> }) => {
+        const filters = conditionFilters(cond)
+        members = members.filter((m) => !rowMatches(m, filters, { id: 'id', household_id: 'householdId' }))
+        return Promise.resolve([])
+      },
     }),
     insert: (table: { _tableName?: string }) => ({
       values: (row: Record<string, unknown>) => ({
@@ -108,11 +139,8 @@ vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>()
   return {
     ...actual,
-    eq: (col: { name?: string }, value: string) => {
-      lastEqColumnKey = col?.name === 'owner_user_id' ? 'ownerUserId' : col?.name === 'household_id' ? 'householdId' : undefined
-      lastEqValue = value
-      return { __eq: [col, value] }
-    },
+    eq: (col: { name?: string }, value: string) => ({ __eq: [col, value] as [{ name?: string }, string] }),
+    and: (...conds: Array<{ __eq: [{ name?: string }, string] }>) => ({ __and: conds.map((c) => c.__eq) }),
   }
 })
 
@@ -146,8 +174,6 @@ describe('family-members routes — two-user isolation', () => {
   beforeEach(() => {
     households = []
     members = []
-    lastEqColumnKey = undefined
-    lastEqValue = undefined
   })
 
   it('rejects a request with no Authorization header', async () => {
@@ -235,5 +261,83 @@ describe('family-members routes — two-user isolation', () => {
     const aBody = (await aList.json()) as MembersListResponse
     expect(aBody.members).toHaveLength(1)
     expect(aBody.members[0].name).toBe('Gaurav Gupta')
+  })
+
+  it('updates a member via ?id= query param (not a path segment)', async () => {
+    await createHousehold('user_a', 'Gupta Family')
+    const createRes = await app.request('/api/family-members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: 'Gaurav Gupta', relationship: 'self', dateOfBirth: '1990-01-01' }),
+    })
+    const created = ((await createRes.json()) as MemberCreateResponse).member!
+
+    const res = await app.request(`/api/family-members?id=${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: 'Gaurav G. Gupta', relationship: 'self', dateOfBirth: '1990-01-01' }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as MemberCreateResponse
+    expect(body.member?.name).toBe('Gaurav G. Gupta')
+  })
+
+  it("rejects an update to a member from a different household with 404 (isolation, not just a 400)", async () => {
+    await createHousehold('user_a', 'Gupta Family')
+    await createHousehold('user_b', 'Sharma Family')
+    const bCreate = await app.request('/api/family-members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_b' },
+      body: JSON.stringify({ name: 'Priya Sharma', relationship: 'self', dateOfBirth: '1992-05-05' }),
+    })
+    const bMember = ((await bCreate.json()) as MemberCreateResponse).member!
+
+    const res = await app.request(`/api/family-members?id=${bMember.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: 'Hijacked Name', relationship: 'self', dateOfBirth: '1992-05-05' }),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('removes a member via ?id= query param', async () => {
+    await createHousehold('user_a', 'Gupta Family')
+    const createRes = await app.request('/api/family-members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: 'Gaurav Gupta', relationship: 'self', dateOfBirth: '1990-01-01' }),
+    })
+    const created = ((await createRes.json()) as MemberCreateResponse).member!
+
+    const res = await app.request(`/api/family-members?id=${created.id}`, {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer user_a' },
+    })
+    expect(res.status).toBe(200)
+
+    const list = await app.request('/api/family-members', { headers: { authorization: 'Bearer user_a' } })
+    const listBody = (await list.json()) as MembersListResponse
+    expect(listBody.members).toEqual([])
+  })
+
+  it("rejects removing a member from a different household with 404", async () => {
+    await createHousehold('user_a', 'Gupta Family')
+    await createHousehold('user_b', 'Sharma Family')
+    const bCreate = await app.request('/api/family-members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_b' },
+      body: JSON.stringify({ name: 'Priya Sharma', relationship: 'self', dateOfBirth: '1992-05-05' }),
+    })
+    const bMember = ((await bCreate.json()) as MemberCreateResponse).member!
+
+    const res = await app.request(`/api/family-members?id=${bMember.id}`, {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer user_a' },
+    })
+    expect(res.status).toBe(404)
+
+    const bList = await app.request('/api/family-members', { headers: { authorization: 'Bearer user_b' } })
+    const bBody = (await bList.json()) as MembersListResponse
+    expect(bBody.members).toHaveLength(1)
   })
 })

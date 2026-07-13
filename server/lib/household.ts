@@ -29,3 +29,23 @@ export async function createHouseholdForOwner(
   const [row] = await db.insert(households).values({ ownerUserId, name: parsedName }).returning()
   return row as Household
 }
+
+/**
+ * Slice 9 — rename an existing household. Scoped by householdId (already
+ * resolved server-side from the caller's session via getHouseholdForOwner),
+ * never by a client-supplied id. Returns null if no row matched (defensive —
+ * shouldn't happen given the route always resolves the household first).
+ */
+export async function updateHouseholdName(
+  db: Pick<typeof Db, 'update'>,
+  householdId: string,
+  name: string,
+): Promise<Household | null> {
+  const parsedName = householdNameSchema.parse(name)
+  const [row] = await db
+    .update(households)
+    .set({ name: parsedName, updatedAt: new Date() })
+    .where(eq(households.id, householdId))
+    .returning()
+  return (row as Household | undefined) ?? null
+}

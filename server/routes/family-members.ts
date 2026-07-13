@@ -4,7 +4,7 @@ import { relationshipEnum, riskProfileEnum } from '../../drizzle/schema.js'
 import { db } from '../lib/db.js'
 import { verifyUserId } from '../lib/auth.js'
 import { getHouseholdForOwner } from '../lib/household.js'
-import { listFamilyMembers, createFamilyMember } from '../lib/family-members.js'
+import { listFamilyMembers, createFamilyMember, updateFamilyMember, removeFamilyMember } from '../lib/family-members.js'
 
 // Mirrors the enums in server/lib/family-members.ts's own schema so an
 // invalid relationship/riskProfile value 400s here (clean HTTP boundary
@@ -54,4 +54,46 @@ familyMembersRoutes.post('/', async (c) => {
     if (err instanceof z.ZodError) return c.json({ error: 'invalid_member' }, 400)
     throw err
   }
+})
+
+// Update/remove use a query param (?id=), not a /:id path segment — same
+// Vercel zero-config routing limitation as holdings/protection (see
+// server/routes/holdings.ts).
+familyMembersRoutes.patch('/', async (c) => {
+  const userId = await verifyUserId(c.req.header('authorization'))
+  if (!userId) return c.json({ error: 'unauthorized' }, 401)
+
+  const household = await getHouseholdForOwner(db, userId)
+  if (!household) return c.json({ error: 'household_not_found' }, 404)
+
+  const memberId = c.req.query('id')
+  if (!memberId) return c.json({ error: 'missing_id' }, 400)
+
+  const body = await c.req.json().catch(() => null)
+  const parsed = createFamilyMemberSchema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'invalid_member' }, 400)
+
+  try {
+    const member = await updateFamilyMember(db, household.id, memberId, parsed.data)
+    if (!member) return c.json({ error: 'not_found' }, 404)
+    return c.json({ member })
+  } catch (err) {
+    if (err instanceof z.ZodError) return c.json({ error: 'invalid_member' }, 400)
+    throw err
+  }
+})
+
+familyMembersRoutes.delete('/', async (c) => {
+  const userId = await verifyUserId(c.req.header('authorization'))
+  if (!userId) return c.json({ error: 'unauthorized' }, 401)
+
+  const household = await getHouseholdForOwner(db, userId)
+  if (!household) return c.json({ error: 'household_not_found' }, 404)
+
+  const memberId = c.req.query('id')
+  if (!memberId) return c.json({ error: 'missing_id' }, 400)
+
+  const removed = await removeFamilyMember(db, household.id, memberId)
+  if (!removed) return c.json({ error: 'not_found' }, 404)
+  return c.json({ ok: true })
 })

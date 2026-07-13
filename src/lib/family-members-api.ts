@@ -60,3 +60,24 @@ export async function createFamilyMember(token: string | null, input: CreateFami
   if (!body.member) throw new FamilyMembersApiError(500, 'member_missing_in_response')
   return body.member
 }
+
+export async function updateFamilyMember(
+  token: string | null,
+  id: string,
+  input: CreateFamilyMemberInput,
+): Promise<FamilyMember> {
+  // Query param, not a /:id path segment — see server/routes/family-members.ts
+  // for why (Vercel zero-config routing only matches single-segment /api/* paths).
+  const res = await authedFetch(`/api/family-members?id=${encodeURIComponent(id)}`, token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  const body = (await res.json()) as MemberCreateResponse
+  if (!body.member) throw new FamilyMembersApiError(500, 'member_missing_in_response')
+  return body.member
+}
+
+export async function removeFamilyMember(token: string | null, id: string): Promise<void> {
+  await authedFetch(`/api/family-members?id=${encodeURIComponent(id)}`, token, { method: 'DELETE' })
+}

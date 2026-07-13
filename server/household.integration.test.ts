@@ -39,8 +39,25 @@ vi.mock('./lib/db.js', () => ({
         },
       }),
     }),
+    update: () => ({
+      set: (patch: { name?: string }) => ({
+        where: (cond: { __idFilter?: string }) => ({
+          returning: () => {
+            const idx = rows.findIndex((r) => r.id === (cond.__idFilter ?? lastIdFilter))
+            if (idx === -1) return Promise.resolve([])
+            rows[idx] = { ...rows[idx], ...patch }
+            return Promise.resolve([rows[idx]])
+          },
+        }),
+      }),
+    }),
   },
 }))
+
+// updateHouseholdName filters by households.id (not ownerUserId) — capture
+// that separately from the ownerFilter side channel below, which only
+// tracks the last eq() call regardless of which column it was against.
+let lastIdFilter: string | undefined
 
 // drizzle's eq(households.ownerUserId, userId) produces an opaque SQL object
 // in real code; the mocked `where` above receives whatever household.ts
@@ -50,9 +67,10 @@ vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>()
   return {
     ...actual,
-    eq: (_col: unknown, value: string) => {
-      ownerFilter = value
-      return { __ownerFilter: value }
+    eq: (col: { name?: string }, value: string) => {
+      if (col?.name === 'id') lastIdFilter = value
+      else ownerFilter = value
+      return { __ownerFilter: value, __idFilter: value }
     },
   }
 })
@@ -71,6 +89,7 @@ describe('household routes — two-user isolation', () => {
   beforeEach(() => {
     rows = []
     ownerFilter = undefined
+    lastIdFilter = undefined
   })
 
   it('rejects a request with no Authorization header', async () => {
@@ -144,5 +163,67 @@ describe('household routes — two-user isolation', () => {
       body: JSON.stringify({ name: 'Gupta Family' }),
     })
     expect(res.status).toBe(500)
+  })
+
+  it('renames the caller\'s household via PATCH', async () => {
+    await app.request('/api/household', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: 'Gupta Family' }),
+    })
+
+    const res = await app.request('/api/household', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: 'Gupta-Sharma Family' }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as HouseholdResponse
+    expect(body.household?.name).toBe('Gupta-Sharma Family')
+  })
+
+  it('rejects a PATCH rename with 404 when the caller has no household yet', async () => {
+    const res = await app.request('/api/household', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_no_household' },
+      body: JSON.stringify({ name: 'New Name' }),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('rejects a blank-name PATCH with 400', async () => {
+    await app.request('/api/household', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: 'Gupta Family' }),
+    })
+    const res = await app.request('/api/household', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: '   ' }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("a PATCH rename by user B never affects user A's household", async () => {
+    await app.request('/api/household', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: JSON.stringify({ name: 'Gupta Family' }),
+    })
+    await app.request('/api/household', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_b' },
+      body: JSON.stringify({ name: 'Sharma Family' }),
+    })
+    await app.request('/api/household', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_b' },
+      body: JSON.stringify({ name: 'Sharma-Verma Family' }),
+    })
+
+    const aCheck = await app.request('/api/household', { headers: { authorization: 'Bearer user_a' } })
+    const aBody = (await aCheck.json()) as HouseholdResponse
+    expect(aBody.household?.name).toBe('Gupta Family')
   })
 })
