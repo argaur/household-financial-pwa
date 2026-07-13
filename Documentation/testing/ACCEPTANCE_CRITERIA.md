@@ -181,3 +181,43 @@
 **Result:** Automated verification complete and passing: unit tests for the `protection` lib (cross-household member rejection, negative cover-amount rejection, invalid type/status enum rejection), two-user isolation integration tests for `/api/protection` (list/create/update), and component tests for the shared `ProtectionForm` and `Profile` pages (empty state, grouped list, add-sheet, edit-sheet pre-fill). `npm run typecheck` and `scripts/check_events.py` both clean.
 
 **Live verification:** owed to Gaurav — human click-through of the 11 steps above, plus the still-pending Slice 2/3/4 click-throughs, before this slice is fully signed off.
+
+---
+
+## Capability: Slice 9 — Profile + account deletion
+
+**⚠️ DESTRUCTIVE — use a disposable test account, never a real one.** The last step of this script permanently deletes the account you're signed in as, along with its household, family members, holdings, and protection records. Create a throwaway account (a test email you don't need again) specifically for this click-through — do not run this against Gaurav's own household data or any account you want to keep.
+
+**Setup:** Sign in with a disposable test account that has a household, at least two family members, at least one holding, and at least one protection record (from Slices 1/2/4/5).
+
+**Steps:**
+1. Go to Profile (`/profile`). The page title should read "Your account." You should see four cards in order: "Your household," "Family members," "Protection," and "Account."
+2. In the household card, tap "Edit." The household name becomes an editable field with "Save changes" and "Cancel" buttons.
+3. Change the name and tap "Save changes." The card should show the new name (not the old one) without a page reload.
+4. In the family members card, tap an existing member's row (not the "Remove" button). A sheet titled "Update family member" opens, pre-filled with that member's name, relationship, date of birth, and risk profile.
+5. Change the name and tap "Save changes." The sheet closes and the member's row shows the new name.
+6. Tap "Add a family member." A sheet titled "Add a family member" opens (same form as onboarding Step 2). Fill it in and tap "Add to plan" — the new member appears as a new row.
+7. Tap "Remove" on a member who has **no** holdings or protection recorded (to keep step 12's zero-row check meaningful for the member you'll check). A dialog opens: "Remove [name]? This will remove [name] and delete any holdings or protection cover recorded for them. This cannot be undone." Tap "Keep them" — the dialog closes, the member is still there.
+8. Tap "Remove" on that same member again, then tap "Remove" in the dialog. The member's row disappears from the list.
+9. In the Account card, confirm your sign-in email is shown, then tap "Sign out." You should be signed out and land back on the sign-in screen.
+10. Sign back in with the same test account. Confirm the household name from step 3 and the remaining members are all still there (sign-out does not delete anything).
+11. Go back to Profile and tap "Delete account." A dialog opens: "Delete your account? This will permanently delete your household, family members, and all holdings. This cannot be undone." Tap "Keep my account" first to confirm cancel works — the dialog closes, nothing happens.
+12. Tap "Delete account" again, then tap "Yes, delete everything." You should be signed out (Clerk invalidates the session as part of account deletion). Trying to sign back in with the same credentials should either fail (account gone) or land on a fresh onboarding flow with a blank household — never your old data.
+
+**Expected:** No step requires a household ID, member ID, or protection-record ID to be typed or visible anywhere in the UI or URL — all resolved from the session server-side or from what you picked in the form. A second account never sees or can edit/remove another household's family members.
+
+**Pass criteria:** All 12 steps behave as described; no console errors related to `/api/household`, `/api/family-members`, or account-deletion calls; `feature_used` (feature_name="edit_household", action="rename_household" / "add_member" / "edit_member" / "remove_member") fires on steps 3/5/6/8, `feature_used` (feature_name="sign_out") fires on step 9, `feature_used` (feature_name="delete_account") fires on step 12 (all visible in PostHog).
+
+**Accessibility check (from Constraints Contract in `SPEC.md`):**
+- [ ] Usable at mobile breakpoint (390px)
+- [ ] Focus states visible when tabbing through the household/member forms and the confirm dialogs
+- [ ] Touch targets ≥44px on Edit/Add/Remove/Sign out/Delete account links and member rows
+- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+
+**Result:** Automated verification complete and passing: unit tests for `updateHouseholdName`, `updateFamilyMember`, `removeFamilyMember`, and the Svix webhook signature verifier (`server/lib/svix.ts` — valid signature, tampered body, wrong secret, stale timestamp, missing headers); a unit test for the cascade-delete logic (`deleteHouseholdForOwner`) against a fully populated fixture household, asserting every user-owned table empties and `analytics_events` is retained; two-user isolation integration tests for the new `PATCH`/`DELETE /api/family-members` and `PATCH /api/household` routes; and a full **create → populate → delete → verify-zero-rows** integration test (`server/account-deletion.integration.test.ts`) that drives the real Hono app end to end — creates a household/member/protection record via the real HTTP routes, signs a real `user.deleted` webhook payload with a synthetic Svix secret the same way Clerk does, posts it to `/api/clerk-webhook`, and asserts household/members/protection/holdings/goals are all empty afterward while a fixture `analytics_events` row remains — plus component tests for the extended `Profile` page (household rename, member add/edit/remove with the confirm dialog, sign-out, and delete-account including the failure path). `npm run typecheck`, full `vitest` run, `npm run build`, and `scripts/check_events.py` all clean.
+
+**Webhook routing verified, not assumed:** ran a real `vercel build` against this project's linked Vercel project and inspected `.vercel/output/config.json` — confirmed `^/api/([^/]+)$` (single segment) routes to the catch-all function while `^/api(/.*)?$` (any second segment) 404s, which is exactly why `/api/clerk-webhook` was chosen over a nested `/api/webhooks/clerk` shape.
+
+**Manual step owed to Gaurav before this works live:** register a `user.deleted` webhook endpoint in the Clerk dashboard pointing at `/api/clerk-webhook`, set its signing secret as `CLERK_WEBHOOK_SECRET` in Vercel, and enable "allow users to delete their own account" in Clerk's User & Authentication settings. None of this was done as part of this slice (no live dashboard changes without explicit go-ahead, same standing rule as every deploy).
+
+**Live verification:** owed to Gaurav — human click-through of the 12 steps above **using a disposable test account**, plus the still-pending Slice 2/3/4/5 click-throughs, before this slice is fully signed off. This slice additionally cannot be verified live until the manual Clerk-dashboard step above is done, since the webhook won't fire without it.
