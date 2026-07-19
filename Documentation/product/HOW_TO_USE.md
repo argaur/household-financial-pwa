@@ -75,6 +75,32 @@ Below the tier card, the **allocation donut** shows how your household's recorde
 
 **What's enforced:** the score is computed server-side, scoped to your household the same way every other read in this app is (`getHouseholdForOwner` resolving from the Clerk session, then 3 already-scoped list queries against members/holdings/protection — no client-supplied household ID anywhere). The score is computed at read time only (on dashboard load), not recomputed live on every write — see "Known limitations" below.
 
+### Following a nudge
+
+Under the allocation donut, the dashboard shows a single **Next step** card. It always points at the *first* thing your household plan is missing, working down the same 5 checks the Health score uses, in order: member coverage → emergency fund → protection → asset diversity → up-to-date values. Fix that one thing and the card moves on to the next.
+
+There is always exactly one card — never two competing suggestions, and never a blank space. Once all five checks pass, the card stays put and simply tells you the plan is fully covered, with a link back to the library.
+
+Each card's link takes you where you can act on it: to Portfolio to record a holding, to Profile to record protection cover, or to the relevant learn-card in Explore. **No nudge ever tells you to buy anything.** They describe what your plan is missing and why it matters, then link to somewhere you can read more or record what you already have — this is a hard line (`app/CLAUDE.md`, "Education, not advice"), not a stylistic preference.
+
+Two of the cards point somewhere slightly different from what the copy deck originally imagined, for good reason:
+- The **emergency fund** nudge links to the Fixed Deposit learn-card, the standard Indian emergency-fund vehicle, because there's no dedicated "emergency fund" instrument in the library.
+- The **protection** nudge links to your Profile's Protection card rather than a "term insurance" learn-card, because no such card exists — and the one insurance-adjacent instrument in the library is a traditional/endowment product, which this project deliberately does not recommend.
+
+**What's enforced:** the nudge is derived server-side from the same three queries that produce the Health score — no extra database work, and no way for the card to disagree with the score shown above it. The "exactly one nudge, never zero" rule is covered by a test suite that exercises all 32 possible combinations of the five checks.
+
+### Installing the app and using it offline
+
+Once you've loaded your dashboard, an **"Add to your home screen"** card appears offering to install the app. Installing gives you a standalone window with no browser chrome, launched from your home screen or app list like any other app. Say "Not now" and it won't ask again on that device. The card only appears in Chromium browsers (Chrome, Edge, Android Chrome) — Safari and Firefox don't offer the underlying install hook, so there's deliberately nothing shown there rather than a dead button.
+
+**Offline, the app is read-only.** The instrument library is fully cached, so you can browse and read every learn-card with no connection. Your dashboard shows whatever was last loaded on that device, with a banner telling you it's cached and how old it is — for example, *"You're offline. Showing what was last saved to this device, from 2 hours ago."* That age is real: it's the last time the app actually reached the network, not the last time you opened the page.
+
+**Nothing you do offline is saved or queued.** Add/edit forms for holdings, family members, and protection all disable their save button while you're offline and say so. There is no background sync in v1 — a form that appeared to accept your data and then quietly lost it would be worse than one that plainly refuses. Reconnect and the forms re-enable themselves; no reload needed.
+
+**Signing out clears the cached dashboard** from the device. Browser caches belong to the site, not to your account, so without this a second person using the same browser could go offline and see the previous user's household. This is the same data-isolation line the server enforces on every request, carried through to the client.
+
+**What's enforced:** the app shell and library use a cache-first strategy (fast, offline-durable, content rarely changes); your dashboard uses network-first with a 5-second timeout, so you always get live data when a connection exists and cached data only when it genuinely can't be reached. A cold start on a deep link works offline too, not just a reload.
+
 ## FAQ
 
 **Why is the score only updated when I load the dashboard, not immediately after I add a holding?**
@@ -85,7 +111,7 @@ Slice 0 (Walking Skeleton) proved the deployment pipeline before any feature cod
 
 ## Known limitations
 
-- No nudge card yet — the dashboard shows the Health tier card and allocation donut only; the single ordered "next step" nudge (first unmet check, linking to its learn-card) is Slice 7.
+- Two nudge CTAs point at substitute destinations because their intended learn-cards don't exist in the 30-instrument library (emergency fund → Fixed Deposit; term insurance → Profile's Protection card). Adding dedicated learn-cards for both would close this properly — see "Following a nudge" above.
 - The Completeness Score is read-time-only (see FAQ above), not recomputed live on every write — an intentional deferral, not a bug.
 - No bottom tab bar yet — Portfolio, Explore, and Profile are all reached via plain links from the dashboard until a later slice adds full navigation.
 - No "remove holding" flow yet — the Portfolio tab supports add and edit only, per Slice 4's scoped capability (`IMPLEMENTATION_PLAN.md`); `COPY_DECK.md`'s remove-holding copy is written ahead for a later slice.

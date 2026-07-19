@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
+import { useOnline, OFFLINE_WRITE_MESSAGE } from '@/lib/use-online'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -46,6 +47,7 @@ interface MemberFormProps {
 export function MemberForm({ initialMember, submitLabel, submittingLabel, analyticsSurface, onSaved }: MemberFormProps) {
   const { getToken } = useAuth()
   const editing = Boolean(initialMember)
+  const online = useOnline()
 
   const [name, setName] = useState(initialMember?.name ?? '')
   const [relationship, setRelationship] = useState<FamilyMember['relationship'] | ''>(initialMember?.relationship ?? '')
@@ -148,10 +150,14 @@ export function MemberForm({ initialMember, submitLabel, submittingLabel, analyt
 
       {error && <p className="text-caption text-destructive">{error}</p>}
 
+      {!online && <p className="text-caption text-muted-foreground">{OFFLINE_WRITE_MESSAGE}</p>}
+
       <Button
         type="submit"
         className="w-full"
-        disabled={submitting || name.trim().length === 0 || !relationship || dateOfBirth.length === 0}
+        disabled={
+          !online || submitting || name.trim().length === 0 || !relationship || dateOfBirth.length === 0
+        }
       >
         {submitting ? submittingLabel : submitLabel}
       </Button>

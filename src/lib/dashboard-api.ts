@@ -21,9 +21,27 @@ export interface AllocationSlice {
   percentage: number
 }
 
+/** Slice 7 — mirrors server/lib/nudge.ts. Keep the two in sync. */
+export type NudgeCheckId =
+  | 'member_coverage'
+  | 'emergency_fund'
+  | 'both_parents_protected'
+  | 'asset_diversity'
+  | 'no_stale_values'
+  | 'complete'
+
+export interface Nudge {
+  checkId: NudgeCheckId
+  learnCardSlug: string
+  memberName?: string
+  assetClassCount?: number
+}
+
 export interface DashboardData {
   household: { id: string; name: string }
   completeness: Completeness
+  /** Always present — exactly one nudge, never zero (SPEC.md §7). */
+  nudge: Nudge
   allocation: AllocationSlice[]
   totalValue: number
 }

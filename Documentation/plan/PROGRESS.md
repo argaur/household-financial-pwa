@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-19 — after Slice 8 (PWA install + offline dashboard)
+
+1. **Slices done:** Slice 8 — 294 tests total (40 new: `pwa-cache` staleness/timestamp/purge, `useOnline`, `InstallPrompt`, `Dashboard` offline banner + freshness-stamp rule, `ProtectionForm` disabled-offline). Typecheck, `check_events.py`, `npm run build` all clean. **The named fallback in `SPEC.md` §7 was NOT needed** — a single `NetworkFirst` rule on the flat `/api/dashboard` path handled dynamic-response caching without fighting vite-plugin-pwa, so the full capability shipped rather than the network-only degradation.
+2. **Current state:** `vite.config.ts` gains a `dashboard-last` NetworkFirst rule (5s network timeout — on a captive-portal connection the request hangs rather than fails, and without a timeout NetworkFirst would wait it out instead of serving the cache) plus `navigateFallback: 'index.html'` so a *cold* offline start on a deep link boots the shell, not just a reload. New `src/lib/pwa-cache.ts` (per-household freshness timestamps + `clearDashboardCache`), `src/lib/pwa-install.ts` (captures `beforeinstallprompt` at boot in `main.tsx`, replayed post-activation), `src/lib/use-online.ts`, `src/components/install-prompt.tsx`. Write forms (holding/member/protection) now **disable** offline with an explicit "nothing is queued in the background" line — `SPEC.md` §7 required this and it was previously unimplemented, not merely unverified. Generated `dist/sw.js` inspected directly to confirm both cache rules and the `NavigationRoute` are actually present.
+3. **Next slice:** Slice 10 ("Why these choices?" + polish/accessibility pass) — the last one, now unblocked. It wants a verified base under it; three slices are currently deployed without a human pass.
+4. **Open decisions:** Two carried from the Slice 7 review (duplicated protection-status derivation between `dashboard.ts` and `nudge.ts`; `learn_card_slug` carrying route sentinels rather than instrument slugs). Two manual Clerk-dashboard steps still owed. **Freshness is stamped only when `navigator.onLine`** — a NetworkFirst cache hit is indistinguishable from a live fetch at the `fetch()` layer, so stamping unconditionally would have marked week-old cached data as "just now"; consequence is that a broken-but-connected network (captive portal) is treated as online, which falls through to the normal error path. **Sign-out purges `dashboard-last`** — SW caches are origin-scoped, not user-scoped, so without it a signed-out user going offline would see the previous household's data; this is a data-isolation fix, not a nicety.
+5. **Kill criterion check:** Slice 0 deployed 2026-07-10, well inside the 2026-07-23 deadline. Slices 0–9 now all built. OK.
+
+---
+
+## 2026-07-19 — after Slice 7 (Nudge system)
+
+1. **Slices done:** Slice 7 — 254 tests total (39 new). Headline suite exercises **all 32 combinations** of the five Completeness checks for the "exactly one nudge, never zero, never two" invariant (`SPEC.md` §7). Typecheck, `check_events.py`, `npm run build` all clean. Both events (`nudge_shown`, `learn_card_clicked`) were already in the registry — no `METRICS_PLAN.md` change.
+2. **Current state:** New pure `server/lib/nudge.ts` (`selectNudge` + `buildNudgeContext`), derived from the same three result sets `getDashboard` already loads — no extra queries. `NudgeCard` renders at the marker Slice 6 left in `Dashboard.tsx`. **Two deliberate COPY_DECK deviations, flagged for backfill:** check 3's CTA reads "Record protection cover →" (→ `/profile`) because no term-insurance learn-card exists and the one insurance-adjacent instrument is the product class this project rejects — routing there would be actively wrong guidance, not just a broken link; and the all-five-pass card is new copy, since `SPEC.md` demands one card but COPY_DECK defines no all-pass nudge. Check 2 keeps COPY_DECK's wording but points at `debt-fixed-deposit`.
+3. **Next slice:** Slice 8 (PWA offline dashboard). **Not parallelizable with this one** despite the plan marking both as depending only on Slice 6 — both edit `Dashboard.tsx`. Same class of collision as Slice 5/9's shared `Profile.tsx`; the file-collision check in `memory/decisions.md` caught it again.
+4. **Open decisions:** Review surfaced two left unfixed — `buildNudgeContext` re-derives the `status === 'active'` rule that `computeCompleteness` already computes (drift risk: the Health card and the nudge below it could one day disagree on screen), and `learn_card_slug` carries route sentinels (`'portfolio'`, `'explore'`) for four of six nudges, which dilutes that PostHog field. Closing the second properly means adding real emergency-fund and term-insurance learn-cards.
+5. **Kill criterion check:** Slice 0 deployed 2026-07-10, well inside the 2026-07-23 deadline. OK.
+
+---
+
 ## 2026-07-13 — merge: Slices 6 + 9 into `main`
 
 1. **Slices done:** Slice 6 (Dashboard) and Slice 9 (Profile + account deletion) were built in parallel on separate branches off the same Slice-5 base commit (`b6173e1`) by two concurrent agents, then merged into `main` by the orchestrating session. Merge touched 5 shared files (`CLAUDE.md`, `PROGRESS.md`, `HOW_TO_USE.md`, `ACCEPTANCE_CRITERIA.md`, `server/app.ts`) — all additive conflicts (both branches appended content at the same location), resolved by keeping both sides; no code logic conflicts.

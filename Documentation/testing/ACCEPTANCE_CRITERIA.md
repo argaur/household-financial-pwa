@@ -217,6 +217,85 @@
 
 ---
 
+## Capability: Slice 7 — Nudge system
+
+**Setup:** Sign in with an account that has a household and at least two family members (from Slices 1/2), one of whom has no holdings recorded. You will deliberately flip checks on and off to watch the nudge move.
+
+**Steps:**
+1. Load `/dashboard`. Below the "Where your money lives" donut there should now be a card headed "NEXT STEP" with a sentence and a single link. Exactly one such card — never two, never none.
+2. With a member who has no holdings, the card should name that member: "[Name] has no holdings recorded yet…" and the link should read "Add a holding for [Name] →". Tap it — you land on Portfolio.
+3. Record a holding for that member so every member has at least one. Return to `/dashboard`. The nudge should now move on to the next unmet check (emergency fund, unless you already flagged one).
+4. On the emergency-fund nudge, the link reads "Learn about emergency funds →" and takes you to the Fixed Deposit instrument page under Explore → Debt. Confirm it opens a real instrument page, not a 404.
+5. Flag one holding as your emergency fund, then reload `/dashboard`. The nudge should advance to protection: "[Name] has no protection cover on record…" with a "Record protection cover →" link landing on Profile.
+6. Add active protection for both self and spouse, reload. If you hold fewer than 3 asset classes, the nudge should now read "…concentrated in N asset class(es)…" with the correct N, and "Explore asset classes →" landing on Explore. Check the singular/plural reads correctly for N=1 vs N=2.
+7. Add holdings spanning 3+ asset classes and reload. With all five checks met, the card must still be there — an affirming "Every check in your household plan is covered…" message with "Explore what else exists →". **The card must never disappear.**
+8. At every step above, scroll the whole dashboard and confirm there is only ever one "NEXT STEP" card on the page.
+
+**Expected:** The nudge always reflects the *first* unmet check in order (member coverage → emergency fund → protection → diversity → stale values), never a later one while an earlier one is still unmet. No link anywhere on the card is a buy/invest action — every CTA either navigates within the app or opens a learn-card.
+
+**Pass criteria:** All 8 steps behave as described; no console errors; `nudge_shown` fires exactly once per dashboard load (visible in PostHog) carrying the `check_id` of the card actually displayed; `learn_card_clicked` fires on tapping the card's link with the matching `check_id` and `learn_card_slug`.
+
+**Accessibility check (from Constraints Contract in `SPEC.md`):**
+- [ ] Usable at mobile breakpoint (390px)
+- [ ] Focus state visible when tabbing to the nudge's link
+- [ ] Touch target ≥44px on the nudge CTA
+- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+
+**Result:** Automated verification complete and passing: `selectNudge` unit-tested against **all 32 combinations** of the five checks, asserting exactly one nudge per combination, never zero, a non-empty `learn_card_slug` every time, and first-unmet-in-order priority for all 31 incomplete combinations; `buildNudgeContext` tested for member-name and asset-class-count derivation (including lapsed protection not counting as cover); `getDashboard` tested for nudge pass-through against a fake DB; `NudgeCard` component-tested for verbatim COPY_DECK copy per check, name interpolation with a safe fallback when no name is available, singular/plural asset class, all six CTA destinations, the no-buy-action rule, and `learn_card_clicked`; `Dashboard` tested for exactly-one-card rendering across empty and complete fixtures and `nudge_shown` firing once. 254 tests pass (up from 215). `npm run typecheck`, `scripts/check_events.py`, and `npm run build` all clean.
+
+**Two deliberate COPY_DECK deviations, flagged for backfill:**
+1. **Check 3's CTA** reads "Record protection cover →" (→ `/profile`), not COPY_DECK's "Learn about term insurance →". There is no term-insurance learn-card among the 30 seeded instruments, and the one insurance-adjacent instrument (`hybrid-traditional-insurance`) is the exact product class this project's standing decision rejects — routing a protection nudge there would be actively wrong guidance, not just a broken link.
+2. **The all-five-pass card** is new copy. `SPEC.md` §7 requires exactly one card and never zero, but COPY_DECK defines no all-pass nudge. Written in CFP voice, observational, no exclamation.
+
+Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`debt-fixed-deposit`) — the standard Indian emergency-fund vehicle — since no dedicated emergency-fund card exists either.
+
+**Live verification:** owed to Gaurav — human click-through of the 8 steps above. The local smoke-run for this slice could not be completed by the agent: the dev server served correctly (`/api/dashboard` returns 401 unauthenticated, `/api/health` 200, `index.html` and the transformed `main.tsx` both served), but the browser rendered a blank page with no console output, and the dashboard is auth-gated behind Clerk, which `app/CLAUDE.md` already documents as needing a human.
+
+---
+
+## Capability: Slice 8 — PWA install + offline dashboard
+
+**Setup:** Use Chrome (desktop or Android) — `beforeinstallprompt` is Chromium-only, so the install card will not appear in Safari or Firefox by design. Sign in with an account that has a household and at least one holding. **Test on the production/preview deployment, not `vercel dev`** — service workers behave differently without a real build.
+
+**Steps:**
+1. Load the app and sign in. Open DevTools → Application → Service Workers and confirm a worker is registered and activated.
+2. Load `/dashboard` while online. Under the nudge card you should see an "Add to your home screen" card with **Install** and **Not now**. (If the app is already installed, or the browser has already been dismissed this session, the card correctly does not appear.)
+3. Tap **Not now**. The card disappears. Reload — it stays gone (the choice is remembered on this device). To re-test, clear `pwa:install-dismissed` from localStorage.
+4. Reload, and this time tap **Install**. The browser's own install dialog appears; accept it. The app installs to your home screen / app list and the card disappears.
+5. Open the installed app. It should launch standalone (no browser chrome) with the teal theme colour.
+6. Back online in the app, load `/dashboard` fully. Then DevTools → Network → **Offline** (or turn off wifi), and **reload the page**.
+7. The dashboard should still render — household name, health tier, donut, nudge — with a dashed banner at the top reading "You're offline. Showing what was last saved to this device, from [N minutes] ago." Confirm the stated age is plausible, not "just now".
+8. Still offline, navigate directly to `/explore` and a specific instrument page — the library should render from precache (already true since Slice 3).
+9. Still offline, open a holding form (Portfolio → add) and a member form (Profile → add member). In each, the submit button must be **disabled**, with the line "You're offline. Changes can't be saved until you reconnect — nothing is queued in the background." Confirm no form silently accepts a submission.
+10. Still offline, **close the tab entirely and reopen the app directly at `/dashboard`** (a cold start, not a reload). It should still boot to the cached dashboard rather than the browser's offline error page.
+11. Go back online. The banner should disappear without a reload, and the next dashboard load should show fresh data.
+12. Sign out, then go offline and try to reach `/dashboard`. You must **not** see the previous household's cached data.
+
+**Expected:** Offline is read-only throughout. Nothing you do offline is queued or replayed when you reconnect — the app says so plainly rather than implying background sync. The offline banner appears only on the dashboard (the network-dependent screen), not on library pages that are legitimately fully cached.
+
+**Pass criteria:** All 12 steps behave as described; no console errors; `pwa_shell_loaded` fires once per load with `cache_status: "miss"` on the very first visit and `"hit"` on subsequent loads; `pwa_install_prompted` fires once when the install card renders; `pwa_installed` fires only when the browser dialog is actually accepted.
+
+**Accessibility check (from Constraints Contract in `SPEC.md`):**
+- [ ] Usable at mobile breakpoint (390px) — including the two-button install card
+- [ ] Focus states visible when tabbing to Install / Not now
+- [ ] Touch targets ≥44px on both install-card buttons
+- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+
+**Result:** Automated verification complete and passing: `pwa-cache` unit-tested for per-household timestamp round-trip, corrupt-value handling, localStorage-unavailable (private mode / quota) tolerance, staleness threshold boundaries, clock-skew (future timestamp) handling, human-readable age formatting with singular/plural and roll-up at the minute/hour/day boundaries, and cache purge including the Cache-API-absent and delete-fails paths; `useOnline` tested for initial state, online/offline transitions, and listener cleanup; `InstallPrompt` tested for visibility gating, the remembered dismissal, accept vs. decline outcomes, double-click protection on the single-use browser event, and both analytics events; `Dashboard` tested for banner presence/absence, the correct reported age, and the freshness-stamp rule; `ProtectionForm` tested for the disabled-offline rule. 294 tests pass (up from 254). `npm run typecheck`, `scripts/check_events.py`, and `npm run build` all clean, and the **generated `dist/sw.js` was inspected directly** to confirm both runtime-caching rules (`dashboard-last` NetworkFirst with a 5s network timeout, `instrument-library` CacheFirst) and the SPA `NavigationRoute` fallback are actually present — not merely configured.
+
+**The named fallback was NOT needed.** `SPEC.md` §7 offered "precache library only; dashboard requires network" as the simpler option if dynamic-response caching fought vite-plugin-pwa's defaults. It didn't — a single `NetworkFirst` rule on the flat `/api/dashboard` path was sufficient, so the full capability shipped.
+
+**Three design decisions worth flagging:**
+1. **Freshness is tracked client-side, not read off the response.** With a NetworkFirst rule, a cache hit and a live response are indistinguishable at the `fetch()` layer, and detecting the difference properly would need a custom service worker — which `SPEC.md` §7 explicitly steers away from for this slice. So the dashboard stamps a timestamp only when `navigator.onLine` is true, and the banner reports that timestamp's age. Consequence: if the device is online but the *network* is broken (captive portal), the app will believe it fetched fresh data. Acceptable — that case shows the normal error path instead.
+2. **The dashboard cache is purged on sign-out.** Service-worker caches are origin-scoped, not user-scoped. NetworkFirst normally protects a second user (they hit the network and get their own data), but offline it would fall back to whichever household was cached last. Since multi-tenancy in this app is app-layer only, the client purges `dashboard-last` on sign-out. **Step 12 above is the test for this** — it's a data-isolation check, not a nicety.
+3. **`navigateFallback: 'index.html'` was added** so a *cold* offline start on a deep link boots the app shell. Without it, offline support would only have worked on a reload of an already-open page — step 10 is the test that distinguishes the two.
+
+**Copy written for this slice, flagged for COPY_DECK backfill:** the offline banner and the offline-write message. `COPY_DECK.md` covers the install prompt (used verbatim) but has no entry for either.
+
+**Live verification:** owed to Gaurav — human click-through of the 12 steps above, on a real deployment. This slice is the one most dependent on live verification in the whole plan: service workers, install prompts, and offline behaviour cannot be meaningfully exercised by unit tests or by `vercel dev`.
+
+---
+
 ## Capability: Slice 9 — Profile + account deletion
 
 **⚠️ DESTRUCTIVE — use a disposable test account, never a real one.** The last step of this script permanently deletes the account you're signed in as, along with its household, family members, holdings, and protection records. Create a throwaway account (a test email you don't need again) specifically for this click-through — do not run this against Gaurav's own household data or any account you want to keep.

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ProtectionForm } from './protection-form'
 import type { FamilyMember } from '@/lib/family-members-api'
@@ -44,6 +44,34 @@ const protectionRecord: Protection = {
   createdAt: '',
   updatedAt: '',
 }
+
+describe('ProtectionForm — offline (SPEC.md §7: disabled, never queued)', () => {
+  // Restore in afterEach (a failing assertion would otherwise leave
+  // navigator.onLine stubbed for every later test in this file), and restore
+  // only THIS spy — vi.restoreAllMocks() also clears the module-level
+  // vi.fn() implementations like getToken's mockResolvedValue.
+  let onLineSpy: ReturnType<typeof vi.spyOn> | null = null
+  afterEach(() => {
+    onLineSpy?.mockRestore()
+    onLineSpy = null
+  })
+
+  it('disables submit and explains why when offline', async () => {
+    onLineSpy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false) as never
+    render(
+      <ProtectionForm
+        members={[member]}
+        submitLabel="Save"
+        submittingLabel="Saving..."
+        analyticsSurface="test"
+        onSaved={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText(/nothing is queued in the background/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+})
 
 describe('ProtectionForm', () => {
   beforeEach(() => {

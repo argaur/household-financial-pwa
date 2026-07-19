@@ -2,6 +2,7 @@ import { assetClassEnum } from '../../drizzle/schema.js'
 import { listFamilyMembers } from './family-members.js'
 import { listHoldings } from './holdings.js'
 import { listProtection } from './protection.js'
+import { buildNudgeContext, selectNudge, type Nudge, type NudgeInputHolding, type NudgeInputMember, type NudgeInputProtection } from './nudge.js'
 import type { db as Db } from './db.js'
 
 export type CompletenessTier = 'getting_started' | 'on_track' | 'strong'
@@ -28,6 +29,8 @@ export interface AllocationSlice {
 
 export interface DashboardResult {
   completeness: CompletenessResult
+  /** Slice 7 — always present; exactly one nudge, never zero (SPEC.md §7). */
+  nudge: Nudge
   allocation: AllocationSlice[]
   totalValue: number
 }
@@ -113,6 +116,16 @@ export async function getDashboard(db: DashboardDb, householdId: string): Promis
     protectionRows as unknown as CompletenessInputProtection[],
   )
 
+  // Slice 7 — derived from the same three result sets, no extra queries.
+  const nudge = selectNudge(
+    completeness.checks,
+    buildNudgeContext(
+      members as unknown as NudgeInputMember[],
+      holdings as unknown as NudgeInputHolding[],
+      protectionRows as unknown as NudgeInputProtection[],
+    ),
+  )
+
   const totals = new Map<string, number>()
   let totalValue = 0
   for (const h of holdings) {
@@ -128,5 +141,5 @@ export async function getDashboard(db: DashboardDb, householdId: string): Promis
       return { assetClass, value, percentage: totalValue > 0 ? Math.round((value / totalValue) * 100) : 0 }
     })
 
-  return { completeness, allocation, totalValue }
+  return { completeness, nudge, allocation, totalValue }
 }

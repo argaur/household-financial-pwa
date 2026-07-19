@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
+import { useOnline, OFFLINE_WRITE_MESSAGE } from '@/lib/use-online'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -52,6 +53,7 @@ export function ProtectionForm({
 }: ProtectionFormProps) {
   const { getToken } = useAuth()
   const editing = Boolean(initialProtection)
+  const online = useOnline()
 
   const [memberId, setMemberId] = useState(initialProtection?.memberId ?? members[0]?.id ?? '')
   const [type, setType] = useState<Protection['type']>(initialProtection?.type ?? 'term-life')
@@ -192,7 +194,13 @@ export function ProtectionForm({
 
       {error && <p className="text-caption text-destructive">{error}</p>}
 
-      <Button type="submit" className="w-full" disabled={submitting || !memberId || coverAmount === ''}>
+      {!online && <p className="text-caption text-muted-foreground">{OFFLINE_WRITE_MESSAGE}</p>}
+
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={!online || submitting || !memberId || coverAmount === ''}
+      >
         {submitting ? submittingLabel : submitLabel}
       </Button>
     </form>

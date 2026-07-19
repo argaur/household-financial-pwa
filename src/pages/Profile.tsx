@@ -11,6 +11,7 @@ import { track } from '@/lib/analytics'
 import { listFamilyMembers, removeFamilyMember, type FamilyMember } from '@/lib/family-members-api'
 import { listProtection, type Protection } from '@/lib/protection-api'
 import { fetchHousehold, updateHousehold, type Household } from '@/lib/household-api'
+import { clearDashboardCache } from '@/lib/pwa-cache'
 
 type State = 'loading' | 'loaded' | 'error'
 
@@ -183,6 +184,12 @@ export function Profile() {
 
   async function handleSignOut() {
     track('feature_used', { feature_name: 'sign_out' })
+    // Slice 8 — service-worker caches are origin-scoped, not user-scoped.
+    // Without this, signing out and then going offline would still serve the
+    // previous household's dashboard from the NetworkFirst cache on a shared
+    // device. Multi-tenancy here is app-layer only, so the client has to
+    // clean up after itself.
+    await clearDashboardCache()
     await signOut()
   }
 

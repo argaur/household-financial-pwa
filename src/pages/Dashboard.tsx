@@ -5,6 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { HealthTierCard } from '@/components/health-tier-card'
 import { AllocationDonut } from '@/components/allocation-donut'
+import { NudgeCard } from '@/components/nudge-card'
+import { InstallPrompt } from '@/components/install-prompt'
+import { formatStaleness, readDashboardFetchedAt, recordDashboardFetch } from '@/lib/pwa-cache'
+import { useOnline } from '@/lib/use-online'
 import { track } from '@/lib/analytics'
 import { fetchDashboard, DashboardApiError, type DashboardData, type CompletenessTier } from '@/lib/dashboard-api'
 
@@ -32,6 +36,11 @@ export function Dashboard() {
   const [state, setState] = useState<State>('loading')
   const [data, setData] = useState<DashboardData | null>(null)
   const viewedFired = useRef(false)
+  // Slice 8 — the offline banner is driven by connectivity, not by inspecting
+  // the response: with a NetworkFirst service-worker rule the client can't
+  // tell a cache hit from a live fetch, so "offline and we still rendered"
+  // is the honest signal that what's on screen came from cache.
+  const offline = !useOnline()
 
   useEffect(() => {
     let cancelled = false
@@ -42,6 +51,13 @@ export function Dashboard() {
         if (cancelled) return
         setData(result)
         setState('loaded')
+        // Only stamp freshness when we actually reached the network. A
+        // NetworkFirst *cache* hit resolves successfully too, so stamping
+        // unconditionally would keep re-marking week-old cached data as
+        // fetched "just now" — the banner would then never report real age.
+        if (navigator.onLine) {
+          recordDashboardFetch(result.household.id, Date.now())
+        }
       } catch (err) {
         if (cancelled) return
         if (err instanceof DashboardApiError && err.status === 404) {
@@ -62,6 +78,16 @@ export function Dashboard() {
 
     const allocationSummary = data.allocation.map((s) => `${s.assetClass}:${s.percentage}%`).join(',')
     track('dashboard_viewed', { household_id: data.household.id, allocation_summary: allocationSummary })
+
+    // Slice 7 — exactly one nudge is always present, so this fires once per
+    // dashboard load, gated by the same viewedFired ref as dashboard_viewed.
+    // Guarded because a *cached* response can predate this field: Slice 8
+    // caches the last dashboard payload in the service worker, so a client on
+    // new JS can render a payload serialized before `nudge` existed. Degrade
+    // to no card rather than crashing the whole dashboard on it.
+    if (data.nudge) {
+      track('nudge_shown', { check_id: data.nudge.checkId, learn_card_slug: data.nudge.learnCardSlug })
+    }
 
     const key = `${LAST_TIER_KEY_PREFIX}${data.household.id}`
     const lastTier = window.localStorage.getItem(key) as CompletenessTier | null
@@ -87,6 +113,8 @@ export function Dashboard() {
           </div>
           <Skeleton className="h-36 w-full rounded-lg" />
           <Skeleton className="h-72 w-full rounded-lg" />
+          {/* Nudge card skeleton — WIREFRAMES.md loading state. */}
+          <Skeleton className="h-28 w-full rounded-lg" />
         </div>
       </main>
     )
@@ -117,6 +145,19 @@ export function Dashboard() {
           <h1 className="font-display text-display">Your plan</h1>
         </header>
 
+        {/* Copy written for Slice 8 — COPY_DECK.md has no offline-banner
+            entry; flagged there for backfill. Observational, no exclamation,
+            per the deck's established voice. DATA_MODEL.md's guidance is to
+            show this only on network-dependent screens, which is why it
+            lives here and not in a global shell. */}
+        {offline && (
+          <div role="status" className="rounded-lg border border-dashed p-3 text-caption">
+            You're offline. Showing what was last saved to this device, from{' '}
+            {formatStaleness(readDashboardFetchedAt(dashboardData.household.id), Date.now())}. Values
+            may have changed since.
+          </div>
+        )}
+
         <HealthTierCard completeness={dashboardData.completeness} />
 
         <AllocationDonut
@@ -125,7 +166,11 @@ export function Dashboard() {
           totalValue={dashboardData.totalValue}
         />
 
-        {/* Next-step nudge card is Slice 7 scope — not built here. */}
+        {dashboardData.nudge && <NudgeCard nudge={dashboardData.nudge} />}
+
+        {/* Post-activation install prompt — renders nothing unless the
+            browser actually offered an install (Slice 8). */}
+        <InstallPrompt surface="dashboard" />
 
         <nav className="flex flex-col gap-2 pt-2">
           <Link to="/portfolio" className="text-body underline">

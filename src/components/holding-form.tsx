@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
+import { useOnline, OFFLINE_WRITE_MESSAGE } from '@/lib/use-online'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -39,6 +40,7 @@ export function HoldingForm({
 }: HoldingFormProps) {
   const { getToken } = useAuth()
   const editing = Boolean(initialHolding)
+  const online = useOnline()
 
   const [memberId, setMemberId] = useState(initialHolding?.memberId ?? members[0]?.id ?? '')
   const [instrumentId, setInstrumentId] = useState(initialHolding?.instrumentId ?? '')
@@ -254,10 +256,14 @@ export function HoldingForm({
 
       {error && <p className="text-caption text-destructive">{error}</p>}
 
+      {!online && <p className="text-caption text-muted-foreground">{OFFLINE_WRITE_MESSAGE}</p>}
+
       <Button
         type="submit"
         className="w-full"
-        disabled={submitting || !memberId || !instrumentId || investedAmount === '' || currentValue === ''}
+        disabled={
+          !online || submitting || !memberId || !instrumentId || investedAmount === '' || currentValue === ''
+        }
       >
         {submitting ? submittingLabel : submitLabel}
       </Button>

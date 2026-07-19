@@ -225,6 +225,39 @@ describe('getDashboard', () => {
     expect(result.completeness.checks.memberCoverage).toBe(true)
   })
 
+  it('returns exactly one nudge, naming the member who has no holdings (Slice 7)', async () => {
+    const db = fakeDb({
+      members: [
+        { id: 'm1', householdId: 'h1', name: 'Arun', relationship: 'self' },
+        { id: 'm2', householdId: 'h1', name: 'Meera', relationship: 'spouse' },
+      ],
+      holdings: [
+        { memberId: 'm1', householdId: 'h1', assetClass: 'equity', currentValue: '600', isEmergencyFund: false },
+      ],
+      protection: [],
+    })
+    const result = await getDashboard(db as never, 'h1')
+    expect(result.completeness.checks.memberCoverage).toBe(false)
+    expect(result.nudge.checkId).toBe('member_coverage')
+    expect(result.nudge.memberName).toBe('Meera')
+    expect(result.nudge.learnCardSlug).toBe('portfolio')
+  })
+
+  it('nudge falls through to the first unmet check when earlier checks pass (Slice 7)', async () => {
+    const db = fakeDb({
+      members: [{ id: 'm1', householdId: 'h1', name: 'Arun', relationship: 'self' }],
+      holdings: [
+        { memberId: 'm1', householdId: 'h1', assetClass: 'equity', currentValue: '600', isEmergencyFund: true },
+        { memberId: 'm1', householdId: 'h1', assetClass: 'debt', currentValue: '300', isEmergencyFund: false },
+      ],
+      protection: [{ memberId: 'm1', householdId: 'h1', status: 'active' }],
+    })
+    const result = await getDashboard(db as never, 'h1')
+    // checks 1-3 pass; only 2 asset classes -> check 4 is the first unmet
+    expect(result.nudge.checkId).toBe('asset_diversity')
+    expect(result.nudge.assetClassCount).toBe(2)
+  })
+
   it('allocation is ordered by the fixed assetClassEnum order, not insertion order', async () => {
     const db = fakeDb({
       members: [],
