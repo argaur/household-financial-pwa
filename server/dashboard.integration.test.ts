@@ -174,6 +174,7 @@ interface MemberResponse {
 interface DashboardResponse {
   household?: { id: string; name: string }
   completeness?: { checks: Record<string, boolean>; score: number; tier: string }
+  nudge?: { checkId: string; learnCardSlug: string; memberName?: string; assetClassCount?: number }
   allocation?: Array<{ assetClass: string; value: number; percentage: number }>
   totalValue?: number
   error?: string
@@ -291,12 +292,30 @@ describe('dashboard route', () => {
     })
     expect(body.completeness?.score).toBe(5)
     expect(body.completeness?.tier).toBe('strong')
+    // Slice 7: the route must forward the nudge getDashboard() computes — all
+    // five checks pass here, so it's the affirming `complete` nudge.
+    expect(body.nudge).toBeDefined()
+    expect(body.nudge?.checkId).toBe('complete')
     expect(body.totalValue).toBe(10000)
     expect(body.allocation).toEqual([
       { assetClass: 'equity', value: 6000, percentage: 60 },
       { assetClass: 'debt', value: 3000, percentage: 30 },
       { assetClass: 'gold', value: 1000, percentage: 10 },
     ])
+  })
+
+  it('always forwards a nudge in the response — never zero (SPEC.md §7)', async () => {
+    // Regression guard: getDashboard() computes a nudge, but the route once
+    // hand-picked response fields and dropped it, so the live dashboard
+    // rendered no NudgeCard despite the "exactly one, never zero" invariant.
+    // A household with zero members has four unmet checks → member_coverage.
+    await createHousehold('user_a', 'Gupta Family')
+    const res = await app.request('/api/dashboard', { headers: { authorization: 'Bearer user_a' } })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as DashboardResponse
+    expect(body.nudge).toBeDefined()
+    expect(body.nudge?.checkId).toBe('member_coverage')
+    expect(body.nudge?.learnCardSlug).toBe('portfolio')
   })
 
   it("user B never sees user A's dashboard data", async () => {

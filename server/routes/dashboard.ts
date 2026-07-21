@@ -20,6 +20,9 @@ dashboardRoutes.get('/', async (c) => {
   return c.json({
     household: { id: household.id, name: household.name },
     completeness: result.completeness,
+    // Slice 7: exactly one nudge, never zero (SPEC.md §7). getDashboard()
+    // always computes it — forward it, or the client renders no NudgeCard.
+    nudge: result.nudge,
     allocation: result.allocation,
     totalValue: result.totalValue,
   })
