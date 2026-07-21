@@ -335,3 +335,27 @@ Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`d
 **Manual step owed to Gaurav before this works live:** register a `user.deleted` webhook endpoint in the Clerk dashboard pointing at `/api/clerk-webhook`, set its signing secret as `CLERK_WEBHOOK_SECRET` in Vercel, and enable "allow users to delete their own account" in Clerk's User & Authentication settings. None of this was done as part of this slice (no live dashboard changes without explicit go-ahead, same standing rule as every deploy).
 
 **Live verification:** owed to Gaurav — human click-through of the 12 steps above **using a disposable test account**, plus the still-pending Slice 2/3/4/5 click-throughs, before this slice is fully signed off. This slice additionally cannot be verified live until the manual Clerk-dashboard step above is done, since the webhook won't fire without it.
+
+---
+
+## Capability: Slice 10 — "Why these choices?" page + accessibility pass
+
+**Setup:** Visit `/why` — no sign-in needed (public page). Also reachable from the "Why these choices?" link at the bottom of the sign-in screen.
+
+**Steps:**
+1. Load `/why`. You should see a hero ("A household-finance app, and the reasoning behind it") over two sections: **Product judgment** and **Engineering**.
+2. Each section has four cards. Every card shows a heading and three labelled parts: **Decision**, **Instead of**, **Why**. Confirm eight cards total, none blank.
+3. Scroll to the footer: a one-line stack summary, a "View the source on GitHub" link (opens the public repo in a new tab), and a "← Back to the app" link.
+4. From the sign-in screen (sign out first if needed), confirm the "Why these choices? — the thinking behind this app" link at the bottom navigates to `/why`.
+
+**Expected:** No sign-in prompt anywhere in this flow. The GitHub link points at `https://github.com/argaur/household-financial-pwa`.
+
+**Pass criteria:** All four steps behave as described; no console errors; `why_page_viewed` fires once on page load (visible in PostHog).
+
+**Accessibility pass (closes the Constraints Contract in `SPEC.md` §6 — the item deferred across every prior slice):**
+- [x] Contrast (WCAG AA) — automated `axe-core` scan (wcag2a/2aa/21aa) on `/why` and `/explore` returns **0 violations**. Fixed a real, app-wide finding: `--muted-foreground` was `30 6% 45%` → measured 4.4:1 (just under AA) on the warm card/background surfaces; darkened to `30 7% 40%` to clear 4.5:1. Because the token is used for all secondary text, this lifts contrast on every screen.
+- [x] Focus states — `focus-visible` ring on shadcn Buttons/inputs (built in) plus a new global `a:focus-visible` ring (`globals.css`) so bare `<a>`/`<Link>` navigation is keyboard-visible too.
+- [x] Touch targets ≥44px — button size tokens raised to `h-11` (44px) for `default`/`sm`/`lg` and `h-11 w-11` for `icon` (the Portfolio FAB); `sm`/`lg` now differ by horizontal padding, not height (`components/ui/button.tsx`).
+- [x] `prefers-reduced-motion` — global media query in `globals.css` reduces all animation/transition/scroll motion to ~0 (covers the dashboard skeleton shimmer, card hover transitions, Radix/Recharts motion).
+
+**Result:** Built and smoke-run live 2026-07-21 against the local dev server (browser-driven): `/why` renders correctly in the locked design language (DM Serif Display hero, warm card surfaces, Decision/Instead of/Why labels), the sign-in footer link resolves to `/why`, and the axe scans above pass with zero violations after the contrast fix. Auth-gated screens (dashboard/profile/portfolio) were not axe-scanned live in this pass — they share the same design tokens and `Button` primitive, so the token-level contrast, focus, touch-target, and reduced-motion fixes apply to them by construction; a live axe scan of those screens is worth doing once the fix is deployed. Automated suite: 300 tests (5 new for `Why`), typecheck / `check_events.py` / `npm run build` all clean.

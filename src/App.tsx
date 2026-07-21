@@ -9,6 +9,7 @@ import { InstrumentDetail } from '@/pages/InstrumentDetail'
 import { Portfolio } from '@/pages/Portfolio'
 import { Profile } from '@/pages/Profile'
 import { Dashboard } from '@/pages/Dashboard'
+import { Why } from '@/pages/Why'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/" element={<RootGate />} />
         <Route path="/docs" element={<DocsStub />} />
         <Route path="/explore" element={<Explore />} />
+        <Route path="/why" element={<Why />} />
         <Route path="/explore/:sectionSlug" element={<LibrarySection />} />
         <Route path="/explore/:sectionSlug/:instrumentSlug" element={<InstrumentDetail />} />
         <Route

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { SignIn, SignUp } from '@clerk/clerk-react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 
 type View = 'sign-in' | 'sign-up'
@@ -40,6 +40,13 @@ export function AuthGate() {
       <Button variant="link" onClick={toggleView}>
         {view === 'sign-in' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
       </Button>
+
+      <Link
+        to="/why"
+        className="text-caption text-muted-foreground underline-offset-4 hover:underline focus-visible:underline"
+      >
+        Why these choices? — the thinking behind this app
+      </Link>
     </main>
   )
 }

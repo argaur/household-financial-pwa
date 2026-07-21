@@ -101,6 +101,10 @@ Once you've loaded your dashboard, an **"Add to your home screen"** card appears
 
 **What's enforced:** the app shell and library use a cache-first strategy (fast, offline-durable, content rarely changes); your dashboard uses network-first with a 5-second timeout, so you always get live data when a connection exists and cached data only when it genuinely can't be reached. A cold start on a deep link works offline too, not just a reload.
 
+## Why these choices? (design rationale)
+
+There is a public, no-login page at **`/why`** explaining the product and engineering decisions behind the app — reachable from the "Why these choices?" link at the bottom of the sign-in screen, or directly at `/why`. It's the recruiter/curious-visitor surface (D-007): eight decision cards, each in a *Decision → Instead of → Why* shape, split into **Product judgment** (holdings-first loop, manual values, education-not-advice, the 5-check health score) and **Engineering** (app-layer multi-tenancy, `jose` over the Clerk SDK, flat API routes, read-only offline), closing with a link to the public source. Copy lives in `src/lib/why-decisions.ts` — edit it there, not in the page component.
+
 ## FAQ
 
 **Why is the score only updated when I load the dashboard, not immediately after I add a holding?**

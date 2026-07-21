@@ -28,7 +28,7 @@
     --secondary:            30  8% 93%;   /* #EDEBE6  warm light gray */
     --secondary-foreground: 30 10% 20%;
     --muted:                30  8% 93%;
-    --muted-foreground:     30  6% 45%;   /* #6B6660  secondary text */
+    --muted-foreground:     30  7% 40%;   /* #6B655E  secondary text — WCAG AA ≥4.5:1 on card/bg (was 45%/4.4:1) */
 
     /* ── Accent — teal tint (subtle highlight bg) ────────────── */
     --accent:            180 40% 93%;   /* #E8F3F2 */
@@ -101,5 +101,26 @@
   /* Section label — the CFP document section header pattern */
   .section-label {
     @apply text-xs font-semibold tracking-widest uppercase text-muted-foreground;
+  }
+
+  /* Focus ring on bare anchors — shadcn Button/inputs style their own
+     focus-visible, but plain <a>/<Link> navigation needs a visible ring too
+     (SPEC.md §6: visible ring on every interactive element). */
+  a:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background rounded-sm;
+  }
+}
+
+/* SPEC.md §6: prefers-reduced-motion disables all shimmer/transition/animation.
+   Covers the dashboard skeleton shimmer, card hover transitions, and any
+   Radix/Recharts motion, without touching layout. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
