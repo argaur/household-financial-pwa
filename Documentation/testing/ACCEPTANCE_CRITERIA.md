@@ -251,6 +251,8 @@ Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`d
 
 **Live verification:** owed to Gaurav — human click-through of the 8 steps above. The local smoke-run for this slice could not be completed by the agent: the dev server served correctly (`/api/dashboard` returns 401 unauthenticated, `/api/health` 200, `index.html` and the transformed `main.tsx` both served), but the browser rendered a blank page with no console output, and the dashboard is auth-gated behind Clerk, which `app/CLAUDE.md` already documents as needing a human.
 
+**Live pass 2026-07-21 (partial) — found and fixed B-001.** Browser-driven click-through against production (signed-in account, 3 members / 1 holding, tier "getting_started", 1/5 checks) found **no "Next step" card rendered at all** — a direct violation of step 1's "never none" and step 7's "must never disappear." Root cause: `server/routes/dashboard.ts` omitted `nudge` from the response even though `getDashboard()` computed it (see B-001 in `BUG_LOG.md`). Fixed in `6e8ff4e`, redeployed, and re-verified live: `/dashboard` now renders exactly one "Next step" card reading "Rinku Sharma has no holdings recorded yet…" with "Add a holding for Rinku Sharma →" (→ `/portfolio`) — the correct `member_coverage` nudge (first member without holdings, in order), no console errors. **Still owed:** steps 2–8's flip-checks-on-and-off sequence (advancing the nudge through emergency-fund → protection → diversity → all-pass), which needs data mutation / a fresh account, plus PostHog verification of `nudge_shown` / `learn_card_clicked`.
+
 ---
 
 ## Capability: Slice 8 — PWA install + offline dashboard

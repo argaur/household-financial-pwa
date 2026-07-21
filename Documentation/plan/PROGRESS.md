@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-21 — live click-through of Slices 2–9 + hotfix B-001
+
+1. **Verified live (browser-driven against production, signed-in account):** Slice 3 library full PASS (6×5 instruments, rate line on PPF `7.1%`/as-of, none on Direct Stocks); Slice 6 dashboard read-only PASS (health card, donut, exactly one `/api/dashboard` 200, correct nav links); Slice 4 Portfolio, Slice 5 Protection empty-state, Slice 9 Profile 4-card structure all render clean; Slice 8 machinery verified (SW `/sw.js` activated, 3 caches — workbox-precache/instrument-library/dashboard-last, install card renders).
+2. **Found + fixed B-001 (P1):** Slice 7 nudge card rendered **nowhere** in production — `server/routes/dashboard.ts` dropped `result.nudge` on serialization though `getDashboard()` computed it; frontend degrades silently (`Dashboard.tsx:169`) so no crash masked it; all 294 tests passed because the route→response seam was never asserted. Fixed `6e8ff4e` (+ two RED-first integration assertions), redeployed, live-verified: `member_coverage` nudge now renders ("Rinku Sharma has no holdings recorded yet…" → `/portfolio`).
+3. **Next slice:** Slice 10 ("Why these choices?" + polish/accessibility) — now has a real base pass under it. Still owed before full sign-off: fresh-account onboarding pass (Slices 2/4 pristine states, needs manual Turnstile sign-up), Slice 8 offline steps 6–12 (DevTools Offline / wifi off, esp. step 12 sign-out cache purge), Slice 9 destructive flow (disposable acct + 2 Clerk-dashboard steps), Slice 5 add-protection.
+4. **Open decisions / Finding 2:** production runs Clerk **development** keys (console warns "strict usage limits… should not be used in production") — needs a Clerk prod instance + `pk_live`/`sk_live` in Vercel Production env. Manual (Gaurav's Clerk dashboard). Suite now 295 (added the B-001 regression test).
+5. **Kill criterion check:** Slice 0 deployed 2026-07-10; Slices 0–9 all built and live; B-001 is the first live-only defect the human/browser pass caught that no unit test could. OK.
+
+---
+
 ## 2026-07-19 — after Slice 8 (PWA install + offline dashboard)
 
 1. **Slices done:** Slice 8 — 294 tests total (40 new: `pwa-cache` staleness/timestamp/purge, `useOnline`, `InstallPrompt`, `Dashboard` offline banner + freshness-stamp rule, `ProtectionForm` disabled-offline). Typecheck, `check_events.py`, `npm run build` all clean. **The named fallback in `SPEC.md` §7 was NOT needed** — a single `NetworkFirst` rule on the flat `/api/dashboard` path handled dynamic-response caching without fighting vite-plugin-pwa, so the full capability shipped rather than the network-only degradation.
