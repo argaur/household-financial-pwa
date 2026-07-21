@@ -1,4 +1,5 @@
 import type { CompletenessChecks } from './dashboard.js'
+import { isParentRelationship, activeProtectionMemberIds } from './household-checks.js'
 
 /**
  * Slice 7 — nudge selection. Pure derived state on top of Slice 6's
@@ -141,11 +142,9 @@ export function buildNudgeContext(
   const memberIdsWithHoldings = new Set(holdings.map((h) => h.memberId))
   const memberWithoutHoldings = members.find((m) => !memberIdsWithHoldings.has(m.id))?.name
 
-  const activeProtectionMemberIds = new Set(
-    protectionRows.filter((p) => p.status === 'active').map((p) => p.memberId),
-  )
+  const protectedMemberIds = activeProtectionMemberIds(protectionRows)
   const unprotectedParent = members.find(
-    (m) => (m.relationship === 'self' || m.relationship === 'spouse') && !activeProtectionMemberIds.has(m.id),
+    (m) => isParentRelationship(m.relationship) && !protectedMemberIds.has(m.id),
   )?.name
 
   const assetClassCount = new Set(holdings.map((h) => h.assetClass)).size

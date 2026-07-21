@@ -3,6 +3,7 @@ import { listFamilyMembers } from './family-members.js'
 import { listHoldings } from './holdings.js'
 import { listProtection } from './protection.js'
 import { buildNudgeContext, selectNudge, type Nudge, type NudgeInputHolding, type NudgeInputMember, type NudgeInputProtection } from './nudge.js'
+import { isParentRelationship, activeProtectionMemberIds } from './household-checks.js'
 import type { db as Db } from './db.js'
 
 export type CompletenessTier = 'getting_started' | 'on_track' | 'strong'
@@ -76,11 +77,9 @@ export function computeCompleteness(
 
   const emergencyFund = holdings.some((h) => h.isEmergencyFund)
 
-  const parentMembers = members.filter((m) => m.relationship === 'self' || m.relationship === 'spouse')
-  const activeProtectionMemberIds = new Set(
-    protectionRows.filter((p) => p.status === 'active').map((p) => p.memberId),
-  )
-  const bothParentsProtected = parentMembers.length > 0 && parentMembers.every((m) => activeProtectionMemberIds.has(m.id))
+  const parentMembers = members.filter((m) => isParentRelationship(m.relationship))
+  const protectedMemberIds = activeProtectionMemberIds(protectionRows)
+  const bothParentsProtected = parentMembers.length > 0 && parentMembers.every((m) => protectedMemberIds.has(m.id))
 
   const distinctAssetClasses = new Set(holdings.map((h) => h.assetClass))
   const assetDiversity = distinctAssetClasses.size >= 3
