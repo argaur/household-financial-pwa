@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { PieChart, Pie, Cell } from 'recharts'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -40,6 +41,15 @@ interface AllocationDonutProps {
 }
 
 export function AllocationDonut({ state, allocation, totalValue }: AllocationDonutProps) {
+  // Recharts stamps each sector <path> with tabindex="-1". The chart lives
+  // inside an aria-hidden wrapper (the labelled parent + text legend are the
+  // accessible representation), and aria-hidden must not contain focusable
+  // descendants — so strip the stray tabindex after render (axe: aria-hidden-focus).
+  const chartRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    chartRef.current?.querySelectorAll('[tabindex]').forEach((el) => el.removeAttribute('tabindex'))
+  }, [state, allocation])
+
   return (
     <section className="rounded-lg border p-4 space-y-4">
       <h2 className="section-label">Where your money lives</h2>
@@ -95,7 +105,7 @@ export function AllocationDonut({ state, allocation, totalValue }: AllocationDon
               trips axe's svg-img-alt; hide the decorative chart internals from
               assistive tech so the wrapper's single label speaks for it.
             */}
-            <div aria-hidden="true">
+            <div aria-hidden="true" ref={chartRef}>
               <PieChart width={200} height={200}>
                 <Pie
                   data={allocation}
