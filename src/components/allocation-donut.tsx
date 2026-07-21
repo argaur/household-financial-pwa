@@ -88,22 +88,31 @@ export function AllocationDonut({ state, allocation, totalValue }: AllocationDon
       {state === 'populated' && (
         <div className="space-y-4">
           <div className="flex justify-center" role="img" aria-label="Household asset allocation by class">
-            <PieChart width={200} height={200}>
-              <Pie
-                data={allocation}
-                dataKey="value"
-                nameKey="assetClass"
-                innerRadius={56}
-                outerRadius={80}
-                paddingAngle={2}
-                stroke="none"
-                isAnimationActive={false}
-              >
-                {allocation.map((slice) => (
-                  <Cell key={slice.assetClass} fill={ASSET_COLORS[slice.assetClass]} />
-                ))}
-              </Pie>
-            </PieChart>
+            {/*
+              The labelled wrapper above is the accessible representation, and
+              the <ul> legend below carries the real per-class values. Recharts
+              exposes each sector as its own <svg>/<path> with no name, which
+              trips axe's svg-img-alt; hide the decorative chart internals from
+              assistive tech so the wrapper's single label speaks for it.
+            */}
+            <div aria-hidden="true">
+              <PieChart width={200} height={200}>
+                <Pie
+                  data={allocation}
+                  dataKey="value"
+                  nameKey="assetClass"
+                  innerRadius={56}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  stroke="none"
+                  isAnimationActive={false}
+                >
+                  {allocation.map((slice) => (
+                    <Cell key={slice.assetClass} fill={ASSET_COLORS[slice.assetClass]} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </div>
           </div>
           <ul className="space-y-1.5">
             {allocation.map((slice) => (
