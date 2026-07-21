@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-21 — after Slice 10 ("Why these choices?" page + accessibility pass) — FINAL SLICE
+
+1. **Slices done:** Slice 10, the last one. Public `/why` page (D-007 recruiter surface): 8 Decision→Instead of→Why cards (Product judgment + Engineering) from `src/lib/why-decisions.ts`, sign-in footer link, repo link, `why_page_viewed`. 5 new tests → 300 total. Accessibility pass closed SPEC §6's Constraints Contract (deferred across every prior slice): contrast (darkened `--muted-foreground` 45%→40%, was 4.4:1), global `a:focus-visible` ring, buttons → 44px, `prefers-reduced-motion`. Commit `63e9f5f`, deployed.
+2. **Current state:** Slices 0–10 all built + deployed. Live axe-core scans (wcag2a/2aa/21aa) of all five screens — `/why`, `/explore`, `/dashboard`, `/portfolio`, `/profile` — return **0 violations**. The authenticated-dashboard scan caught two Recharts donut issues the localhost/public scans could not reach: `svg-img-alt` (fixed via an `aria-hidden` chart wrapper, `3ff9e42`) and `aria-hidden-focus` (fixed by stripping Recharts' `tabindex`, `9db5d5c`). Also landed the deferred Slice 7 drift-risk refactor — shared `isParentRelationship` / `activeProtectionMemberIds` in `server/lib/household-checks.ts` (`b04dac2`).
+3. **Next slice:** None — Slice 10 was the last. Remaining work is human-gated verification only: Slices 2/4/5/8/9 click-throughs (fresh account / real-data mutation / offline toggling / disposable account) and the 2 Clerk-dashboard steps for account deletion.
+4. **Open decisions:** Finding 2 — production still runs Clerk **development** keys (needs a prod instance + `pk_live`/`sk_live` in Vercel). New-scope item flagged but NOT built: dedicated emergency-fund + term-insurance learn-cards (would close the Slice 7 CTA deviations + the `learn_card_slug` route-sentinel dilution) — needs Gaurav's go-ahead since it exceeds the locked 30-instrument library (D-010).
+5. **Kill criterion check:** Slice 0 deployed 2026-07-10; all of Slices 0–10 built + live. Project is feature-complete. OK.
+
+---
+
 ## 2026-07-21 — live click-through of Slices 2–9 + hotfix B-001
 
 1. **Verified live (browser-driven against production, signed-in account):** Slice 3 library full PASS (6×5 instruments, rate line on PPF `7.1%`/as-of, none on Direct Stocks); Slice 6 dashboard read-only PASS (health card, donut, exactly one `/api/dashboard` 200, correct nav links); Slice 4 Portfolio, Slice 5 Protection empty-state, Slice 9 Profile 4-card structure all render clean; Slice 8 machinery verified (SW `/sw.js` activated, 3 caches — workbox-precache/instrument-library/dashboard-last, install card renders).
