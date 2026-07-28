@@ -24,7 +24,7 @@
 - [x] Usable at mobile breakpoint (390px) — verified via Tailwind responsive container, not yet walked on a physical device
 - [x] Focus states visible when tabbing through — shadcn Button default focus ring
 - [x] Touch targets ≥44px — shadcn Button default size meets this
-- [ ] Text readable (WCAG AA contrast) — not yet formally audited; deferred to Slice 10's accessibility pass
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** PASS — 2026-07-10, verified live via automated browser (Playwright) for page render, DB connection, and UI interaction; PostHog ingestion verified via direct API call rather than the automated browser click, since PostHog's own bot-detection filters headless-Chromium traffic (see `PROGRESS.md`). Sentry DSN not yet configured (org permission pending) — client-side wiring present but unverified end-to-end.
 
@@ -52,7 +52,7 @@
 - [ ] Usable at mobile breakpoint (390px)
 - [ ] Focus states visible when tabbing through the household name form
 - [ ] Touch targets ≥44px on the Continue button
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as Slice 0
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** PASS — 2026-07-10, verified live at https://household-financial-pwa.vercel.app. Sign-up, household creation, and household-scoped persistence across refresh/sign-out-sign-in all confirmed working. One deploy-time gotcha found and fixed along the way: a stale PWA service worker (installed during the Slice 0 visit) served the old cached shell after this deploy went live, masking the new code until the service worker was unregistered and the page hard-refreshed — worth remembering for every future slice's live smoke-test, not just this one. Accessibility checklist not walked this pass — deferred to Slice 10 per Slice 0's precedent.
 
@@ -80,7 +80,7 @@
 - [ ] Usable at mobile breakpoint (390px)
 - [ ] Focus states visible when tabbing through the add-member form
 - [ ] Touch targets ≥44px on Continue / Add to plan
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as Slice 0/1
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** Automated verification complete and passing: 55 tests (unit + two-user isolation integration tests for both `/api/household` and `/api/family-members`, plus component tests for the add-member form including the disabled/enabled Continue transitions), `npm run typecheck` clean, `check_events.py` clean. A full automated browser click-through (Playwright, matching how Slice 0/1 were verified) was attempted but blocked at the Clerk sign-up screen by a Cloudflare Turnstile bot-check that gates account creation on this Clerk instance — the same class of environmental limitation as Slice 0's PostHog headless-detection issue, not a code defect. Did not attempt to defeat the bot-check (a legitimate third-party security control). **This capability has not yet had a human click-through** — needs Gaurav to do the 8 steps above once, live, before this is fully signed off (should take under 2 minutes; the underlying code paths are identical in shape to Slice 1's, which did pass a full human-verified live test).
 
@@ -105,13 +105,13 @@
 - [ ] Usable at mobile breakpoint (390px)
 - [ ] Focus states visible when tabbing through section cards and instrument rows
 - [ ] Touch targets ≥44px on section/instrument rows
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** Automated verification complete and passing: 80 tests total (12 new — seed-data validation, instrument route integration tests with no-auth-required assertions, and component tests for all 3 new pages including the rate/no-rate detail branches), `npm run typecheck` clean, `check_events.py` clean (27 registered events). 30 instruments seeded into the live Neon database via `npm run db:seed` (idempotent upsert by slug).
 
 **Real bug found and fixed along the way, not a local-tooling fluke:** the original design used a `/api/instruments/:slug` path parameter for instrument detail. This 404'd under local `vercel dev`, then 404'd identically on a real production deploy — `vercel build`'s generated `.vercel/output/config.json` showed Vercel's zero-config routing for this project (`framework: "vite"`, not Next.js) only maps single-path-segment requests under `/api/` to the catch-all function; anything with a second segment hits a hardcoded 404 rule the platform generates itself. Confirmed this isn't specific to the new route — `/api/family-members/anything` 404s the same way on the already-shipped Slice 2 code, it just never happened to be exercised. Fixed by switching instrument-detail lookup to a query param (`/api/instruments?slug=...`), the same fix-pattern this project already used twice for Vercel platform limitations (manual JWT verification instead of `@hono/clerk-auth`; moving server code out of `api/`). Re-verified live on production after the fix — see below.
 
-**Live verification:** confirmed on production (https://household-financial-pwa.vercel.app) after the query-param fix: `/api/instruments` (list, 30 rows), `/api/instruments?category=N` (filtered, 5 rows), and `/api/instruments?slug=equity-direct-stocks` (single instrument, 200) all return real data; `/api/instruments?slug=does-not-exist` returns 404. Browser click-through of the Explore → section → detail flow and the offline/airplane-mode check are still owed to Gaurav, same as Slice 2's pending human click-through — Playwright automation isn't attempted here since this capability doesn't touch Clerk/PostHog's bot-detection walls, but a live human pass hasn't been done yet.
+**Live verification:** confirmed on production (https://household-financial-pwa.vercel.app) after the query-param fix: `/api/instruments` (list, 30 rows), `/api/instruments?category=N` (filtered, 5 rows), and `/api/instruments?slug=equity-direct-stocks` (single instrument, 200) all return real data; `/api/instruments?slug=does-not-exist` returns 404. **Human click-through: PASSED 2026-07-21** (browser-driven against production in a real signed-in Chrome). Explore → section → detail verified end to end: all 6 sections × 5 instruments present, rate line renders where applicable (PPF `7.1%` with its as-of date) and is correctly absent where not (Direct Stocks). Slice 3 is fully signed off — it is not on the pending list.
 
 ---
 
@@ -141,7 +141,7 @@
 - [ ] Usable at mobile breakpoint (390px)
 - [ ] Focus states visible when tabbing through the holding form and Portfolio rows
 - [ ] Touch targets ≥44px on the "+" FAB and holding rows
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** Automated verification complete and passing: unit tests for the `holdings` lib (asset-class derivation, cross-household member rejection, negative-amount rejection), two-user isolation integration tests for `/api/holdings` (list/create/update, including a test that caught a real filter bug in the test's own mock — see below), and component tests for the shared `HoldingForm`, `OnboardingStep3`, and `Portfolio` pages (empty state, grouped list, add-sheet, edit-sheet pre-fill). `npm run typecheck` and `scripts/check_events.py` both clean.
 
@@ -176,7 +176,7 @@
 - [ ] Usable at mobile breakpoint (390px)
 - [ ] Focus states visible when tabbing through the protection form and Profile rows
 - [ ] Touch targets ≥44px on the "Add" link and protection rows
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** Automated verification complete and passing: unit tests for the `protection` lib (cross-household member rejection, negative cover-amount rejection, invalid type/status enum rejection), two-user isolation integration tests for `/api/protection` (list/create/update), and component tests for the shared `ProtectionForm` and `Profile` pages (empty state, grouped list, add-sheet, edit-sheet pre-fill). `npm run typecheck` and `scripts/check_events.py` both clean.
 
@@ -207,7 +207,7 @@
 - [ ] Usable at mobile breakpoint (390px)
 - [ ] Focus states visible when tabbing through the dashboard's links and retry button
 - [ ] Touch targets ≥44px on the "Record a holding" CTA and the bottom nav links
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** Automated verification complete and passing: unit tests for `computeCompleteness` against fixture households (0 members; 1 member, no holdings; partial coverage; full 5-of-5 coverage; tier boundary cases), unit tests for `getDashboard`'s allocation aggregation (totals, percentages, fixed asset-class ordering), two-user isolation integration tests for `/api/dashboard`, and component tests for `HealthTierCard`, `AllocationDonut` (loading/empty/populated states), and `Dashboard` (empty vs. populated rendering, `dashboard_viewed` firing once, `completeness_score_changed` firing only on an actual tier change, error state with retry). `npm run typecheck`, `scripts/check_events.py`, and `npm run build` all clean.
 
@@ -239,7 +239,7 @@
 - [ ] Usable at mobile breakpoint (390px)
 - [ ] Focus state visible when tabbing to the nudge's link
 - [ ] Touch target ≥44px on the nudge CTA
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** Automated verification complete and passing: `selectNudge` unit-tested against **all 32 combinations** of the five checks, asserting exactly one nudge per combination, never zero, a non-empty `learn_card_slug` every time, and first-unmet-in-order priority for all 31 incomplete combinations; `buildNudgeContext` tested for member-name and asset-class-count derivation (including lapsed protection not counting as cover); `getDashboard` tested for nudge pass-through against a fake DB; `NudgeCard` component-tested for verbatim COPY_DECK copy per check, name interpolation with a safe fallback when no name is available, singular/plural asset class, all six CTA destinations, the no-buy-action rule, and `learn_card_clicked`; `Dashboard` tested for exactly-one-card rendering across empty and complete fixtures and `nudge_shown` firing once. 254 tests pass (up from 215). `npm run typecheck`, `scripts/check_events.py`, and `npm run build` all clean.
 
@@ -281,7 +281,7 @@ Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`d
 - [ ] Usable at mobile breakpoint (390px) — including the two-button install card
 - [ ] Focus states visible when tabbing to Install / Not now
 - [ ] Touch targets ≥44px on both install-card buttons
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** Automated verification complete and passing: `pwa-cache` unit-tested for per-household timestamp round-trip, corrupt-value handling, localStorage-unavailable (private mode / quota) tolerance, staleness threshold boundaries, clock-skew (future timestamp) handling, human-readable age formatting with singular/plural and roll-up at the minute/hour/day boundaries, and cache purge including the Cache-API-absent and delete-fails paths; `useOnline` tested for initial state, online/offline transitions, and listener cleanup; `InstallPrompt` tested for visibility gating, the remembered dismissal, accept vs. decline outcomes, double-click protection on the single-use browser event, and both analytics events; `Dashboard` tested for banner presence/absence, the correct reported age, and the freshness-stamp rule; `ProtectionForm` tested for the disabled-offline rule. 294 tests pass (up from 254). `npm run typecheck`, `scripts/check_events.py`, and `npm run build` all clean, and the **generated `dist/sw.js` was inspected directly** to confirm both runtime-caching rules (`dashboard-last` NetworkFirst with a 5s network timeout, `instrument-library` CacheFirst) and the SPA `NavigationRoute` fallback are actually present — not merely configured.
 
@@ -326,7 +326,7 @@ Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`d
 - [ ] Usable at mobile breakpoint (390px)
 - [ ] Focus states visible when tabbing through the household/member forms and the confirm dialogs
 - [ ] Touch targets ≥44px on Edit/Add/Remove/Sign out/Delete account links and member rows
-- [ ] Text readable (WCAG AA contrast) — deferred to Slice 10's accessibility pass, same as prior slices
+- [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
 **Result:** Automated verification complete and passing: unit tests for `updateHouseholdName`, `updateFamilyMember`, `removeFamilyMember`, and the Svix webhook signature verifier (`server/lib/svix.ts` — valid signature, tampered body, wrong secret, stale timestamp, missing headers); a unit test for the cascade-delete logic (`deleteHouseholdForOwner`) against a fully populated fixture household, asserting every user-owned table empties and `analytics_events` is retained; two-user isolation integration tests for the new `PATCH`/`DELETE /api/family-members` and `PATCH /api/household` routes; and a full **create → populate → delete → verify-zero-rows** integration test (`server/account-deletion.integration.test.ts`) that drives the real Hono app end to end — creates a household/member/protection record via the real HTTP routes, signs a real `user.deleted` webhook payload with a synthetic Svix secret the same way Clerk does, posts it to `/api/clerk-webhook`, and asserts household/members/protection/holdings/goals are all empty afterward while a fixture `analytics_events` row remains — plus component tests for the extended `Profile` page (household rename, member add/edit/remove with the confirm dialog, sign-out, and delete-account including the failure path). `npm run typecheck`, full `vitest` run, `npm run build`, and `scripts/check_events.py` all clean.
 

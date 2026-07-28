@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-26 — hotfix: dead PostHog init
+
+1. **Slices done:** None — post-feature-complete hotfix, no slice work. Commit `27cd666`.
+2. **Current state:** `initPostHog()` gated on `VITE_POSTHOG_KEY`, which was never set in the Vercel project — so it returned early on every load and **this app had produced zero analytics since the file was written**. The only signal was a console warning in a browser nobody was watching. `src/lib/posthog.ts` now falls back to the shared Web Fleet ingest token when the env var is absent (a `phc_` token is a public client-side write-only key by design; hardcoding is the fleet convention, and the env var still wins when set), and registers `project: financial-planning` so events are attributable on the Fleet Overview dashboard.
+3. **Next slice:** None. Unchanged — remaining work is human-gated verification (Slices 2/4/5/8/9 click-throughs + the 2 Clerk-dashboard steps).
+4. **Open decisions:** Unchanged from the Slice 10 entry (Finding 2; learn-cards go-ahead). New lesson: an analytics integration that fails *silently and by design* (early return on a missing env var) is indistinguishable from one that works — the guard needs to be loud, or the deploy checklist needs an actual event-arrival assertion, not a "PostHog wired" checkbox.
+5. **Kill criterion check:** Project feature-complete since 2026-07-21. OK.
+
+---
+
 ## 2026-07-21 — after Slice 10 ("Why these choices?" page + accessibility pass) — FINAL SLICE
 
 1. **Slices done:** Slice 10, the last one. Public `/why` page (D-007 recruiter surface): 8 Decision→Instead of→Why cards (Product judgment + Engineering) from `src/lib/why-decisions.ts`, sign-in footer link, repo link, `why_page_viewed`. 5 new tests → 300 total. Accessibility pass closed SPEC §6's Constraints Contract (deferred across every prior slice): contrast (darkened `--muted-foreground` 45%→40%, was 4.4:1), global `a:focus-visible` ring, buttons → 44px, `prefers-reduced-motion`. Commit `63e9f5f`, deployed.
