@@ -92,3 +92,41 @@ One row per v1 feature from `SOLUTION_BRIEF.md` (feature # in parentheses). Ever
 - Public surface: one `track(event_name: string, properties: object)` wrapper only — no raw PostHog SDK calls in feature code; the wrapper fans out to both PostHog and the internal table in one call
 - Initialised in: Slice 0 (Walking Skeleton)
 - Each feature's events added in the same commit as the feature code
+
+---
+
+## Verification log
+
+### 2026-07-28 — North Star funnel verified end-to-end (first time)
+
+Funnel saved as PostHog insight `bMF690Mf`; screenshot in `Documentation/product/screenshots/`.
+Scoped with `project = 'financial-planning'` — mandatory, since this app reports into the shared
+"Web Fleet" PostHog project (id 486719) and that registered property is the only thing separating it
+from the other sites in the fleet.
+
+| Step | Event | Persons | Conversion |
+|---|---|---|---|
+| 1 | `onboarding_started` | 1 | — |
+| 2 | `onboarding_step_completed` | 1 | 100% (2m 3s) |
+| 3 | `onboarding_completed` | 1 | 100% (1ms) |
+| 4 | `dashboard_viewed` | 1 | 100% (925ms) |
+
+**n = 1, and that 1 is our own test account.** This verifies the *pipeline* — events fire, arrive,
+carry their documented properties, and assemble into the funnel this document specifies — and
+nothing about real user behaviour. The 60% onboarding-completion target is still entirely
+unmeasured. Do not cite this funnel as evidence for any Input Metric target.
+
+**Why this took until now:** `initPostHog()` guarded on `VITE_POSTHOG_KEY`, which was never set in
+Vercel, so it returned early on every load and the app recorded **zero** analytics from the day the
+file was written until `27cd666` (2026-07-26). The failure was silent by construction — the guard
+logged a console warning in a browser nobody was watching. Every event listed in this plan was
+"implemented" and none were arriving.
+
+**Lesson for this plan:** an event registry proves an event is *declared*, not that it is *ingested*.
+The two questions need separate evidence. `scripts/check_events.py` answers the first; only a query
+against PostHog answers the second, and nothing in the pipeline forced anyone to ask it.
+
+**Known-absent events, by design, not defects:**
+- `signup_failed` / `login_failed` — Clerk's prebuilt components expose no failure callback; needs a
+  custom auth form.
+- `learn_card_clicked` — the nudge CTA was simply never clicked during the verification pass.
