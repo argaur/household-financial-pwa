@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Dashboard } from './Dashboard'
 import { DashboardApiError, type DashboardData } from '@/lib/dashboard-api'
@@ -103,10 +103,16 @@ describe('Dashboard', () => {
     renderDashboard()
 
     await screen.findByText('Strong')
-    expect(track).toHaveBeenCalledWith('dashboard_viewed', {
-      household_id: 'h1',
-      allocation_summary: 'equity:60%,debt:40%',
-    })
+    // waitFor, not a bare expect: both track() calls live in a useEffect that
+    // commits AFTER the DOM mutation findByText resolves on, so asserting
+    // immediately races the effect. That race is real — it failed 1 run in 8
+    // locally and broke the first CI run on main (see BUG_LOG B-004).
+    await waitFor(() =>
+      expect(track).toHaveBeenCalledWith('dashboard_viewed', {
+        household_id: 'h1',
+        allocation_summary: 'equity:60%,debt:40%',
+      }),
+    )
     // dashboard_viewed + nudge_shown (Slice 7) — both once per load.
     expect(track).toHaveBeenCalledTimes(2)
   })
@@ -126,11 +132,14 @@ describe('Dashboard', () => {
     renderDashboard()
 
     await screen.findByText('Next step')
-    expect(track).toHaveBeenCalledWith('nudge_shown', {
-      check_id: 'member_coverage',
-      learn_card_slug: 'portfolio',
-      target_type: 'route',
-    })
+    // Same effect-vs-DOM race as above — see BUG_LOG B-004.
+    await waitFor(() =>
+      expect(track).toHaveBeenCalledWith('nudge_shown', {
+        check_id: 'member_coverage',
+        learn_card_slug: 'portfolio',
+        target_type: 'route',
+      }),
+    )
     expect(track.mock.calls.filter((c) => c[0] === 'nudge_shown')).toHaveLength(1)
   })
 

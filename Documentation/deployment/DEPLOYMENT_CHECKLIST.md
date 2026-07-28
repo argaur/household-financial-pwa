@@ -6,7 +6,7 @@
 bash scripts/predeploy-check.sh <PRODUCTION_URL>   # must exit 0
 ```
 
-**Filled in:** 2026-07-28 against production (HEAD `438838e`). Nothing below is ticked without evidence; unticked boxes are genuinely not done, not "probably fine".
+**Filled in:** 2026-07-28 against production (latest verification at HEAD `337abcc`). Nothing below is ticked without evidence; unticked boxes are genuinely not done, not "probably fine".
 
 > **The script itself was wrong and was fixed first.** Its first run reported 2 failures and 3 warnings, and every one of them was an artefact:
 > - **Health check** hit `/health`, but this app serves health at `/api/health` — and the PWA's SPA `navigateFallback` returns `index.html` with a **200** for unknown paths, so a wrong path reported "reachable but missing version and commit_sha" instead of a clean 404. A wrong-path bug wearing the costume of a malformed-response bug.
@@ -17,7 +17,7 @@ bash scripts/predeploy-check.sh <PRODUCTION_URL>   # must exit 0
 
 ---
 
-- [x] **Preflight script exits 0** — 2026-07-28: `✓ PREFLIGHT PASSED — safe to deploy` (4 passed, 0 failed, 2 warnings). The two warnings are real and tracked below: CORS inconclusive, no rate limiting.
+- [x] **Preflight script exits 0** — 2026-07-28: `✓ PREFLIGHT PASSED — safe to deploy` (4 passed, 0 failed, 2 warnings). The two warnings were real when run: CORS (since fixed and live-verified, below) and no rate limiting (still open as SEC-001). Note the script reports CORS as "inconclusive" rather than passing — it probes with an `OPTIONS` request and reads the 204, which does not tell it whether the origin was reflected; the real verification was done by hand from a foreign origin.
 - [x] **All env vars documented in `.env.example`** (no real values committed) — now machine-verified by preflight check 6. Added this session: `CLERK_WEBHOOK_SECRET` (read by `server/routes/clerk-webhook.ts`, previously undocumented) and commented `VITE_COMMIT_SHA` / `VERCEL_GIT_COMMIT_SHA` entries so build-injected vars are documented without implying they should be set by hand.
 - [x] **Secrets stored in platform env config** (not in repo) — Vercel Production env. Bundle scan finds zero server-side key prefixes, zero Svix prefixes, zero Postgres URIs in `dist/`; only the public-by-design Clerk publishable key and PostHog ingest token. See `SECURITY_REVIEW.md` row 5.
 - [x] **`/health` returns 200 with version + commit SHA** — `GET /api/health` → `{"status":"ok","version":"0.0.0","commit_sha":"27cd666…","db":"ok"}`. `db:"ok"` means it round-trips to Neon, not just that the function booted.
@@ -29,8 +29,8 @@ bash scripts/predeploy-check.sh <PRODUCTION_URL>   # must exit 0
 - [ ] **Rate limiting on all public endpoints** — **not done.** Tracked as **SEC-001** in `SECURITY_REVIEW.md` with the exposure scoped (Clerk throttles auth; the unthrottled surface is a signed-in user's own household) and an explicit trigger to fix: first real traffic or any Neon quota warning.
 - [ ] **Database backups configured, cadence documented in `RUNBOOK.md`** — **not done.** Neon's free tier provides point-in-time restore within its retention window, but nothing has been configured, tested, or written down, and no restore has ever been rehearsed. This is the largest genuine gap on this list: it is the only item where the failure mode is *permanent loss of user data* rather than degraded service.
 - [x] **`/docs` route deployed and accessible** — `GET /docs` → 200, serving `HOW_TO_USE.md`.
-- [ ] **GitHub Actions CI green on main** — **no CI exists.** No `.github/workflows` in the repo. The full gate (`npm run typecheck`, 303 tests, `npm run build`, `scripts/check_events.py`) is run manually before each commit and was run for every commit this session — but nothing enforces it, so a future push can break `main` unchallenged. Deploys are Vercel-on-push and do not gate on tests.
-- [ ] **README updated with live URL, hero screenshot, `CASE_STUDY.md` link** — **not done.** There is no `README.md` in `app/` at all, `Documentation/product/screenshots/` does not exist, and `CASE_STUDY.md` is still the unfilled template ("[Product Name]"). For a repo whose stated purpose is a recruiter-facing portfolio piece (D-007), this is the highest-value remaining gap — the `/why` page was built to tell this story, and the README is the landing page a recruiter actually hits first.
+- [x] **GitHub Actions CI green on main** — added `b67437f` (`.github/workflows/ci.yml`): Node 20, `npm ci`, then typecheck / vitest / build / `check_events.py` on every push and PR to `main`. No deploy step — Vercel owns deploys. **It earned its keep on the first run, by failing.** Run `30373134020` on `337abcc` went red on a suite that had passed locally minutes earlier — exposing a genuine flaky test (**B-004**), which turned out to be the same failure recorded as unreproduced back on 2026-07-19. Fixed and re-verified 12/12; the point stands that no amount of careful local running had caught it in nine days.
+- [ ] **README updated with live URL, hero screenshot, `CASE_STUDY.md` link** — **partially done.** `README.md` now exists (`da07a62`) with the live URL, the core journey, the stack and links to `/why`, `CASE_STUDY.md` and `HOW_TO_USE.md`. `CASE_STUDY.md` is drafted (`3c9b33b`) but explicitly marked **DRAFT — awaiting Gaurav's approval**. `Documentation/product/screenshots/` now exists and holds the North Star funnel capture. **Still missing the hero screenshot of the app itself** — deliberately not faked: the only live household is an emptied test account, so any capture today would show a zero-state, which is the wrong first impression for a portfolio piece. Box stays unticked until there is a populated household to photograph.
 
 ---
 
