@@ -15,3 +15,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     disconnect() {}
   }
 }
+// jsdom's window.scrollTo exists but logs "Not implemented" — components that
+// restore scroll position (e.g. Portfolio.tsx closing the holding sheet) call
+// it in every test run, not just scroll-specific ones.
+window.scrollTo = () => {}

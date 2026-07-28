@@ -125,6 +125,38 @@ describe('Portfolio', () => {
     await screen.findByText('Large Cap Index Fund')
   })
 
+  it('restores the pre-open scroll position after the add-holding sheet closes (B-002)', async () => {
+    listHoldings.mockResolvedValue([])
+    createHolding.mockResolvedValue(holding)
+    render(<Portfolio />)
+
+    await screen.findByText(/nothing recorded yet/i)
+
+    // Page is scrolled slightly before the sheet opens — this is the offset
+    // the user should land back on once the sheet closes.
+    let scrollY = 40
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scrollY })
+    const scrollToSpy = vi.spyOn(window, 'scrollTo')
+
+    fireEvent.click(screen.getByRole('button', { name: /record your first holding/i }))
+    await screen.findByRole('heading', { name: /record a holding/i })
+
+    // Simulate a mobile browser scrolling the fixed-position sheet's host
+    // document while a lower field is focused — the tall-sheet scroll drift
+    // that B-002 leaves behind.
+    scrollY = 640
+
+    fireEvent.click(screen.getByRole('combobox', { name: /instrument/i }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Large Cap Index Fund' }))
+    fireEvent.change(screen.getByLabelText(/amount invested/i), { target: { value: '10000' } })
+    fireEvent.change(screen.getByLabelText(/current value/i), { target: { value: '10500' } })
+    fireEvent.click(screen.getByRole('button', { name: /add to plan/i }))
+
+    await screen.findByText('Large Cap Index Fund')
+
+    expect(scrollToSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 40 }))
+  })
+
   it('opens the edit sheet pre-filled when a holding row is tapped', async () => {
     listHoldings.mockResolvedValue([holding])
     updateHolding.mockResolvedValue({ ...holding, currentValue: '12000' })
@@ -141,5 +173,30 @@ describe('Portfolio', () => {
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => expect(updateHolding).toHaveBeenCalledWith('test-token', 'hold1', expect.objectContaining({ currentValue: '12000' })))
+  })
+
+  it('restores the pre-open scroll position after the edit-holding sheet closes (B-002, shared seam)', async () => {
+    listHoldings.mockResolvedValue([holding])
+    updateHolding.mockResolvedValue({ ...holding, currentValue: '12000' })
+    render(<Portfolio />)
+
+    await screen.findByText('Large Cap Index Fund')
+
+    let scrollY = 40
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scrollY })
+    const scrollToSpy = vi.spyOn(window, 'scrollTo')
+
+    fireEvent.click(screen.getByText('Large Cap Index Fund'))
+    await screen.findByRole('heading', { name: /update holding/i })
+
+    scrollY = 640
+
+    const currentValueInput = screen.getByLabelText(/current value/i) as HTMLInputElement
+    fireEvent.change(currentValueInput, { target: { value: '12000' } })
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(updateHolding).toHaveBeenCalled())
+
+    expect(scrollToSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 40 }))
   })
 })

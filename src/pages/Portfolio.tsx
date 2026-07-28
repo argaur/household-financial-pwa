@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -27,6 +27,13 @@ export function Portfolio() {
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null)
+  // Sheet content is position:fixed and taller than the viewport; some mobile
+  // browsers scroll the underlying document (not the fixed sheet) to bring a
+  // focused field into view above the keyboard. That leaves window scroll
+  // sitting wherever the tall sheet reached, so closing it strands the user
+  // below the (often much shorter) holdings list. Captured on open, restored
+  // on close — see BUG_LOG.md B-002.
+  const scrollPositionRef = useRef(0)
 
   useEffect(() => {
     let cancelled = false
@@ -53,21 +60,28 @@ export function Portfolio() {
     }
   }, [getToken])
 
+  function closeSheet() {
+    setSheetOpen(false)
+    setEditingHolding(null)
+    window.scrollTo({ top: scrollPositionRef.current, behavior: 'auto' })
+  }
+
   function handleSaved(holding: Holding) {
     setHoldings((prev) => {
       const exists = prev.some((h) => h.id === holding.id)
       return exists ? prev.map((h) => (h.id === holding.id ? holding : h)) : [...prev, holding]
     })
-    setSheetOpen(false)
-    setEditingHolding(null)
+    closeSheet()
   }
 
   function openAddSheet() {
+    scrollPositionRef.current = window.scrollY
     setEditingHolding(null)
     setSheetOpen(true)
   }
 
   function openEditSheet(holding: Holding) {
+    scrollPositionRef.current = window.scrollY
     setEditingHolding(holding)
     setSheetOpen(true)
   }
@@ -159,7 +173,7 @@ export function Portfolio() {
         </Button>
       )}
 
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => (open ? setSheetOpen(true) : closeSheet())}>
         <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editingHolding ? 'Update holding' : 'Record a holding'}</SheetTitle>
