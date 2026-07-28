@@ -34,7 +34,11 @@ echo "========================================"
 # ── 1. Health endpoint ────────────────────────────────────────────────────────
 echo ""
 echo "1. Health endpoint"
-HEALTH_RESPONSE=$(curl -sf --max-time 10 "$BASE_URL/health" 2>/dev/null || echo "CURL_FAILED")
+# This project serves health at /api/health. Note the SPA fallback: /health
+# returns index.html with a 200, so a wrong path here reads as "reachable
+# but missing fields" rather than 404 — a false failure, not a real one.
+HEALTH_PATH="${HEALTH_PATH:-/api/health}"
+HEALTH_RESPONSE=$(curl -sf --max-time 10 "$BASE_URL$HEALTH_PATH" 2>/dev/null || echo "CURL_FAILED")
 
 if [[ "$HEALTH_RESPONSE" == "CURL_FAILED" ]]; then
   fail "/health endpoint unreachable"
@@ -54,7 +58,9 @@ echo "2. HTTPS redirect"
 # Only meaningful if the URL is https — check that http redirects
 HTTP_URL="${BASE_URL/https:\/\//http://}"
 if [[ "$HTTP_URL" != "$BASE_URL" ]]; then
-  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -L "$HTTP_URL" 2>/dev/null || echo "000")
+  # No -L: following the redirect reports the final 200 and hides the 3xx
+  # we are actually testing for.
+  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$HTTP_URL" 2>/dev/null || echo "000")
   if [[ "$HTTP_STATUS" =~ ^3 ]]; then
     pass "HTTP redirects to HTTPS (got $HTTP_STATUS)"
   else
@@ -159,20 +165,28 @@ ENV_EXAMPLE=".env.example"
 if [[ ! -f "$ENV_EXAMPLE" ]]; then
   warn ".env.example not found in current directory — skipping env var check"
 else
-  MISSING_VARS=()
-  while IFS= read -r line; do
-    # Skip comments and blank lines
-    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-    VAR_NAME=$(echo "$line" | cut -d= -f1 | tr -d ' ')
-    if [[ -z "${!VAR_NAME:-}" ]]; then
-      MISSING_VARS+=("$VAR_NAME")
-    fi
-  done < "$ENV_EXAMPLE"
+  # The checklist item is "all env vars are DOCUMENTED in .env.example", so the
+  # test is: every var the source actually reads must appear in the template.
+  # This previously asserted the reverse — that every documented var was set in
+  # the *local shell* — which failed on any machine that correctly does not hold
+  # production secrets, i.e. always. That made a green run impossible and taught
+  # the reader to ignore the script.
+  # Counts vars documented as comments too (e.g. VITE_COMMIT_SHA, which Vercel
+  # sets automatically and must NOT be set by hand — documenting it as a
+  # commented line is correct, not an omission).
+  DOCUMENTED=$(grep -oE '^#? *[A-Z][A-Z0-9_]*=' "$ENV_EXAMPLE" | tr -d '#= ' | sort -u)
+  # *.starter files are framework templates carried for reference, not code this
+  # app runs — their NEXT_PUBLIC_* vars would be false positives.
+  REFERENCED=$( { grep -rhoE --include='*.ts' --include='*.tsx' 'import\.meta\.env\.[A-Z][A-Z0-9_]*' src 2>/dev/null | sed 's/.*env\.//'
+                  grep -rhoE --include='*.ts' --include='*.py' 'process\.env\.[A-Z][A-Z0-9_]*' server api scripts 2>/dev/null | sed 's/.*env\.//'
+                } | sort -u | grep -vE '^(NODE_ENV|VERCEL[A-Z0-9_]*|CI|MODE|BASE_URL|DEV|PROD|SSR)$' || true)
+  UNDOCUMENTED=$(comm -23 <(echo "$REFERENCED") <(echo "$DOCUMENTED") | tr '
+' ' ' | sed 's/ *$//')
 
-  if [[ ${#MISSING_VARS[@]} -eq 0 ]]; then
-    pass "All env vars from .env.example are set"
+  if [[ -z "$UNDOCUMENTED" ]]; then
+    pass "Every env var read by the source is documented in .env.example"
   else
-    fail "Missing env vars: ${MISSING_VARS[*]}"
+    fail "Env vars read by the source but undocumented in .env.example: $UNDOCUMENTED"
   fi
 fi
 

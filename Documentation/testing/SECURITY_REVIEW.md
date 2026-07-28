@@ -1,24 +1,34 @@
-# Security Review — [Project Name]
+# Security Review — Household Financial Planning PWA
 
 **Layer 0 of Phase 5 — runs FIRST, before any other testing layer. All checks must pass before Layer 1 begins.**
 **Why first:** AI-generated CRUD ships IDOR and missing authz constantly — it implements the happy path you asked for. Solo, you are the only person who finds this before an attacker does.
 
 Run the `security-review` skill, then verify each row with evidence (curl output, test link, grep result — not "looks fine").
 
+**Reviewed:** 2026-07-28, against production at `https://household-financial-pwa.vercel.app` (HEAD `438838e`).
+**Threat model note:** every row below is scoped to the fact that this app stores *self-reported household financial figures* behind per-user auth. There is no money movement, no payment instrument, and no third-party write access — so the realistic worst case is one household reading or altering another's recorded numbers. That makes rows 1, 2 and 7 the ones that actually matter here, and they are the ones with the strongest evidence.
+
 ---
 
 | # | Check | Assertion | Result | Evidence |
 |---|---|---|---|---|
-| 1 | Authz on every endpoint | Wrong-user requests return 403, not 200 (authn ≠ authz) | pass / FAIL | |
-| 2 | Object ownership (IDOR) | User A cannot read or modify User B's data by changing an ID | | |
-| 3 | Input sanitization | All user input sanitized at system boundaries | | |
-| 4 | Rate limiting | Auth + paid/destructive endpoints return 429 under burst | | |
-| 5 | Secrets in client bundle | Production build grepped — no API keys, tokens, service-role keys | | |
-| 6 | Admin operations | Server-side only — no client-callable admin routes | | |
-| 7 | [Project-specific] | | | |
+| 1 | Authz on every endpoint | Wrong-user requests return 403, not 200 (authn ≠ authz) | **pass**, with a deliberate deviation | Every authenticated route calls `verifyUserId()` (`server/lib/auth.ts`) and returns **401**, not 403, when the bearer token is absent or unverifiable — 15 such returns across `server/routes/*.ts`. 401 is correct here: the app never distinguishes "authenticated but not permitted", because a caller is only ever scoped to their own household. There is no cross-household resource a valid user could be *forbidden* from — such rows are invisible, not denied (row 2). The template's "403" wording assumes a shared-resource model this app does not have. Unauthenticated live probe: `GET /api/dashboard` → 401. |
+| 2 | Object ownership (IDOR) | User A cannot read or modify User B's data by changing an ID | **pass** | Two-user isolation integration tests drive the real Hono app across all five resource families: `server/{dashboard,family-members,holdings,household,protection}.integration.test.ts`, each containing a "user B never sees user A's data" case. These cover the guessed-ID paths specifically — `?id=` on the holdings and protection edit routes, and cross-household `member_id` in create payloads (rejected 400, not 201). Reinforced by `server/lib/family-members.test.ts`. Note the historical caveat recorded in `ACCEPTANCE_CRITERIA.md` Slice 4: an early version of the holdings isolation test passed falsely because the *test's own* in-memory `and()` mock dropped a filter — the production filter was always correct, but this is why these tests are trusted only after the mock's filtering was itself verified. |
+| 3 | Input sanitization | All user input sanitized at system boundaries | **pass** | Zod schemas at every write boundary: `server/routes/{family-members,holdings,household,protection}.ts`. Enum narrowing (relationship, asset class, protection type/status), negative-amount rejection, and cross-household member rejection are unit-tested per lib. The three routes without Zod are correct to lack it — `dashboard` and `instruments` are read-only with no user-supplied body, and `clerk-webhook` authenticates by HMAC over the raw body (row 7) rather than parsing first. Storage is parameterized throughout via Drizzle; no string-built SQL. Output is React-escaped, no `dangerouslySetInnerHTML` anywhere. |
+| 4 | Rate limiting | Auth + paid/destructive endpoints return 429 under burst | **FAIL** | Zero rate-limiting code exists: `grep -rn "rateLimit\|rate-limit\|ratelimit" server src api` → 0 matches. `predeploy-check.sh` confirms no 429 after 20 rapid requests. Sign-in/sign-up are hosted by Clerk, which applies its own throttling, so the credential-stuffing surface is covered by the provider — but this app's own destructive endpoint (`DELETE /api/family-members`) and all write routes are unthrottled beyond Vercel's platform limits. See Open Failures. |
+| 5 | Secrets in client bundle | Production build grepped — no API keys, tokens, service-role keys | **pass** | Scanned `dist/` by pattern count, values never printed: server-side Clerk key prefix **0**, Svix signing prefix **0**, Postgres connection URI **0**. Only public-by-design tokens present: Clerk publishable key (3) and PostHog ingest token (1) — both are write-only client identifiers. Independently confirmed by `predeploy-check.sh` check 4 against the *served* HTML + linked bundles, which catches anything injected at build time rather than only what is in the repo. |
+| 6 | Admin operations | Server-side only — no client-callable admin routes | **pass** (vacuous) | `grep -rn "admin" server/routes/` → 0 matches. The app has no admin concept, no role column, and no privileged route — the instrument library is seeded by an operator-run script (`scripts/seed-instruments.ts`) against `DATABASE_URL`, never over HTTP. Recorded as vacuous rather than "pass" so a future admin surface does not inherit an unearned tick. |
+| 7 | **Project-specific:** multi-tenant isolation is app-layer, not database-enforced | Every query is scoped by a `household_id` the server resolves from the session — never from client input | **pass**, with the residual risk stated | This is the project's single most important security property, because D-004 chose app-layer scoping over Postgres RLS. `household_id` is resolved server-side per request via `getHouseholdForOwner(db, userId)`; no route accepts a client-supplied household ID. The webhook is the one unauthenticated entry point and is HMAC-verified over the raw body (`server/lib/svix.ts` — tested against valid signature, tampered body, wrong secret, stale timestamp, missing headers), with a full create → populate → delete → verify-zero-rows integration test. Live probe: unsigned `POST /api/clerk-webhook` → **401**. **Residual risk, accepted:** because isolation is enforced in application code rather than by the database, a single future route that forgets `getHouseholdForOwner` would leak across households with nothing behind it to catch the mistake. The isolation tests are the compensating control, so *every new resource route must ship with a two-user test* — that is a standing requirement, not a nicety. |
 
 ---
 
 ## Open Failures
 
-[Every FAIL row gets an entry: root cause → fix commit → regression test → re-verified date. Zero open failures = gate condition.]
+**SEC-001 — No application-level rate limiting (row 4).**
+- **Root cause:** Never implemented. Not an oversight in a specific slice — rate limiting was never scoped into any slice of the plan.
+- **Exposure, honestly scoped:** Authentication is hosted by Clerk and throttled there, so the classic credential-stuffing path is not exposed. What remains unthrottled is this app's own authenticated write surface — a signed-in user can hammer their own `POST /api/holdings` or `DELETE /api/family-members`. Since every route is session-scoped, the blast radius is the attacker's *own* household plus database load and Neon free-tier quota. That is a cost/availability risk, not a data-integrity or cross-tenant one.
+- **Why it is not being fixed before ship:** at zero real users the realistic exploit is self-inflicted, and the ₹0/month budget ceiling (D-008) argues against adding infrastructure for a load profile that does not exist yet.
+- **Fix when triggered:** add a per-user token bucket in Hono middleware ahead of the write routes. **Trigger:** first sign of real traffic, or any Neon quota warning — whichever comes first.
+- **Fix commit:** — · **Regression test:** — · **Re-verified:** —
+
+**Gate status:** one open FAIL, accepted with the reasoning above rather than silently ticked. Rows 1, 2, 3, 5, 7 — the ones that protect household data from other households — all pass with executable evidence.
