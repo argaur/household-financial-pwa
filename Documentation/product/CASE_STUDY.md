@@ -20,7 +20,7 @@ A public, installable PWA where a household is the unit of account. Three fact-o
 
 *Hero screenshot to be captured per `PORTFOLIO_ANGLE.md`: the moment right after onboarding step 3, with the allocation donut, health tier, and nudge appearing together. Not yet in the repo.*
 
-**Outcome:** eleven vertical slices from empty repo to feature-complete and live in six weeks (first deploy 2026-07-10, thirteen days inside a self-imposed 30-day kill criterion; feature-complete 2026-07-21), at ₹0/month infrastructure cost on free tiers, with a 300-test suite and zero axe accessibility violations across all five screens in production.
+**Outcome:** eleven vertical slices from empty repo to feature-complete and live in six weeks (first deploy 2026-07-10, thirteen days inside a self-imposed 30-day kill criterion; feature-complete 2026-07-21), at ₹0/month infrastructure cost on free tiers, with a 310-test suite and zero axe accessibility violations across all five screens in production.
 
 ## Decisions and tradeoffs
 
@@ -113,4 +113,4 @@ Two boundary choices worth naming. **Multi-tenancy is enforced in the applicatio
 | 14-day return rate | 25% | Awaiting first cohort |
 | Nudge click-through (`nudge_shown` → `learn_card_clicked`) | Research question, no target | Awaiting first cohort |
 
-What *is* measured today is build quality: 300/300 tests passing, clean typecheck and build, zero axe accessibility violations on all five screens in production, and ₹0/month infrastructure spend against a ₹0 ceiling.
+What *is* measured today is build quality: 310/310 tests passing, clean typecheck and build, zero axe accessibility violations on all five screens in production, and ₹0/month infrastructure spend against a ₹0 ceiling.

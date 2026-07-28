@@ -96,7 +96,7 @@ public by decision (D-004), so sample data must be synthetic.
 ## Project state
 
 **Feature-complete and deployed.** All 11 slices (0–10) are built and live; the test suite is green
-(300/300 at the last gate check) with typecheck and build clean, and all five screens scan 0 axe violations in
+(310/310 at the last gate check) with typecheck and build clean, and all five screens scan 0 axe violations in
 the live app.
 
 Phase 5 verification is **partially outstanding**, and every remaining item needs a human — Claude has
