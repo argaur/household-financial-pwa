@@ -86,7 +86,11 @@ export function Dashboard() {
     // new JS can render a payload serialized before `nudge` existed. Degrade
     // to no card rather than crashing the whole dashboard on it.
     if (data.nudge) {
-      track('nudge_shown', { check_id: data.nudge.checkId, learn_card_slug: data.nudge.learnCardSlug })
+      track('nudge_shown', {
+        check_id: data.nudge.checkId,
+        learn_card_slug: data.nudge.learnCardSlug,
+        target_type: data.nudge.targetType,
+      })
     }
 
     const key = `${LAST_TIER_KEY_PREFIX}${data.household.id}`

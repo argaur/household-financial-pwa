@@ -21,7 +21,10 @@ dashboardRoutes.get('/', async (c) => {
     household: { id: household.id, name: household.name },
     completeness: result.completeness,
     // Slice 7: exactly one nudge, never zero (SPEC.md §7). getDashboard()
-    // always computes it — forward it, or the client renders no NudgeCard.
+    // always computes it — forward it whole, or the client renders no
+    // NudgeCard. B-001 was caused by hand-picking fields out of this object;
+    // pass the reference rather than rebuilding it, so new nudge fields
+    // (e.g. targetType) cannot be silently dropped here again.
     nudge: result.nudge,
     allocation: result.allocation,
     totalValue: result.totalValue,

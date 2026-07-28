@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-28 — live click-throughs (Slices 2/4/5, 9 partial) + nudge analytics fix
+
+1. **Slices done:** None — verification and one closed review finding. Slices 2, 4 and 5 all **PASS** live on a purpose-made throwaway account; Slice 9 passes steps 1–5 before a browser-extension disconnect. The two manual Clerk-dashboard steps are done (Gaurav — the panel is a cross-origin Svix iframe that ignores synthetic clicks), verified by probing rather than by trusting the dashboard: unsigned `POST /api/clerk-webhook` returned 500 → 401 once the secret actually reached the running function.
+2. **Current state:** Suite 300 → 303, typecheck / `check_events.py` / `npm run build` clean. Closed the last open Slice 7 finding (`learn_card_slug` route-sentinel dilution) — but **not** the way it was originally scoped. See D-011: adding emergency-fund and term-insurance instruments would have converted one sentinel of five and bent an investment taxonomy to hold a protection product and a holding-level flag. Added a `target_type` (`learn_card` | `route`) property to `nudge_shown` / `learn_card_clicked` instead, from a single `NUDGE_TARGET` map. Three doc defects fixed in `ACCEPTANCE_CRITERIA.md`: Slices 2, 4 and 5 all scripted a post-onboarding "confirmation screen" that Slices 4 and 6 had already replaced.
+3. **Next slice:** None. Outstanding: Slice 9 steps 6–12 (ends in the destructive delete — needs a go-ahead) and Slice 8's 12 offline steps (needs DevTools/wifi toggling and the native install dialog, neither drivable).
+4. **Open decisions:** Finding 2 unchanged — production still on Clerk **development** keys. Now better scoped: the dev instance holds exactly one user, so moving to a production instance strands a one-user pool rather than requiring a migration. New: **B-002 (P2)** — the add-holding sheet leaves the page scrolled past the end of its own content, so the user lands on a blank viewport after adding a holding; cosmetic on desktop, reads as "nothing happened" at 390px.
+5. **Kill criterion check:** Project feature-complete since 2026-07-21. OK.
+
+---
+
 ## 2026-07-26 — hotfix: dead PostHog init
 
 1. **Slices done:** None — post-feature-complete hotfix, no slice work. Commit `27cd666`.

@@ -52,7 +52,7 @@ Cross-referenced to `Documentation/solution/METRICS_PLAN.md` (Project-Specific E
 | Add/Edit holding form save | `holding_created` / `holding_updated` | `instrument_id`, `asset_class`, `member_id` | (2) Manual holdings entry |
 | Dashboard render (any state) | `dashboard_viewed` | `household_id`, `allocation_summary` | (3) Portfolio dashboard |
 | Any of the 5 completeness checks flips | `completeness_score_changed` | `household_id`, `before_tier`, `after_tier` | (4) Household Health panel |
-| Nudge card render / nudge CTA click | `nudge_shown` / `learn_card_clicked` | `check_id`, `learn_card_slug` | (5) Single ordered nudge |
+| Nudge card render / nudge CTA click | `nudge_shown` / `learn_card_clicked` | `check_id`, `learn_card_slug`, `target_type` | (5) Single ordered nudge |
 | Explore section card tap | `library_section_viewed` | `section` | (6) Instrument library |
 | Instrument card / detail tap | `instrument_viewed` | `section`, `instrument_slug` | (6) Instrument library |
 | Bottom tab bar tap | `nav_tab_clicked` | `tab_name` | (7) Bottom tab nav |

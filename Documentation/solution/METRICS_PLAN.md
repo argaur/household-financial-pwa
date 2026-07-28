@@ -62,7 +62,7 @@ One row per v1 feature from `SOLUTION_BRIEF.md` (feature # in parentheses). Ever
 | `holding_created` / `holding_updated` | instrument_id, asset_class, member_id | (2) Manual holdings entry | User saves a holding form |
 | `dashboard_viewed` | household_id, allocation_summary | (3) Portfolio dashboard | User lands on the post-onboarding or returning dashboard |
 | `completeness_score_changed` | household_id, before_tier, after_tier | (4) Household Health panel | Any of the 5 checks flips state |
-| `nudge_shown` / `learn_card_clicked` | check_id, learn_card_slug | (5) Single ordered nudge | Dashboard renders the first unmet check; user clicks its learn-card link |
+| `nudge_shown` / `learn_card_clicked` | check_id, learn_card_slug, target_type | (5) Single ordered nudge | Dashboard renders the first unmet check; user clicks its learn-card link |
 | `library_section_viewed` / `instrument_viewed` | section, instrument_slug | (6) Instrument library | User opens a section or an instrument detail card |
 | `nav_tab_clicked` / `fab_clicked` | tab_name | (7) Bottom tab nav + FAB | User navigates via the bottom bar or the "+" action |
 | `pwa_shell_loaded` | cache_status (hit/miss) | (8) PWA shell | App boots from precached assets |

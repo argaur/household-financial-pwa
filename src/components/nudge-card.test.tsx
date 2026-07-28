@@ -7,10 +7,13 @@ import type { Nudge } from '@/lib/dashboard-api'
 const track = vi.fn()
 vi.mock('@/lib/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))
 
-function renderCard(nudge: Nudge) {
+// targetType defaults to 'route' (the majority case) so the copy fixtures
+// below stay focused on the copy. The tests that care about it set it.
+function renderCard(nudge: Omit<Nudge, 'targetType'> & Partial<Pick<Nudge, 'targetType'>>) {
+  const full: Nudge = { targetType: 'route', ...nudge }
   return render(
     <MemoryRouter>
-      <NudgeCard nudge={nudge} />
+      <NudgeCard nudge={full} />
     </MemoryRouter>,
   )
 }
@@ -102,12 +105,29 @@ describe('NudgeCard — CTA destinations', () => {
 })
 
 describe('NudgeCard — analytics', () => {
-  it('fires learn_card_clicked with check_id and learn_card_slug on CTA click', () => {
-    renderCard({ checkId: 'emergency_fund', learnCardSlug: 'debt-fixed-deposit' })
+  it('fires learn_card_clicked with check_id, learn_card_slug and target_type on CTA click', () => {
+    // emergency_fund is the one nudge whose CTA resolves to a real instrument
+    // page, so it is the one that should report target_type 'learn_card'.
+    renderCard({
+      checkId: 'emergency_fund',
+      learnCardSlug: 'debt-fixed-deposit',
+      targetType: 'learn_card',
+    })
     fireEvent.click(screen.getByRole('link'))
     expect(track).toHaveBeenCalledWith('learn_card_clicked', {
       check_id: 'emergency_fund',
       learn_card_slug: 'debt-fixed-deposit',
+      target_type: 'learn_card',
+    })
+  })
+
+  it('reports target_type route when the CTA goes to an app screen, not a learn card', () => {
+    renderCard({ checkId: 'member_coverage', learnCardSlug: 'portfolio', targetType: 'route' })
+    fireEvent.click(screen.getByRole('link'))
+    expect(track).toHaveBeenCalledWith('learn_card_clicked', {
+      check_id: 'member_coverage',
+      learn_card_slug: 'portfolio',
+      target_type: 'route',
     })
   })
 

@@ -31,7 +31,7 @@ const emptyDashboard: DashboardData = {
     score: 0,
     tier: 'getting_started',
   },
-  nudge: { checkId: 'member_coverage', learnCardSlug: 'portfolio', memberName: 'Meera' },
+  nudge: { checkId: 'member_coverage', learnCardSlug: 'portfolio', targetType: 'route', memberName: 'Meera' },
   allocation: [],
   totalValue: 0,
 }
@@ -49,7 +49,7 @@ const populatedDashboard: DashboardData = {
     score: 5,
     tier: 'strong',
   },
-  nudge: { checkId: 'complete', learnCardSlug: 'explore' },
+  nudge: { checkId: 'complete', learnCardSlug: 'explore', targetType: 'route' },
   allocation: [
     { assetClass: 'equity', value: 6000, percentage: 60 },
     { assetClass: 'debt', value: 4000, percentage: 40 },
@@ -129,6 +129,7 @@ describe('Dashboard', () => {
     expect(track).toHaveBeenCalledWith('nudge_shown', {
       check_id: 'member_coverage',
       learn_card_slug: 'portfolio',
+      target_type: 'route',
     })
     expect(track.mock.calls.filter((c) => c[0] === 'nudge_shown')).toHaveLength(1)
   })

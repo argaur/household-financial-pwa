@@ -3,6 +3,7 @@ import {
   selectNudge,
   buildNudgeContext,
   NUDGE_CHECK_ORDER,
+  NUDGE_TARGET,
   type NudgeCheckId,
   type NudgeInputHolding,
   type NudgeInputMember,
@@ -51,6 +52,33 @@ describe('selectNudge — the "exactly one nudge" invariant (SPEC.md §7)', () =
   it('always returns a non-empty learnCardSlug (both analytics events require it)', () => {
     for (const checks of combos) {
       expect(selectNudge(checks, context).learnCardSlug.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('always returns a targetType, so analytics can tell a learn-card from a route', () => {
+    for (const checks of combos) {
+      expect(['learn_card', 'route']).toContain(selectNudge(checks, context).targetType)
+    }
+  })
+
+  it('marks only the genuine learn-card destination as learn_card', () => {
+    // Five of six nudges send the user to an app route (portfolio/explore/
+    // profile), not to an instrument page — see NUDGE_HREF in nudge-card.tsx.
+    // Reporting all six as `learn_card_slug` made that field uninterpretable
+    // in PostHog. emergency_fund is the only one that resolves to a real
+    // instrument page.
+    const targetTypeFor = (checkId: NudgeCheckId) =>
+      Object.values(NUDGE_TARGET).length && NUDGE_TARGET[checkId].targetType
+
+    expect(targetTypeFor('emergency_fund')).toBe('learn_card')
+    for (const checkId of [
+      'member_coverage',
+      'both_parents_protected',
+      'asset_diversity',
+      'no_stale_values',
+      'complete',
+    ] as const) {
+      expect(targetTypeFor(checkId), checkId).toBe('route')
     }
   })
 

@@ -42,27 +42,44 @@ const CHECK_KEYS = [
 ] as const satisfies readonly (keyof CompletenessChecks)[]
 
 /**
- * Target each nudge's CTA points at, and the value reported as
- * `learn_card_slug` on both `nudge_shown` and `learn_card_clicked`.
+ * Where each nudge's CTA sends the user, and what that destination actually
+ * IS. Reported as `learn_card_slug` + `target_type` on both `nudge_shown` and
+ * `learn_card_clicked`.
  *
- * Two of these deviate from COPY_DECK.md's literal CTA targets, deliberately:
- * COPY_DECK assumes "emergency funds" and "term insurance" learn-cards, but
- * neither exists among the 30 seeded instruments, and the one
+ * `targetType` exists because only ONE of these six destinations is a learn
+ * card. The other five are app routes (see NUDGE_HREF in nudge-card.tsx:
+ * /portfolio, /profile, /explore). Reporting all six under a field named
+ * `learn_card_slug` made it impossible to answer "which learn cards do nudges
+ * actually drive traffic to?" in PostHog — the route names sat in the same
+ * field as instrument slugs, indistinguishable without hardcoding the list
+ * into every query. The slug stays for continuity with the events already
+ * ingested; `target_type` is what makes it interpretable.
+ *
+ * Two destinations deviate from COPY_DECK.md's literal CTA targets,
+ * deliberately: COPY_DECK assumes "emergency funds" and "term insurance"
+ * learn-cards. Neither exists among the 30 seeded instruments, and the one
  * insurance-adjacent instrument (`hybrid-traditional-insurance`) is the exact
  * product class this project's standing decision rejects — sending a
- * protection nudge there would be actively wrong advice. So:
+ * protection nudge there would be actively wrong advice. Adding them was
+ * considered and rejected 2026-07-28 (see DECISIONS_LOG D-011): neither term
+ * insurance nor an emergency fund is an asset class, and the library's six
+ * categories are an investment taxonomy. An emergency fund is already modelled
+ * where it belongs — the `is_emergency_fund` flag on a holding. So:
  *   - emergency_fund -> the fixed-deposit card, the standard Indian
- *     emergency-fund vehicle, keeping COPY_DECK's CTA wording.
+ *     emergency-fund vehicle, keeping COPY_DECK's CTA wording. A real
+ *     instrument page, hence `learn_card`.
  *   - both_parents_protected -> the Protection card on Profile (Slice 5),
  *     with reworded CTA copy. Flagged for COPY_DECK backfill.
  */
-export const NUDGE_LEARN_CARD_SLUG: Record<NudgeCheckId, string> = {
-  member_coverage: 'portfolio',
-  emergency_fund: 'debt-fixed-deposit',
-  both_parents_protected: 'protection',
-  asset_diversity: 'explore',
-  no_stale_values: 'portfolio',
-  complete: 'explore',
+export type NudgeTargetType = 'learn_card' | 'route'
+
+export const NUDGE_TARGET: Record<NudgeCheckId, { slug: string; targetType: NudgeTargetType }> = {
+  member_coverage: { slug: 'portfolio', targetType: 'route' },
+  emergency_fund: { slug: 'debt-fixed-deposit', targetType: 'learn_card' },
+  both_parents_protected: { slug: 'protection', targetType: 'route' },
+  asset_diversity: { slug: 'explore', targetType: 'route' },
+  no_stale_values: { slug: 'portfolio', targetType: 'route' },
+  complete: { slug: 'explore', targetType: 'route' },
 }
 
 export interface NudgeContext {
@@ -77,6 +94,8 @@ export interface NudgeContext {
 export interface Nudge {
   checkId: NudgeCheckId
   learnCardSlug: string
+  /** Whether learnCardSlug names an instrument page or an app route. */
+  targetType: NudgeTargetType
   /** Present only for checks whose copy interpolates a member name (1 and 3). */
   memberName?: string
   /** Present only for check 4, whose copy interpolates the count. */
@@ -93,7 +112,8 @@ export function selectNudge(checks: CompletenessChecks, context: NudgeContext): 
   const firstUnmetIndex = CHECK_KEYS.findIndex((key) => !checks[key])
   const checkId: NudgeCheckId = firstUnmetIndex === -1 ? 'complete' : NUDGE_CHECK_ORDER[firstUnmetIndex]
 
-  const nudge: Nudge = { checkId, learnCardSlug: NUDGE_LEARN_CARD_SLUG[checkId] }
+  const target = NUDGE_TARGET[checkId]
+  const nudge: Nudge = { checkId, learnCardSlug: target.slug, targetType: target.targetType }
 
   // Only attach interpolation data the selected check's copy actually uses —
   // an absent name stays absent rather than becoming the string "undefined"

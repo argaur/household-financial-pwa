@@ -30,9 +30,13 @@ export type NudgeCheckId =
   | 'no_stale_values'
   | 'complete'
 
+export type NudgeTargetType = 'learn_card' | 'route'
+
 export interface Nudge {
   checkId: NudgeCheckId
   learnCardSlug: string
+  /** Whether learnCardSlug names an instrument page or an app route. */
+  targetType: NudgeTargetType
   memberName?: string
   assetClassCount?: number
 }

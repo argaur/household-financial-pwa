@@ -174,7 +174,13 @@ interface MemberResponse {
 interface DashboardResponse {
   household?: { id: string; name: string }
   completeness?: { checks: Record<string, boolean>; score: number; tier: string }
-  nudge?: { checkId: string; learnCardSlug: string; memberName?: string; assetClassCount?: number }
+  nudge?: {
+    checkId: string
+    learnCardSlug: string
+    targetType?: string
+    memberName?: string
+    assetClassCount?: number
+  }
   allocation?: Array<{ assetClass: string; value: number; percentage: number }>
   totalValue?: number
   error?: string
@@ -316,6 +322,10 @@ describe('dashboard route', () => {
     expect(body.nudge).toBeDefined()
     expect(body.nudge?.checkId).toBe('member_coverage')
     expect(body.nudge?.learnCardSlug).toBe('portfolio')
+    // Same seam as B-001: the route hand-picks response fields, so every new
+    // nudge field needs its own assertion here or it can be dropped on
+    // serialization while every unit test still passes.
+    expect(body.nudge?.targetType).toBe('route')
   })
 
   it("user B never sees user A's dashboard data", async () => {

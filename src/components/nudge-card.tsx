@@ -86,7 +86,11 @@ export function NudgeCard({ nudge }: NudgeCardProps) {
         to={NUDGE_HREF[nudge.checkId]}
         className="inline-flex min-h-[44px] items-center text-body underline"
         onClick={() =>
-          track('learn_card_clicked', { check_id: nudge.checkId, learn_card_slug: nudge.learnCardSlug })
+          track('learn_card_clicked', {
+            check_id: nudge.checkId,
+            learn_card_slug: nudge.learnCardSlug,
+            target_type: nudge.targetType,
+          })
         }
       >
         {ctaFor(nudge)}

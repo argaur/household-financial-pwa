@@ -26,8 +26,11 @@ export interface EventMap {
   holding_updated: { instrument_id: string; asset_class: string; member_id: string }
   dashboard_viewed: { household_id: string; allocation_summary: string }
   completeness_score_changed: { household_id: string; before_tier: string; after_tier: string }
-  nudge_shown: { check_id: string; learn_card_slug: string }
-  learn_card_clicked: { check_id: string; learn_card_slug: string }
+  // target_type distinguishes an instrument page from an app route — five of
+  // the six nudge destinations are routes, so learn_card_slug alone is not
+  // interpretable in PostHog (server/lib/nudge.ts NUDGE_TARGET).
+  nudge_shown: { check_id: string; learn_card_slug: string; target_type: 'learn_card' | 'route' }
+  learn_card_clicked: { check_id: string; learn_card_slug: string; target_type: 'learn_card' | 'route' }
   library_section_viewed: { section: string }
   instrument_viewed: { section: string; instrument_slug: string }
   nav_tab_clicked: { tab_name: string }
