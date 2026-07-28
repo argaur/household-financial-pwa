@@ -69,8 +69,8 @@
 4. Fill in name, relationship, date of birth (risk profile optional) and click "Add to plan."
 5. The sheet closes and a member card appears with the name and relationship/DOB.
 6. "Continue" should now be enabled.
-7. Click "Continue" — you should land on a confirmation screen mentioning holdings come next.
-8. Refresh the page — you should land directly on that same confirmation screen, not back at Step 2.
+7. Click "Continue" — you should land on Onboarding Step 3, "What do you currently hold?" (This step originally read "a confirmation screen mentioning holdings come next" — that was the Slice-2-era placeholder. Slice 4 replaced it with the real holdings form; corrected 2026-07-28.)
+8. Refresh the page — you should land directly on Step 3, not back at Step 2.
 
 **Expected:** No step requires a household ID or member ID to be typed or visible anywhere in the UI or URL — both are resolved from the session server-side. A second account never sees another household's members.
 
@@ -82,7 +82,7 @@
 - [ ] Touch targets ≥44px on Continue / Add to plan
 - [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
-**Result:** Automated verification complete and passing: 55 tests (unit + two-user isolation integration tests for both `/api/household` and `/api/family-members`, plus component tests for the add-member form including the disabled/enabled Continue transitions), `npm run typecheck` clean, `check_events.py` clean. A full automated browser click-through (Playwright, matching how Slice 0/1 were verified) was attempted but blocked at the Clerk sign-up screen by a Cloudflare Turnstile bot-check that gates account creation on this Clerk instance — the same class of environmental limitation as Slice 0's PostHog headless-detection issue, not a code defect. Did not attempt to defeat the bot-check (a legitimate third-party security control). **This capability has not yet had a human click-through** — needs Gaurav to do the 8 steps above once, live, before this is fully signed off (should take under 2 minutes; the underlying code paths are identical in shape to Slice 1's, which did pass a full human-verified live test).
+**Result:** Automated verification complete and passing: 55 tests (unit + two-user isolation integration tests for both `/api/household` and `/api/family-members`, plus component tests for the add-member form including the disabled/enabled Continue transitions), `npm run typecheck` clean, `check_events.py` clean. A full automated browser click-through (Playwright, matching how Slice 0/1 were verified) was attempted but blocked at the Clerk sign-up screen by a Cloudflare Turnstile bot-check that gates account creation on this Clerk instance — the same class of environmental limitation as Slice 0's PostHog headless-detection issue, not a code defect. Did not attempt to defeat the bot-check (a legitimate third-party security control). **Live verification: PASSED 2026-07-28** — all 8 steps driven against production on a purpose-made throwaway account (the Turnstile sign-up was cleared by hand, everything after it browser-driven). Notes: step 2's disabled Continue was verified as a real `button.disabled === true` in the DOM, not merely grey styling; the member card rendered "Self · DOB: 1990-01-01"; step 8's refresh landed on Step 3, confirming onboarding position is derived from data rather than a persisted flag. No `/api/family-members` console errors — the only console output on any load was the known Clerk development-keys warning (Finding 2).
 
 ---
 
@@ -126,8 +126,8 @@
 4. Type an amount invested and a current value.
 5. Click "Optional fields" — units held, monthly SIP, start date, maturity date, and nominee appear; leave them blank.
 6. Check "Mark as emergency fund," then click "See my plan."
-7. You should land on a confirmation screen with a "View your holdings →" link and an "Explore what you can invest in →" link.
-8. Tap "View your holdings →". You should see "Your holdings" with a 1-holding summary line and your holding grouped under the member's name.
+7. You should land directly on `/dashboard` — household health card, allocation donut, and nudge. (This step originally expected "a confirmation screen with a 'View your holdings →' link"; Slice 6's dashboard replaced that placeholder. Corrected 2026-07-28.)
+8. Go to Portfolio (bottom nav). You should see "Your holdings" with a 1-holding summary line and your holding grouped under the member's name.
 9. Tap the holding row — a sheet opens titled "Update holding," pre-filled with everything you entered (including the emergency-fund checkbox and current value).
 10. Change the current value and click "Save changes" — the sheet closes and the updated value shows in the list.
 11. Tap the "+" button (bottom-right) — an empty "Record a holding" sheet opens; add a second holding for the same or a different member and confirm it appears as a second row/group as appropriate.
@@ -147,7 +147,9 @@
 
 **A real bug caught by the isolation test itself, not shipped code:** while writing the `/api/holdings` integration test's in-memory mock, the `and(eq(a), eq(b))` composition initially lost the column names for the second condition, silently turning the household-ownership filter into a no-op inside the *test's own fake database* — the test for "reject a holding referencing a member from a different household" passed with a false green (201 instead of 400) until this was traced and fixed. The production code in `server/lib/holdings.ts` was correct throughout; this was a lesson about verifying a new test helper's filtering logic actually filters, not just returning the right shape, before trusting a passing isolation test — worth remembering for the next slice that introduces `and()`-composed queries in a hand-rolled mock.
 
-**Live verification:** owed to Gaurav — human click-through of the 12 steps above, plus the still-pending Slice 2/3 click-throughs, before this slice is fully signed off.
+**Live verification: PASSED 2026-07-28** — all 12 steps driven against production on the throwaway account. Evidence worth keeping: the auto-filled Asset class field was confirmed in the DOM as `value: "Debt", disabled: true, readOnly: true` (not just visually greyed); "Optional fields" revealed the full documented set (units held, monthly SIP, start date, maturity date, nominee); the emergency-fund flag round-tripped into the edit sheet still checked; the edit updated ₹5,25,000 → ₹5,40,000 in both the row and the summary line without a reload; and the "+" FAB opened a genuinely empty "Record a holding" sheet rather than leaking the prior edit's state — the shared-form-divergence risk flagged in `SPEC.md` §7 did not materialize. Second holding added (2 holdings · ₹7,70,000, two asset classes); step 12's refresh landed on Portfolio, not onboarding. No `/api/holdings` console errors.
+
+**One defect found: B-002 (P2)** — after submitting the add-holding sheet the page retains the tall sheet's scroll offset, leaving the user on an empty viewport below the short holdings list. See `BUG_LOG.md`.
 
 ---
 
@@ -156,7 +158,7 @@
 **Setup:** Sign in with an account that already has a household, at least one family member, and at least one holding (from Slices 1/2/4).
 
 **Steps:**
-1. From the post-onboarding confirmation screen, tap "Manage your protection cover →". You should land on "Profile" with a "Protection" card showing "No protection cover on record." and an "Add protection cover" button.
+1. Go to Profile (`/profile`). (This step originally started from a post-onboarding confirmation screen with a "Manage your protection cover →" link; that screen no longer exists — Slice 6's dashboard replaced it. Corrected 2026-07-28.) You should see a "Protection" card showing "No protection cover on record." and an "Add protection cover" button.
 2. Tap "Add protection cover" (or the "Add" link in the card header) — a sheet titled "Add protection cover" opens.
 3. Try clicking "Add cover" with nothing filled in — it should be disabled.
 4. Select a family member under "For." Leave "Type" and "Status" at their defaults (Term life / Active).
@@ -180,7 +182,9 @@
 
 **Result:** Automated verification complete and passing: unit tests for the `protection` lib (cross-household member rejection, negative cover-amount rejection, invalid type/status enum rejection), two-user isolation integration tests for `/api/protection` (list/create/update), and component tests for the shared `ProtectionForm` and `Profile` pages (empty state, grouped list, add-sheet, edit-sheet pre-fill). `npm run typecheck` and `scripts/check_events.py` both clean.
 
-**Live verification:** owed to Gaurav — human click-through of the 11 steps above, plus the still-pending Slice 2/3/4 click-throughs, before this slice is fully signed off.
+**Live verification: PASSED 2026-07-28** — all 11 steps driven against production on the throwaway account. `Add cover` confirmed as a real `disabled === true` in the empty state; defaults arrived as documented (Term life / Active); the record rendered "Term life · ₹50,00,000 cover · Active · HDFC Life" grouped under the member; the edit sheet pre-filled everything including the optional Provider (`"HDFC Life"`) while the never-filled Annual premium stayed empty; the status change to Lapsed reflected in the card; a second record (Health · ₹10,00,000 · Active) appeared as a second row under the same member; and step 11's refresh returned both records with no flicker through the empty state. No `/api/protection` console errors.
+
+**Incidental confirmation:** renaming the member in Slice 9's step 5 immediately updated this card's group heading too — the Protection card reads member names live rather than caching them.
 
 ---
 
@@ -332,9 +336,11 @@ Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`d
 
 **Webhook routing verified, not assumed:** ran a real `vercel build` against this project's linked Vercel project and inspected `.vercel/output/config.json` — confirmed `^/api/([^/]+)$` (single segment) routes to the catch-all function while `^/api(/.*)?$` (any second segment) 404s, which is exactly why `/api/clerk-webhook` was chosen over a nested `/api/webhooks/clerk` shape.
 
-**Manual step owed to Gaurav before this works live:** register a `user.deleted` webhook endpoint in the Clerk dashboard pointing at `/api/clerk-webhook`, set its signing secret as `CLERK_WEBHOOK_SECRET` in Vercel, and enable "allow users to delete their own account" in Clerk's User & Authentication settings. None of this was done as part of this slice (no live dashboard changes without explicit go-ahead, same standing rule as every deploy).
+**Manual Clerk-dashboard step: DONE 2026-07-28** (by Gaurav — the Clerk webhooks panel is an embedded cross-origin Svix iframe that ignores synthetic clicks, so it could not be automated). Endpoint registered at `/api/clerk-webhook` for `user.deleted`, signing secret set as `CLERK_WEBHOOK_SECRET` in Vercel Production, self-service account deletion enabled. **Verified by construction, not by looking at the dashboard:** an unsigned `POST /api/clerk-webhook` returned **500** (`webhook_not_configured`, the `server/routes/clerk-webhook.ts:28` guard) before the env var landed and **401** (`invalid_signature`) after — proving the secret is present in the running function and the Svix verifier is actually executing. Note the first attempt set the variable without redeploying, which reads identically to not setting it at all; the 500→401 probe is what caught it.
 
-**Live verification:** owed to Gaurav — human click-through of the 12 steps above **using a disposable test account**, plus the still-pending Slice 2/3/4/5 click-throughs, before this slice is fully signed off. This slice additionally cannot be verified live until the manual Clerk-dashboard step above is done, since the webhook won't fire without it.
+**Live verification: steps 1–5 PASSED 2026-07-28**, remainder outstanding. Verified so far: step 1's four cards render in the documented order (Your household / Family members / Protection / Account); step 2's Edit swaps in an editable field with Save changes + Cancel; step 3's rename showed the new name with no page reload; step 4's member row (not Remove) opens "Update family member" pre-filled with name, relationship, DOB and the blank optional risk profile; step 5's rename updated both the member row *and* the Protection card's group heading. Steps 6–12 were interrupted when the browser extension disconnected mid-run, not by any app behaviour.
+
+**Still owed:** steps 6–12, ending in the destructive deletion. Two safeguards before resuming — step 7's removal must target a member with no holdings or protection (currently that is "Test Member Two", added at step 6), and step 12 permanently deletes the account, so it needs an explicit go-ahead. After it fires, confirm the cascade server-side (household / members / holdings / protection all empty, `analytics_events` retained) rather than trusting the UI's confirmation.
 
 ---
 
