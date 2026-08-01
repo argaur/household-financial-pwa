@@ -10,6 +10,10 @@ export const households = pgTable('households', {
   id: uuid('id').defaultRandom().primaryKey(),
   ownerUserId: text('owner_user_id').notNull(),
   name: text('name').notNull(),
+  ciphertext: text('ciphertext'),
+  iv: text('iv'),
+  alg: text('alg'),
+  version: integer('version').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
@@ -26,6 +30,10 @@ export const familyMembers = pgTable('family_members', {
   relationship: text('relationship', { enum: relationshipEnum }).notNull(),
   dateOfBirth: date('date_of_birth').notNull(),
   riskProfile: text('risk_profile', { enum: riskProfileEnum }),
+  ciphertext: text('ciphertext'),
+  iv: text('iv'),
+  alg: text('alg'),
+  version: integer('version').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
@@ -69,6 +77,10 @@ export const holdings = pgTable('holdings', {
   priceSource: text('price_source').notNull().default('manual'),
   isEmergencyFund: boolean('is_emergency_fund').notNull().default(false),
   notes: text('notes'),
+  ciphertext: text('ciphertext'),
+  iv: text('iv'),
+  alg: text('alg'),
+  version: integer('version').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
@@ -88,6 +100,10 @@ export const protection = pgTable('protection', {
   premium: numeric('premium'),
   provider: text('provider'),
   status: text('status', { enum: protectionStatusEnum }).notNull(),
+  ciphertext: text('ciphertext'),
+  iv: text('iv'),
+  alg: text('alg'),
+  version: integer('version').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
@@ -114,11 +130,28 @@ export const analyticsEvents = pgTable('analytics_events', {
   createdAtIdx: index('analytics_events_created_at_idx').on(t.createdAt),
 }))
 
-export const householdsRelations = relations(households, ({ many }) => ({
+// Encryption-prep: per-household key material for client-side encryption.
+// Schema only in this step — nothing reads/writes it yet (see drizzle/schema.ts header note).
+export const householdKeys = pgTable('household_keys', {
+  householdId: uuid('household_id').primaryKey().references(() => households.id, { onDelete: 'cascade' }),
+  kdfAlg: text('kdf_alg').notNull(),
+  kdfIterations: integer('kdf_iterations').notNull(),
+  passphraseSalt: text('passphrase_salt').notNull(),
+  wrappedDekPassphrase: text('wrapped_dek_passphrase').notNull(),
+  passphraseWrapIv: text('passphrase_wrap_iv').notNull(),
+  recoverySalt: text('recovery_salt').notNull(),
+  wrappedDekRecovery: text('wrapped_dek_recovery').notNull(),
+  recoveryWrapIv: text('recovery_wrap_iv').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const householdsRelations = relations(households, ({ many, one }) => ({
   familyMembers: many(familyMembers),
   holdings: many(holdings),
   protection: many(protection),
   goals: many(goals),
+  householdKeys: one(householdKeys, { fields: [households.id], references: [householdKeys.householdId] }),
 }))
 
 export const familyMembersRelations = relations(familyMembers, ({ one, many }) => ({
@@ -136,4 +169,8 @@ export const holdingsRelations = relations(holdings, ({ one }) => ({
 export const protectionRelations = relations(protection, ({ one }) => ({
   household: one(households, { fields: [protection.householdId], references: [households.id] }),
   member: one(familyMembers, { fields: [protection.memberId], references: [familyMembers.id] }),
+}))
+
+export const householdKeysRelations = relations(householdKeys, ({ one }) => ({
+  household: one(households, { fields: [householdKeys.householdId], references: [households.id] }),
 }))
