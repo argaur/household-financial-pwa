@@ -1,4 +1,4 @@
-> **DRAFT — awaiting Gaurav's approval.** Nothing here is signed off. No checklist box in this repo has been ticked on account of this document.
+> **Approved by Gaurav, 2026-08-01.**
 
 # Case Study — Household Financial Planning PWA
 

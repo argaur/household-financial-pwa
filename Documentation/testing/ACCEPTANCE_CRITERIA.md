@@ -355,7 +355,11 @@ Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`d
 
 **Setup note for resuming:** steps 9–12 need data to be meaningful — step 10 asks you to confirm surviving members after signing back in, and step 12's cascade check is vacuous against an already-empty household. Repopulate with at least 1 member + 1 holding + 1 protection record before continuing.
 
-**Still owed: steps 9–12**, ending in the destructive deletion. (Corrected 2026-07-29 — this line previously read "steps 6–12", contradicting the two paragraphs above it that record steps 6, 7 and 8 as passed on 2026-07-28. Steps 1–8 are done.)
+**Steps 9 and 10 PASSED 2026-08-01** against a properly repopulated household (Sharma Family, 2 members, 3 holdings across Equity/Debt/Gold, 1 term-life record), on the production Clerk instance at `finance.gauravg.dev`. Step 9: sign-out returned to the sign-in screen. Step 10: after signing back in with Google, the household name, both members and the protection record were all still present, read back from `/profile`. Sign-out deletes nothing, which is what the step exists to prove. Not vacuous this time — the earlier blocker was an empty household, and it was populated first precisely so these steps would mean something.
+
+**Steps 11 and 12 remain owed, and need a human to click.** The delete-account confirm dialog did not open under two synthetic clicks on `ref_31`. This is **B-003 recurring**, closed on 2026-07-28 as automation flake after Gaurav opened the same dialog by hand on the first try. Per B-003's own recorded lesson — when a Radix control refuses a synthetic click, suspect the driver and get a human to press it rather than filing a defect — no new bug is raised. Step 12 needed an explicit go-ahead regardless.
+
+**Original line, for the record: still owed: steps 9–12**, ending in the destructive deletion. (Corrected 2026-07-29 — this line previously read "steps 6–12", contradicting the two paragraphs above it that record steps 6, 7 and 8 as passed on 2026-07-28. Steps 1–8 are done.)
 
 Three things gate the remainder:
 
