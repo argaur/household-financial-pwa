@@ -26,9 +26,11 @@ vi.mock('@/lib/holdings-api', async (importOriginal) => {
 const member: FamilyMember = {
   id: 'm1',
   householdId: 'h1',
-  name: 'Gaurav Gupta',
+  name: 'Ananya Verma',
   relationship: 'self',
   dateOfBirth: '1990-01-01',
+  riskProfile: null,
+  version: 1,
   createdAt: '',
   updatedAt: '',
 }
@@ -63,9 +65,9 @@ const holding: Holding = {
   startDate: null,
   maturityDate: null,
   nominee: null,
-  priceSource: 'manual',
   isEmergencyFund: false,
   notes: null,
+  version: 3,
   createdAt: '',
   updatedAt: '',
 }
@@ -117,6 +119,9 @@ describe('HoldingForm', () => {
       expect(createHolding).toHaveBeenCalledWith('test-token', {
         memberId: 'm1',
         instrumentId: 'i1',
+        // Derived in the browser now — the server can no longer see the
+        // instrument, so it cannot denormalize the asset class.
+        assetClass: 'equity',
         investedAmount: '10000',
         currentValue: '10500',
         isEmergencyFund: false,
@@ -147,13 +152,21 @@ describe('HoldingForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() =>
-      expect(updateHolding).toHaveBeenCalledWith('test-token', 'hold1', {
-        memberId: 'm1',
-        instrumentId: 'i1',
-        investedAmount: '10000',
-        currentValue: '12000',
-        isEmergencyFund: false,
-      }),
+      expect(updateHolding).toHaveBeenCalledWith(
+        'test-token',
+        'hold1',
+        {
+          memberId: 'm1',
+          instrumentId: 'i1',
+          assetClass: 'equity',
+          investedAmount: '10000',
+          currentValue: '12000',
+          isEmergencyFund: false,
+        },
+        // The version this edit was made against — the server refuses the
+        // write if the stored row has moved on.
+        3,
+      ),
     )
     expect(onSaved).toHaveBeenCalled()
   })

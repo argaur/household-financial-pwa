@@ -1,43 +1,25 @@
 import { eq, and } from 'drizzle-orm'
-import { z } from 'zod'
-import { familyMembers, relationshipEnum, riskProfileEnum } from '../../drizzle/schema.js'
+import { familyMembers } from '../../drizzle/schema.js'
 import type { db as Db } from './db.js'
+import type { HouseholdScopedCreate, EncryptedUpdate, UpdateOutcome } from './envelope.js'
 
 export type FamilyMember = typeof familyMembers.$inferSelect
 
-const dateOfBirthSchema = z
-  .string()
-  .trim()
-  .min(1, 'Date of birth is required')
-  .refine((value) => !Number.isNaN(Date.parse(value)), 'Date of birth must be a valid date')
-  .refine((value) => Date.parse(value) <= Date.now(), 'Date of birth must be in the past')
-
-const createFamilyMemberSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(100, 'Name is too long'),
-  relationship: z.enum(relationshipEnum),
-  dateOfBirth: dateOfBirthSchema,
-  riskProfile: z.enum(riskProfileEnum).optional(),
-})
-
-export type CreateFamilyMemberInput = z.input<typeof createFamilyMemberSchema>
-
-/** Thrown when a member referenced by id doesn't belong to the caller's household (or doesn't exist). */
-export class FamilyMemberError extends Error {
-  constructor(public code: 'member_not_found') {
-    super(code)
-  }
-}
+export type CreateFamilyMemberInput = HouseholdScopedCreate
+export type UpdateFamilyMemberInput = EncryptedUpdate
 
 /**
- * Every query here filters by householdId (resolved server-side from the
- * Clerk session via getHouseholdForOwner, never from client input) — this
- * mirrors the app-layer scoping boundary Slice 1 established for households.
- * No function in this module accepts a client-supplied household_id from a
- * different caller than the route already resolved.
+ * Every query here filters by householdId (resolved server-side from the Clerk
+ * session via getHouseholdForOwner, never from client input) — this mirrors
+ * the app-layer scoping boundary Slice 1 established for households. No
+ * function in this module accepts a client-supplied household_id.
+ *
+ * A member's name, relationship, date of birth and risk profile are inside
+ * `ciphertext`. The server keeps only the id and the household it belongs to,
+ * which is exactly what it needs to enforce tenancy and cascade deletes.
  */
 export async function listFamilyMembers(db: Pick<typeof Db, 'select'>, householdId: string): Promise<FamilyMember[]> {
-  const rows = await db.select().from(familyMembers).where(eq(familyMembers.householdId, householdId))
-  return rows as FamilyMember[]
+  return db.select().from(familyMembers).where(eq(familyMembers.householdId, householdId))
 }
 
 export async function createFamilyMember(
@@ -45,52 +27,57 @@ export async function createFamilyMember(
   householdId: string,
   input: CreateFamilyMemberInput,
 ): Promise<FamilyMember> {
-  const parsed = createFamilyMemberSchema.parse(input)
   const [row] = await db
     .insert(familyMembers)
     .values({
+      id: input.id,
       householdId,
-      name: parsed.name,
-      relationship: parsed.relationship,
-      dateOfBirth: parsed.dateOfBirth,
-      riskProfile: parsed.riskProfile,
+      ciphertext: input.ciphertext,
+      iv: input.iv,
+      alg: input.alg,
     })
     .returning()
-  return row as FamilyMember
+  if (!row) throw new Error('Insert of a family member returned no row')
+  return row
 }
 
 /**
- * Slice 9 — edit a member's own fields (name/relationship/DOB/risk profile).
- * Scoped by householdId + memberId together (mirrors holdings.ts's
- * resolveMemberAndInstrument cross-household check) — a memberId alone
- * doesn't prove ownership, the FK doesn't enforce it either.
+ * Version-conditional update — see server/lib/holdings.ts's updateHolding.
+ * Scoped by householdId + memberId together: a memberId alone doesn't prove
+ * ownership, and the FK doesn't enforce it either.
  */
 export async function updateFamilyMember(
   db: Pick<typeof Db, 'select' | 'update'>,
   householdId: string,
   memberId: string,
-  input: CreateFamilyMemberInput,
-): Promise<FamilyMember | null> {
+  input: UpdateFamilyMemberInput,
+): Promise<UpdateOutcome<FamilyMember>> {
   const existingRows = await db
     .select()
     .from(familyMembers)
     .where(and(eq(familyMembers.id, memberId), eq(familyMembers.householdId, householdId)))
     .limit(1)
-  if (!existingRows[0]) return null
+  if (!existingRows[0]) return { status: 'not_found' }
 
-  const parsed = createFamilyMemberSchema.parse(input)
   const [row] = await db
     .update(familyMembers)
     .set({
-      name: parsed.name,
-      relationship: parsed.relationship,
-      dateOfBirth: parsed.dateOfBirth,
-      riskProfile: parsed.riskProfile ?? null,
+      ciphertext: input.ciphertext,
+      iv: input.iv,
+      alg: input.alg,
+      version: input.expectedVersion + 1,
       updatedAt: new Date(),
     })
-    .where(and(eq(familyMembers.id, memberId), eq(familyMembers.householdId, householdId)))
+    .where(
+      and(
+        eq(familyMembers.id, memberId),
+        eq(familyMembers.householdId, householdId),
+        eq(familyMembers.version, input.expectedVersion),
+      ),
+    )
     .returning()
-  return (row as FamilyMember | undefined) ?? null
+  if (!row) return { status: 'conflict' }
+  return { status: 'updated', row }
 }
 
 /**

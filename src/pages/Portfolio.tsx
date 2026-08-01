@@ -46,8 +46,8 @@ export function Portfolio() {
           listInstruments(),
         ])
         if (cancelled) return
-        setHoldings(holdingsResult)
-        setMembers(membersResult)
+        setHoldings(holdingsResult.holdings)
+        setMembers(membersResult.members)
         setInstruments(instrumentsResult)
         setState('loaded')
       } catch {

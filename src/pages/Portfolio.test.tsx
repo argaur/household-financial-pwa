@@ -37,9 +37,11 @@ vi.mock('@/lib/holdings-api', async (importOriginal) => {
 const member = {
   id: 'm1',
   householdId: 'h1',
-  name: 'Gaurav Gupta',
+  name: 'Ananya Verma',
   relationship: 'self' as const,
   dateOfBirth: '1990-01-01',
+  riskProfile: null,
+  version: 1,
   createdAt: '',
   updatedAt: '',
 }
@@ -74,9 +76,9 @@ const holding = {
   startDate: null,
   maturityDate: null,
   nominee: null,
-  priceSource: 'manual',
   isEmergencyFund: false,
   notes: null,
+  version: 1,
   createdAt: '',
   updatedAt: '',
 }
@@ -88,27 +90,29 @@ describe('Portfolio', () => {
     listHoldings.mockReset()
     createHolding.mockReset()
     updateHolding.mockReset()
-    listFamilyMembers.mockResolvedValue([member])
+    // The list clients return the decrypted rows plus counts of what could
+    // not be read — see src/lib/encrypted-rows.ts.
+    listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
     listInstruments.mockResolvedValue([instrument])
   })
 
   it('shows the empty state and a CTA when there are no holdings', async () => {
-    listHoldings.mockResolvedValue([])
+    listHoldings.mockResolvedValue({ holdings: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     render(<Portfolio />)
     await screen.findByText(/nothing recorded yet/i)
     expect(screen.getByRole('button', { name: /record your first holding/i })).toBeInTheDocument()
   })
 
   it('lists holdings grouped by member with a summary line', async () => {
-    listHoldings.mockResolvedValue([holding])
+    listHoldings.mockResolvedValue({ holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 })
     render(<Portfolio />)
-    await screen.findByText("Gaurav Gupta's holdings")
+    await screen.findByText("Ananya Verma's holdings")
     expect(screen.getByText('Large Cap Index Fund')).toBeInTheDocument()
     expect(screen.getAllByText(/1 holding · ₹10,500/i)).toHaveLength(2)
   })
 
   it('opens the add sheet from the empty-state CTA and appends the created holding', async () => {
-    listHoldings.mockResolvedValue([])
+    listHoldings.mockResolvedValue({ holdings: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     createHolding.mockResolvedValue(holding)
     render(<Portfolio />)
 
@@ -126,7 +130,7 @@ describe('Portfolio', () => {
   })
 
   it('restores the pre-open scroll position after the add-holding sheet closes (B-002)', async () => {
-    listHoldings.mockResolvedValue([])
+    listHoldings.mockResolvedValue({ holdings: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     createHolding.mockResolvedValue(holding)
     render(<Portfolio />)
 
@@ -158,7 +162,7 @@ describe('Portfolio', () => {
   })
 
   it('opens the edit sheet pre-filled when a holding row is tapped', async () => {
-    listHoldings.mockResolvedValue([holding])
+    listHoldings.mockResolvedValue({ holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 })
     updateHolding.mockResolvedValue({ ...holding, currentValue: '12000' })
     render(<Portfolio />)
 
@@ -172,11 +176,17 @@ describe('Portfolio', () => {
     fireEvent.change(currentValueInput, { target: { value: '12000' } })
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
-    await waitFor(() => expect(updateHolding).toHaveBeenCalledWith('test-token', 'hold1', expect.objectContaining({ currentValue: '12000' })))
+    await waitFor(() => expect(updateHolding).toHaveBeenCalledWith(
+          'test-token',
+          'hold1',
+          expect.objectContaining({ currentValue: '12000', assetClass: 'equity' }),
+          1,
+        ),
+      )
   })
 
   it('restores the pre-open scroll position after the edit-holding sheet closes (B-002, shared seam)', async () => {
-    listHoldings.mockResolvedValue([holding])
+    listHoldings.mockResolvedValue({ holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 })
     updateHolding.mockResolvedValue({ ...holding, currentValue: '12000' })
     render(<Portfolio />)
 

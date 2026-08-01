@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from 'vitest'
-import { z } from 'zod'
 import {
   listFamilyMembers,
   createFamilyMember,
@@ -8,16 +7,10 @@ import {
   type CreateFamilyMemberInput,
 } from './family-members.js'
 
-// Tests below deliberately pass invalid enum/date values to verify runtime
-// rejection — cast past the narrow input type, which correctly rejects them
-// at compile time too.
-function invalid(input: Record<string, unknown>): CreateFamilyMemberInput {
-  return input as unknown as CreateFamilyMemberInput
-}
-
-function fakeDb(existingRows: unknown[]) {
-  const insertedRows: unknown[] = []
-  const updatedPatches: unknown[] = []
+/** Same shape as server/lib/holdings.test.ts's fake — see the note there. */
+function fakeDb(existingRows: unknown[], options: { updateMatches?: boolean } = {}) {
+  const insertedRows: Array<Record<string, unknown>> = []
+  const updatedPatches: Array<Record<string, unknown>> = []
   const deletedCalls: unknown[] = []
   return {
     select: vi.fn(() => ({
@@ -30,28 +23,28 @@ function fakeDb(existingRows: unknown[]) {
       })),
     })),
     insert: vi.fn(() => ({
-      values: vi.fn((row: unknown) => ({
+      values: vi.fn((row: Record<string, unknown>) => ({
         returning: vi.fn(() => {
           insertedRows.push(row)
-          return Promise.resolve([{ id: 'new-id', createdAt: new Date(), updatedAt: new Date(), ...(row as object) }])
+          return Promise.resolve([{ version: 1, createdAt: new Date(), updatedAt: new Date(), ...row }])
         }),
       })),
     })),
     update: vi.fn(() => ({
-      set: vi.fn((patch: unknown) => ({
+      set: vi.fn((patch: Record<string, unknown>) => ({
         where: vi.fn(() => ({
           returning: vi.fn(() => {
+            if (options.updateMatches === false) return Promise.resolve([])
             updatedPatches.push(patch)
-            const existing = existingRows[0] as Record<string, unknown> | undefined
-            if (!existing) return Promise.resolve([])
-            return Promise.resolve([{ ...existing, ...(patch as object) }])
+            const existing = (existingRows[0] ?? {}) as Record<string, unknown>
+            return Promise.resolve([{ ...existing, ...patch }])
           }),
         })),
       })),
     })),
     delete: vi.fn(() => ({
-      where: vi.fn(() => {
-        deletedCalls.push(true)
+      where: vi.fn((cond: unknown) => {
+        deletedCalls.push(cond)
         return Promise.resolve([])
       }),
     })),
@@ -61,126 +54,70 @@ function fakeDb(existingRows: unknown[]) {
   }
 }
 
-describe('listFamilyMembers', () => {
-  it('returns the members for a household', async () => {
-    const db = fakeDb([{ id: 'm1', householdId: 'h1', name: 'Gaurav Gupta', relationship: 'self' }])
-    const result = await listFamilyMembers(db as never, 'h1')
-    expect(result).toHaveLength(1)
-    expect(result[0].name).toBe('Gaurav Gupta')
-  })
+const envelope = {
+  ciphertext: 'Y2lwaGVydGV4dC1ieXRlcw',
+  iv: 'aXYtYnl0ZXMtMTIx',
+  alg: 'AES-256-GCM' as const,
+}
 
-  it('returns an empty array when the household has no members', async () => {
+const validInput: CreateFamilyMemberInput = { id: 'member-1', ...envelope }
+
+describe('createFamilyMember', () => {
+  it('stores the envelope under the caller household and nothing else', async () => {
     const db = fakeDb([])
-    const result = await listFamilyMembers(db as never, 'h1')
-    expect(result).toEqual([])
+    const result = await createFamilyMember(db as never, 'h1', validInput)
+
+    expect(result.householdId).toBe('h1')
+    // No name, relationship, date of birth or risk profile can reach the
+    // database from here — they only exist inside the ciphertext.
+    expect(Object.keys(db._insertedRows[0]).sort()).toEqual(['alg', 'ciphertext', 'householdId', 'id', 'iv'])
   })
 })
 
-describe('createFamilyMember', () => {
-  const validInput: CreateFamilyMemberInput = { name: 'Gaurav Gupta', relationship: 'self', dateOfBirth: '1990-01-01' }
-
-  it('creates a member scoped to the household', async () => {
-    const db = fakeDb([])
-    const result = await createFamilyMember(db as never, 'h1', validInput)
-    expect(result.name).toBe('Gaurav Gupta')
-    expect(db._insertedRows).toHaveLength(1)
-    expect((db._insertedRows[0] as { householdId: string }).householdId).toBe('h1')
-  })
-
-  it('accepts an optional risk profile', async () => {
-    const db = fakeDb([])
-    const result = await createFamilyMember(db as never, 'h1', { ...validInput, riskProfile: 'moderate' })
-    expect(result.riskProfile).toBe('moderate')
-  })
-
-  it('rejects a blank name with a ZodError', async () => {
-    const db = fakeDb([])
-    await expect(createFamilyMember(db as never, 'h1', { ...validInput, name: '  ' })).rejects.toBeInstanceOf(z.ZodError)
-    expect(db._insertedRows).toHaveLength(0)
-  })
-
-  it('rejects an invalid relationship value', async () => {
-    const db = fakeDb([])
-    await expect(
-      createFamilyMember(db as never, 'h1', invalid({ ...validInput, relationship: 'sibling' })),
-    ).rejects.toBeInstanceOf(z.ZodError)
-    expect(db._insertedRows).toHaveLength(0)
-  })
-
-  it('rejects a missing date of birth', async () => {
-    const db = fakeDb([])
-    await expect(
-      createFamilyMember(db as never, 'h1', { ...validInput, dateOfBirth: '' }),
-    ).rejects.toBeInstanceOf(z.ZodError)
-    expect(db._insertedRows).toHaveLength(0)
-  })
-
-  it('rejects a malformed date of birth', async () => {
-    const db = fakeDb([])
-    await expect(
-      createFamilyMember(db as never, 'h1', { ...validInput, dateOfBirth: 'not-a-date' }),
-    ).rejects.toBeInstanceOf(z.ZodError)
-    expect(db._insertedRows).toHaveLength(0)
-  })
-
-  it('rejects a future date of birth', async () => {
-    const db = fakeDb([])
-    const future = new Date()
-    future.setFullYear(future.getFullYear() + 1)
-    const futureDate = future.toISOString().slice(0, 10)
-    await expect(
-      createFamilyMember(db as never, 'h1', { ...validInput, dateOfBirth: futureDate }),
-    ).rejects.toBeInstanceOf(z.ZodError)
-    expect(db._insertedRows).toHaveLength(0)
-  })
-
-  it('rejects an invalid risk profile value', async () => {
-    const db = fakeDb([])
-    await expect(
-      createFamilyMember(db as never, 'h1', invalid({ ...validInput, riskProfile: 'reckless' })),
-    ).rejects.toBeInstanceOf(z.ZodError)
-    expect(db._insertedRows).toHaveLength(0)
+describe('listFamilyMembers', () => {
+  it('returns the household members', async () => {
+    const db = fakeDb([{ id: 'member-1', householdId: 'h1' }])
+    await expect(listFamilyMembers(db as never, 'h1')).resolves.toHaveLength(1)
   })
 })
 
 describe('updateFamilyMember', () => {
-  const validInput: CreateFamilyMemberInput = { name: 'Gaurav Gupta', relationship: 'self', dateOfBirth: '1990-01-01' }
+  const updateInput = { ...envelope, expectedVersion: 1 }
 
-  it('updates a member that belongs to the household', async () => {
-    const db = fakeDb([{ id: 'm1', householdId: 'h1', name: 'Old Name', relationship: 'self', dateOfBirth: '1990-01-01' }])
-    const result = await updateFamilyMember(db as never, 'h1', 'm1', { ...validInput, name: 'New Name' })
-    expect(result?.name).toBe('New Name')
-    expect(db._updatedPatches).toHaveLength(1)
+  it('writes the new envelope and bumps the version to expectedVersion + 1', async () => {
+    const db = fakeDb([{ id: 'member-1', householdId: 'h1', version: 1 }])
+    const outcome = await updateFamilyMember(db as never, 'h1', 'member-1', updateInput)
+    expect(outcome.status).toBe('updated')
+    expect(db._updatedPatches[0].version).toBe(2)
+    expect(db._updatedPatches[0].ciphertext).toBe(envelope.ciphertext)
   })
 
-  it('returns null when the member does not belong to this household (cross-household isolation)', async () => {
+  it("reports not_found when the member does not belong to the caller's household", async () => {
     const db = fakeDb([])
-    const result = await updateFamilyMember(db as never, 'h1', 'm-from-another-household', validInput)
-    expect(result).toBeNull()
+    await expect(updateFamilyMember(db as never, 'h1', 'member-other', updateInput)).resolves.toEqual({
+      status: 'not_found',
+    })
     expect(db._updatedPatches).toHaveLength(0)
   })
 
-  it('rejects an invalid relationship value with a ZodError', async () => {
-    const db = fakeDb([{ id: 'm1', householdId: 'h1', name: 'Old Name', relationship: 'self', dateOfBirth: '1990-01-01' }])
-    await expect(
-      updateFamilyMember(db as never, 'h1', 'm1', invalid({ ...validInput, relationship: 'sibling' })),
-    ).rejects.toBeInstanceOf(z.ZodError)
-    expect(db._updatedPatches).toHaveLength(0)
+  it('reports a conflict when the conditional update matches no row', async () => {
+    const db = fakeDb([{ id: 'member-1', householdId: 'h1', version: 5 }], { updateMatches: false })
+    await expect(updateFamilyMember(db as never, 'h1', 'member-1', updateInput)).resolves.toEqual({
+      status: 'conflict',
+    })
   })
 })
 
 describe('removeFamilyMember', () => {
   it('removes a member that belongs to the household', async () => {
-    const db = fakeDb([{ id: 'm1', householdId: 'h1', name: 'Gaurav Gupta' }])
-    const removed = await removeFamilyMember(db as never, 'h1', 'm1')
-    expect(removed).toBe(true)
+    const db = fakeDb([{ id: 'member-1', householdId: 'h1' }])
+    await expect(removeFamilyMember(db as never, 'h1', 'member-1')).resolves.toBe(true)
     expect(db._deletedCalls).toHaveLength(1)
   })
 
-  it('returns false and never deletes when the member does not belong to this household', async () => {
+  it("refuses to remove a member from another household and issues no delete", async () => {
     const db = fakeDb([])
-    const removed = await removeFamilyMember(db as never, 'h1', 'm-from-another-household')
-    expect(removed).toBe(false)
+    await expect(removeFamilyMember(db as never, 'h1', 'member-other')).resolves.toBe(false)
     expect(db._deletedCalls).toHaveLength(0)
   })
 })

@@ -73,7 +73,9 @@ export function MemberForm({ initialMember, submitLabel, submittingLabel, analyt
 
     try {
       const token = await getToken()
-      const member = editing ? await updateFamilyMember(token, initialMember!.id, input) : await createFamilyMember(token, input)
+      const member = editing
+        ? await updateFamilyMember(token, initialMember!.id, input, initialMember!.version)
+        : await createFamilyMember(token, input)
       track('feature_used', { feature_name: 'edit_household', action: editing ? 'edit_member' : 'add_member', member_id: member.id })
       onSaved(member)
     } catch (err) {

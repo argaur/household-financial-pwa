@@ -51,7 +51,7 @@ export function OnboardingStep2({ onContinue }: OnboardingStep2Props) {
         const token = await getToken()
         const result = await listFamilyMembers(token)
         if (cancelled) return
-        setMembers(result)
+        setMembers(result.members)
         setMembersState('loaded')
       } catch {
         if (cancelled) return

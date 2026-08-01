@@ -43,20 +43,27 @@ export function HouseholdGate() {
       try {
         const result = await fetchHousehold(token)
         if (cancelled) return
-        if (!result) {
+        if (result.state === 'absent') {
           setState('no-household')
+          return
+        }
+        // 'not-yet-encrypted' and 'unreadable' both mean a household exists
+        // that this browser cannot read — never treat either as "no household",
+        // which would offer to create a second one.
+        if (result.state !== 'ok') {
+          setState('error')
           return
         }
         const memberList = await listFamilyMembers(token)
         if (cancelled) return
-        if (memberList.length === 0) {
+        if (memberList.members.length === 0) {
           setState('onboarding-members')
           return
         }
-        setMembers(memberList)
+        setMembers(memberList.members)
         const holdings = await listHoldings(token)
         if (cancelled) return
-        setState(holdings.length === 0 ? 'onboarding-holdings' : 'has-household')
+        setState(holdings.holdings.length === 0 ? 'onboarding-holdings' : 'has-household')
       } catch (err) {
         if (cancelled) return
         setState(err instanceof HouseholdApiError && err.status === 401 ? 'session-expired' : 'error')
@@ -134,7 +141,7 @@ export function HouseholdGate() {
         onContinue={async () => {
           const token = await getToken()
           const memberList = await listFamilyMembers(token)
-          setMembers(memberList)
+          setMembers(memberList.members)
           setState('onboarding-holdings')
         }}
       />

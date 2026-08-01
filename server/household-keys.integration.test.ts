@@ -16,7 +16,8 @@ vi.mock('jose', () => ({
 interface HouseholdRow {
   id: string
   ownerUserId: string
-  name: string
+  /** Legacy plaintext column — always null now that the name is encrypted. */
+  name: string | null
 }
 interface HouseholdKeyRow {
   householdId: string
@@ -64,9 +65,9 @@ vi.mock('./lib/db.js', () => ({
       values: (row: Record<string, unknown>) => {
         function insertHousehold() {
           const created: HouseholdRow = {
-            id: `h-${households.length + 1}`,
+            id: row.id as string,
             ownerUserId: row.ownerUserId as string,
-            name: row.name as string,
+            name: null,
           }
           households.push(created)
           return [created]
@@ -144,11 +145,22 @@ function validBody(tag: string) {
   }
 }
 
-async function createHousehold(token: string, name: string) {
+// /api/household stores an opaque envelope and takes a client-generated id
+// (see server/lib/envelope.ts). The label argument survives only to keep these
+// call sites readable — it never reaches the server.
+const HOUSEHOLD_IDS = [
+  '11111111-1111-4111-8111-111111111111',
+  '22222222-2222-4222-8222-222222222222',
+  '33333333-3333-4333-8333-333333333333',
+]
+const householdEnvelope = { ciphertext: 'Y2lwaGVydGV4dC1vbmU', iv: 'aXYtYnl0ZXMtMTIx', alg: 'AES-256-GCM' }
+let householdSeq = 0
+
+async function createHousehold(token: string, _label: string) {
   const res = await app.request('/api/household', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ id: HOUSEHOLD_IDS[householdSeq++], ...householdEnvelope }),
   })
   const body = (await res.json()) as HouseholdResponse
   return body.household!
@@ -170,6 +182,7 @@ describe('household-keys routes', () => {
   beforeEach(() => {
     households = []
     keyRows = []
+    householdSeq = 0
     householdKeysRateLimiter.reset()
   })
 
@@ -213,7 +226,7 @@ describe('household-keys routes', () => {
 
     const created = ((await res.json()) as HouseholdKeysResponse).householdKeys!
     expect(created).toEqual({
-      householdId: 'h-1',
+      householdId: HOUSEHOLD_IDS[0],
       kdfAlg: 'PBKDF2-SHA256',
       kdfIterations: 600_000,
       passphraseSalt: 'salt-passphrase-a',
@@ -235,7 +248,7 @@ describe('household-keys routes', () => {
     expect(res.status).toBe(200)
     const body = (await res.json()) as HouseholdKeysResponse
     expect(body.householdKeys).toMatchObject({
-      householdId: 'h-1',
+      householdId: HOUSEHOLD_IDS[0],
       kdfAlg: 'PBKDF2-SHA256',
       kdfIterations: 600_000,
       wrappedDekPassphrase: 'wrapped-passphrase-a',
@@ -254,11 +267,11 @@ describe('household-keys routes', () => {
     await post('user_a', validBody('a'))
     const res = await get('user_a')
     const body = (await res.json()) as HouseholdKeysResponse
-    expect(body.householdKeys?.householdId).toBe('h-1')
+    expect(body.householdKeys?.householdId).toBe(HOUSEHOLD_IDS[0])
     expect(body.householdKeys?.wrappedDekPassphrase).toBe('wrapped-passphrase-a')
     expect(JSON.stringify(body)).not.toContain('-b')
     // And user B's row is untouched by anything user A did.
-    expect(keyRows.find((k) => k.householdId === 'h-2')?.wrappedDekPassphrase).toBe('wrapped-passphrase-b')
+    expect(keyRows.find((k) => k.householdId === HOUSEHOLD_IDS[1])?.wrappedDekPassphrase).toBe('wrapped-passphrase-b')
   })
 
   it('returns 409 on a second POST and leaves the stored row completely unchanged', async () => {
@@ -305,7 +318,7 @@ describe('household-keys routes', () => {
 
   it('rejects extra unexpected fields with 400', async () => {
     await createHousehold('user_a', 'Household One')
-    const res = await post('user_a', { ...validBody('a'), householdId: 'h-2', plaintextPassphrase: 'hunter2' })
+    const res = await post('user_a', { ...validBody('a'), householdId: HOUSEHOLD_IDS[1], plaintextPassphrase: 'hunter2' })
     expect(res.status).toBe(400)
     expect(keyRows).toHaveLength(0)
   })

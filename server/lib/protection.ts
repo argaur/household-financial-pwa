@@ -1,40 +1,23 @@
 import { eq, and } from 'drizzle-orm'
-import { z } from 'zod'
-import { protection, familyMembers, protectionTypeEnum, protectionStatusEnum } from '../../drizzle/schema.js'
+import { protection, familyMembers } from '../../drizzle/schema.js'
 import type { db as Db } from './db.js'
+import type { MemberScopedCreate, EncryptedUpdate, UpdateOutcome } from './envelope.js'
 
 export type Protection = typeof protection.$inferSelect
 
-/** Thrown for any client-input problem (unknown member) or a missing protection record. */
+/** Thrown when the member a protection record is filed under isn't in the caller's household. */
 export class ProtectionError extends Error {
-  constructor(public code: 'member_not_found' | 'protection_not_found') {
+  constructor(public code: 'member_not_found') {
     super(code)
   }
 }
 
-// Matches drizzle's `numeric` column convention in this project (see
-// holdings.ts's numericString) — stored/returned as a string, not a float,
-// to avoid money-precision loss.
-const numericString = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .transform((v) => String(v).trim())
-    .refine((v) => v.length > 0 && !Number.isNaN(Number(v)) && Number(v) >= 0, `${label} must be a non-negative number`)
-
-const protectionInputSchema = z.object({
-  memberId: z.string().trim().min(1, 'Member is required'),
-  type: z.enum(protectionTypeEnum),
-  coverAmount: numericString('Cover amount'),
-  premium: numericString('Premium').optional(),
-  provider: z.string().trim().max(200).optional(),
-  status: z.enum(protectionStatusEnum),
-})
-
-export type CreateProtectionInput = z.input<typeof protectionInputSchema>
+export type CreateProtectionInput = MemberScopedCreate
+export type UpdateProtectionInput = EncryptedUpdate
 
 type ProtectionDb = Pick<typeof Db, 'select'>
 
-async function resolveMember(db: ProtectionDb, householdId: string, memberId: string) {
+async function assertMemberInHousehold(db: ProtectionDb, householdId: string, memberId: string): Promise<void> {
   const memberRows = await db
     .select()
     .from(familyMembers)
@@ -44,16 +27,13 @@ async function resolveMember(db: ProtectionDb, householdId: string, memberId: st
 }
 
 /**
- * Every query filters by householdId (resolved server-side from the Clerk
- * session, never client input) — mirrors the app-layer scoping boundary
- * proven in Slice 1/2/4. memberId is additionally verified to belong to the
- * same household before a protection record can be created/updated against
- * it, since the family_members FK alone doesn't enforce cross-household
- * isolation (same pattern as holdings.ts).
+ * Same shape as server/lib/holdings.ts: householdId is always resolved from
+ * the session, memberId is verified to belong to it, and the record's own
+ * contents (type, cover amount, premium, provider, status) are opaque
+ * ciphertext the server cannot read.
  */
 export async function listProtection(db: ProtectionDb, householdId: string): Promise<Protection[]> {
-  const rows = await db.select().from(protection).where(eq(protection.householdId, householdId))
-  return rows as Protection[]
+  return db.select().from(protection).where(eq(protection.householdId, householdId))
 }
 
 export async function createProtection(
@@ -61,52 +41,54 @@ export async function createProtection(
   householdId: string,
   input: CreateProtectionInput,
 ): Promise<Protection> {
-  const parsed = protectionInputSchema.parse(input)
-  await resolveMember(db, householdId, parsed.memberId)
+  await assertMemberInHousehold(db, householdId, input.memberId)
 
   const [row] = await db
     .insert(protection)
     .values({
+      id: input.id,
       householdId,
-      memberId: parsed.memberId,
-      type: parsed.type,
-      coverAmount: parsed.coverAmount,
-      premium: parsed.premium,
-      provider: parsed.provider,
-      status: parsed.status,
+      memberId: input.memberId,
+      ciphertext: input.ciphertext,
+      iv: input.iv,
+      alg: input.alg,
     })
     .returning()
-  return row as Protection
+  if (!row) throw new Error('Insert of a protection record returned no row')
+  return row
 }
 
+/** Version-conditional update — see server/lib/holdings.ts's updateHolding for the reasoning. */
 export async function updateProtection(
   db: ProtectionDb & Pick<typeof Db, 'update'>,
   householdId: string,
   protectionId: string,
-  input: CreateProtectionInput,
-): Promise<Protection | null> {
+  input: UpdateProtectionInput,
+): Promise<UpdateOutcome<Protection>> {
   const existingRows = await db
     .select()
     .from(protection)
     .where(and(eq(protection.id, protectionId), eq(protection.householdId, householdId)))
     .limit(1)
-  if (!existingRows[0]) return null
-
-  const parsed = protectionInputSchema.parse(input)
-  await resolveMember(db, householdId, parsed.memberId)
+  if (!existingRows[0]) return { status: 'not_found' }
 
   const [row] = await db
     .update(protection)
     .set({
-      memberId: parsed.memberId,
-      type: parsed.type,
-      coverAmount: parsed.coverAmount,
-      premium: parsed.premium ?? null,
-      provider: parsed.provider ?? null,
-      status: parsed.status,
+      ciphertext: input.ciphertext,
+      iv: input.iv,
+      alg: input.alg,
+      version: input.expectedVersion + 1,
       updatedAt: new Date(),
     })
-    .where(and(eq(protection.id, protectionId), eq(protection.householdId, householdId)))
+    .where(
+      and(
+        eq(protection.id, protectionId),
+        eq(protection.householdId, householdId),
+        eq(protection.version, input.expectedVersion),
+      ),
+    )
     .returning()
-  return row as Protection
+  if (!row) return { status: 'conflict' }
+  return { status: 'updated', row }
 }

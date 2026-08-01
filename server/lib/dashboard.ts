@@ -50,23 +50,42 @@ export async function getDashboard(db: DashboardDb, householdId: string): Promis
     listProtection(db, householdId),
   ])
 
-  const completeness = computeCompleteness(
-    members as unknown as CompletenessInputMember[],
-    holdings as unknown as CompletenessInputHolding[],
-    protectionRows as unknown as CompletenessInputProtection[],
-  )
+  // These three loops replace `as unknown as` casts that used to sit here.
+  // The plaintext columns are nullable now — every encrypted row has them set
+  // to null — and the casts were quietly promising TypeScript a `string` where
+  // there is a `string | null`. A row the server cannot read is skipped rather
+  // than asserted into existence: this computation is genuinely blind to
+  // encrypted data, and the honest expression of that is a shorter list, not a
+  // `!`. The client-side dashboard is what makes these rows count again.
+  const memberInputs: Array<CompletenessInputMember & NudgeInputMember> = []
+  for (const member of members) {
+    if (member.name === null || member.relationship === null) continue
+    memberInputs.push({ id: member.id, name: member.name, relationship: member.relationship })
+  }
+
+  const holdingInputs: Array<CompletenessInputHolding & NudgeInputHolding & AllocationInputHolding> = []
+  for (const holding of holdings) {
+    if (holding.assetClass === null) continue
+    holdingInputs.push({
+      memberId: holding.memberId,
+      assetClass: holding.assetClass,
+      currentValue: holding.currentValue,
+      isEmergencyFund: holding.isEmergencyFund,
+    })
+  }
+
+  const protectionInputs: Array<CompletenessInputProtection & NudgeInputProtection> = []
+  for (const record of protectionRows) {
+    if (record.status === null) continue
+    protectionInputs.push({ memberId: record.memberId, status: record.status })
+  }
+
+  const completeness = computeCompleteness(memberInputs, holdingInputs, protectionInputs)
 
   // Slice 7 — derived from the same three result sets, no extra queries.
-  const nudge = selectNudge(
-    completeness.checks,
-    buildNudgeContext(
-      members as unknown as NudgeInputMember[],
-      holdings as unknown as NudgeInputHolding[],
-      protectionRows as unknown as NudgeInputProtection[],
-    ),
-  )
+  const nudge = selectNudge(completeness.checks, buildNudgeContext(memberInputs, holdingInputs, protectionInputs))
 
-  const { allocation, totalValue } = computeAllocation(holdings as unknown as AllocationInputHolding[])
+  const { allocation, totalValue } = computeAllocation(holdingInputs)
 
   return { completeness, nudge, allocation, totalValue }
 }

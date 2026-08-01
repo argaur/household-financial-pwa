@@ -25,9 +25,11 @@ vi.mock('@/lib/protection-api', async (importOriginal) => {
 const member: FamilyMember = {
   id: 'm1',
   householdId: 'h1',
-  name: 'Gaurav Gupta',
+  name: 'Ananya Verma',
   relationship: 'self',
   dateOfBirth: '1990-01-01',
+  riskProfile: null,
+  version: 1,
   createdAt: '',
   updatedAt: '',
 }
@@ -41,6 +43,7 @@ const protectionRecord: Protection = {
   premium: null,
   provider: null,
   status: 'active',
+  version: 4,
   createdAt: '',
   updatedAt: '',
 }
@@ -134,12 +137,18 @@ describe('ProtectionForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() =>
-      expect(updateProtection).toHaveBeenCalledWith('test-token', 'prot1', {
-        memberId: 'm1',
-        type: 'term-life',
-        coverAmount: '6000000',
-        status: 'active',
-      }),
+      expect(updateProtection).toHaveBeenCalledWith(
+        'test-token',
+        'prot1',
+        {
+          memberId: 'm1',
+          type: 'term-life',
+          coverAmount: '6000000',
+          status: 'active',
+        },
+        // The version this edit was made against.
+        4,
+      ),
     )
     expect(onSaved).toHaveBeenCalled()
   })

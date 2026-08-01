@@ -84,9 +84,9 @@ export function Profile() {
           listProtection(token),
         ])
         if (cancelled) return
-        setHousehold(householdResult)
-        setMembers(membersResult)
-        setProtectionRecords(protectionResult)
+        setHousehold(householdResult.state === 'ok' ? householdResult.household : null)
+        setMembers(membersResult.members)
+        setProtectionRecords(protectionResult.protection)
         setState('loaded')
       } catch {
         if (cancelled) return
@@ -124,12 +124,12 @@ export function Profile() {
   }
 
   async function saveHouseholdName() {
-    if (savingHouseholdName || householdNameDraft.trim().length === 0) return
+    if (savingHouseholdName || householdNameDraft.trim().length === 0 || !household) return
     setSavingHouseholdName(true)
     setHouseholdNameError(null)
     try {
       const token = await getToken()
-      const updated = await updateHousehold(token, householdNameDraft)
+      const updated = await updateHousehold(token, householdNameDraft, household.version)
       setHousehold(updated)
       setEditingHouseholdName(false)
       track('feature_used', { feature_name: 'edit_household', action: 'rename_household' })

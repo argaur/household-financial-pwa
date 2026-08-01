@@ -54,7 +54,8 @@ vi.mock('@/lib/protection-api', async (importOriginal) => {
 const household = {
   id: 'h1',
   ownerUserId: 'user_a',
-  name: 'Gupta Family',
+  name: 'Verma Family',
+  version: 2,
   createdAt: '',
   updatedAt: '',
 }
@@ -62,9 +63,11 @@ const household = {
 const member = {
   id: 'm1',
   householdId: 'h1',
-  name: 'Gaurav Gupta',
+  name: 'Ananya Verma',
   relationship: 'self' as const,
   dateOfBirth: '1990-01-01',
+  riskProfile: null,
+  version: 1,
   createdAt: '',
   updatedAt: '',
 }
@@ -78,6 +81,7 @@ const protectionRecord = {
   premium: null,
   provider: null,
   status: 'active' as const,
+  version: 1,
   createdAt: '',
   updatedAt: '',
 }
@@ -95,29 +99,31 @@ describe('Profile', () => {
     updateProtection.mockReset()
     signOut.mockClear()
     deleteUser.mockClear()
-    fetchHousehold.mockResolvedValue(household)
-    listFamilyMembers.mockResolvedValue([member])
+    // fetchHousehold now reports whether the row could be read at all, and
+    // the list clients return counts alongside the decrypted rows.
+    fetchHousehold.mockResolvedValue({ state: 'ok', household })
+    listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
   })
 
   it('shows the empty state and a CTA when there is no protection cover', async () => {
-    listProtection.mockResolvedValue([])
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     render(<Profile />)
     await screen.findByText(/no protection cover on record/i)
     expect(screen.getByRole('button', { name: /add protection cover/i })).toBeInTheDocument()
   })
 
   it('lists protection records grouped by member', async () => {
-    listProtection.mockResolvedValue([protectionRecord])
+    listProtection.mockResolvedValue({ protection: [protectionRecord], unreadableCount: 0, notYetEncryptedCount: 0 })
     render(<Profile />)
     await screen.findByText('Term life')
-    // "Gaurav Gupta" appears twice now: once in the Family members card row,
+    // "Ananya Verma" appears twice now: once in the Family members card row,
     // once as the Protection card's group header.
-    expect(screen.getAllByText('Gaurav Gupta').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('Ananya Verma').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText(/₹50,00,000 cover · Active/i)).toBeInTheDocument()
   })
 
   it('opens the add sheet from the empty-state CTA and appends the created record', async () => {
-    listProtection.mockResolvedValue([])
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     createProtection.mockResolvedValue(protectionRecord)
     render(<Profile />)
 
@@ -132,7 +138,7 @@ describe('Profile', () => {
   })
 
   it('opens the edit sheet pre-filled when a protection row is tapped', async () => {
-    listProtection.mockResolvedValue([protectionRecord])
+    listProtection.mockResolvedValue({ protection: [protectionRecord], unreadableCount: 0, notYetEncryptedCount: 0 })
     updateProtection.mockResolvedValue({ ...protectionRecord, coverAmount: '6000000' })
     render(<Profile />)
 
@@ -147,37 +153,43 @@ describe('Profile', () => {
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() =>
-      expect(updateProtection).toHaveBeenCalledWith('test-token', 'prot1', expect.objectContaining({ coverAmount: '6000000' })),
+      expect(updateProtection).toHaveBeenCalledWith(
+        'test-token',
+        'prot1',
+        expect.objectContaining({ coverAmount: '6000000' }),
+        1,
+      ),
     )
   })
 
   it('shows the household name and edits it via the inline Edit form', async () => {
-    listProtection.mockResolvedValue([])
-    updateHousehold.mockResolvedValue({ ...household, name: 'Gupta-Sharma Family' })
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    updateHousehold.mockResolvedValue({ ...household, name: 'Verma-Rao Family', version: 3 })
     render(<Profile />)
 
-    await screen.findByText('Gupta Family')
+    await screen.findByText('Verma Family')
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
 
-    const nameInput = screen.getByDisplayValue('Gupta Family') as HTMLInputElement
-    fireEvent.change(nameInput, { target: { value: 'Gupta-Sharma Family' } })
+    const nameInput = screen.getByDisplayValue('Verma Family') as HTMLInputElement
+    fireEvent.change(nameInput, { target: { value: 'Verma-Rao Family' } })
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
-    await waitFor(() => expect(updateHousehold).toHaveBeenCalledWith('test-token', 'Gupta-Sharma Family'))
-    await screen.findByText('Gupta-Sharma Family')
+    // The version the rename was made against travels with it.
+    await waitFor(() => expect(updateHousehold).toHaveBeenCalledWith('test-token', 'Verma-Rao Family', 2))
+    await screen.findByText('Verma-Rao Family')
   })
 
   it('adds a family member from the "Add a family member" CTA', async () => {
-    listProtection.mockResolvedValue([])
-    const newMember = { ...member, id: 'm2', name: 'Priya Gupta', relationship: 'spouse' as const }
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    const newMember = { ...member, id: 'm2', name: 'Rohit Verma', relationship: 'spouse' as const }
     createFamilyMember.mockResolvedValue(newMember)
     render(<Profile />)
 
-    await screen.findByText('Gaurav Gupta')
+    await screen.findByText('Ananya Verma')
     fireEvent.click(screen.getByRole('button', { name: /add a family member/i }))
 
     await screen.findByRole('heading', { name: /^add a family member$/i })
-    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Priya Gupta' } })
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Rohit Verma' } })
     fireEvent.change(screen.getByLabelText(/date of birth/i), { target: { value: '1991-02-02' } })
 
     // Radix Select isn't a native <select>; drive it via its combobox trigger + option role.
@@ -186,31 +198,31 @@ describe('Profile', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /add to plan/i }))
 
-    await screen.findByText('Priya Gupta')
+    await screen.findByText('Rohit Verma')
   })
 
   it('opens the edit-member sheet pre-filled when a member row is tapped', async () => {
-    listProtection.mockResolvedValue([])
-    updateFamilyMember.mockResolvedValue({ ...member, name: 'Gaurav G. Gupta' })
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    updateFamilyMember.mockResolvedValue({ ...member, name: 'Ananya R. Verma', version: 2 })
     render(<Profile />)
 
-    await screen.findByText('Gaurav Gupta')
-    fireEvent.click(screen.getByText('Gaurav Gupta'))
+    await screen.findByText('Ananya Verma')
+    fireEvent.click(screen.getByText('Ananya Verma'))
 
     await screen.findByRole('heading', { name: /update family member/i })
     const nameInput = screen.getByLabelText(/full name/i) as HTMLInputElement
-    expect(nameInput.value).toBe('Gaurav Gupta')
+    expect(nameInput.value).toBe('Ananya Verma')
   })
 
   it('removes a member after confirming the destructive dialog', async () => {
-    listProtection.mockResolvedValue([])
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     removeFamilyMember.mockResolvedValue(undefined)
     render(<Profile />)
 
-    await screen.findByText('Gaurav Gupta')
+    await screen.findByText('Ananya Verma')
     fireEvent.click(screen.getByRole('button', { name: /^remove$/i }))
 
-    await screen.findByRole('heading', { name: /remove gaurav gupta\?/i })
+    await screen.findByRole('heading', { name: /remove ananya verma\?/i })
     // Both the member row's own "Remove" button and the confirm dialog's
     // "Remove" button match /^remove$/i once the dialog is open — the
     // dialog's confirm button is the last match (Radix portals it to the
@@ -222,20 +234,20 @@ describe('Profile', () => {
   })
 
   it('signs out via the Sign out link', async () => {
-    listProtection.mockResolvedValue([])
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     render(<Profile />)
 
-    await screen.findByText('Gaurav Gupta')
+    await screen.findByText('Ananya Verma')
     fireEvent.click(screen.getByText('Sign out'))
 
     await waitFor(() => expect(signOut).toHaveBeenCalled())
   })
 
   it('deletes the account after confirming the destructive dialog', async () => {
-    listProtection.mockResolvedValue([])
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     render(<Profile />)
 
-    await screen.findByText('Gaurav Gupta')
+    await screen.findByText('Ananya Verma')
     fireEvent.click(screen.getByText('Delete account'))
 
     await screen.findByRole('heading', { name: /delete your account\?/i })
@@ -245,11 +257,11 @@ describe('Profile', () => {
   })
 
   it('shows an inline error and does not sign the user out if account deletion fails', async () => {
-    listProtection.mockResolvedValue([])
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     deleteUser.mockRejectedValueOnce(new Error('clerk_error'))
     render(<Profile />)
 
-    await screen.findByText('Gaurav Gupta')
+    await screen.findByText('Ananya Verma')
     fireEvent.click(screen.getByText('Delete account'))
     await screen.findByRole('heading', { name: /delete your account\?/i })
     fireEvent.click(screen.getByRole('button', { name: /yes, delete everything/i }))

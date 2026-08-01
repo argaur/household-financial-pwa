@@ -1,76 +1,44 @@
 import { eq, and } from 'drizzle-orm'
-import { z } from 'zod'
-import { holdings, familyMembers, instruments, assetClassEnum } from '../../drizzle/schema.js'
+import { holdings, familyMembers } from '../../drizzle/schema.js'
 import type { db as Db } from './db.js'
+import type { MemberScopedCreate, EncryptedUpdate, UpdateOutcome } from './envelope.js'
 
 export type Holding = typeof holdings.$inferSelect
 
-/** Thrown for any client-input problem (unknown member/instrument, bad values) or a missing holding. */
+/** Thrown when the member a holding is filed under isn't in the caller's household. */
 export class HoldingError extends Error {
-  constructor(public code: 'member_not_found' | 'instrument_not_found' | 'holding_not_found') {
+  constructor(public code: 'member_not_found') {
     super(code)
   }
 }
 
-// Matches drizzle's `numeric` column convention in this project (see
-// instruments.rateValue) — stored/returned as a string, not a float, to
-// avoid money-precision loss.
-const numericString = (label: string) =>
-  z
-    .union([z.string(), z.number()])
-    .transform((v) => String(v).trim())
-    .refine((v) => v.length > 0 && !Number.isNaN(Number(v)) && Number(v) >= 0, `${label} must be a non-negative number`)
-
-const holdingInputSchema = z.object({
-  memberId: z.string().trim().min(1, 'Member is required'),
-  instrumentId: z.string().trim().min(1, 'Instrument is required'),
-  investedAmount: numericString('Amount invested'),
-  currentValue: numericString('Current value'),
-  units: numericString('Units').optional(),
-  monthlySip: numericString('Monthly SIP').optional(),
-  startDate: z.string().trim().min(1).optional(),
-  maturityDate: z.string().trim().min(1).optional(),
-  nominee: z.string().trim().max(200).optional(),
-  isEmergencyFund: z.boolean().optional().default(false),
-  notes: z.string().trim().max(1000).optional(),
-})
-
-export type CreateHoldingInput = z.input<typeof holdingInputSchema>
-
-// category is 1-indexed (1=Equity ... 6=Alternative); assetClassEnum is in
-// the same order — see drizzle/schema.ts's category comment.
-function assetClassForCategory(category: number): (typeof assetClassEnum)[number] {
-  return assetClassEnum[category - 1]
-}
+export type CreateHoldingInput = MemberScopedCreate
+export type UpdateHoldingInput = EncryptedUpdate
 
 type HoldingsDb = Pick<typeof Db, 'select'>
 
-async function resolveMemberAndInstrument(db: HoldingsDb, householdId: string, memberId: string, instrumentId: string) {
+async function assertMemberInHousehold(db: HoldingsDb, householdId: string, memberId: string): Promise<void> {
   const memberRows = await db
     .select()
     .from(familyMembers)
     .where(and(eq(familyMembers.id, memberId), eq(familyMembers.householdId, householdId)))
     .limit(1)
-  const member = memberRows[0]
-  if (!member) throw new HoldingError('member_not_found')
-
-  const instrumentRows = await db.select().from(instruments).where(eq(instruments.id, instrumentId)).limit(1)
-  const instrument = instrumentRows[0] as { category: number } | undefined
-  if (!instrument) throw new HoldingError('instrument_not_found')
-
-  return { assetClass: assetClassForCategory(instrument.category) }
+  if (!memberRows[0]) throw new HoldingError('member_not_found')
 }
 
 /**
  * Every query filters by householdId (resolved server-side from the Clerk
  * session, never client input) — mirrors the app-layer scoping boundary
  * proven in Slice 1/2. memberId is additionally verified to belong to the
- * same household before a holding can be created/updated against it, since
- * the family_members FK alone doesn't enforce cross-household isolation.
+ * same household before a holding can be created against it, since the
+ * family_members FK alone doesn't enforce cross-household isolation.
+ *
+ * Nothing in here can read a holding's contents: `instrumentId`, amounts,
+ * dates and notes now live inside `ciphertext`, sealed under a key the server
+ * never receives. What is left is the tenancy boundary and the version.
  */
 export async function listHoldings(db: HoldingsDb, householdId: string): Promise<Holding[]> {
-  const rows = await db.select().from(holdings).where(eq(holdings.householdId, householdId))
-  return rows as Holding[]
+  return db.select().from(holdings).where(eq(holdings.householdId, householdId))
 }
 
 export async function createHolding(
@@ -78,64 +46,67 @@ export async function createHolding(
   householdId: string,
   input: CreateHoldingInput,
 ): Promise<Holding> {
-  const parsed = holdingInputSchema.parse(input)
-  const { assetClass } = await resolveMemberAndInstrument(db, householdId, parsed.memberId, parsed.instrumentId)
+  await assertMemberInHousehold(db, householdId, input.memberId)
 
+  // `version` is left to its column default of 1 — the client encrypted
+  // against version 1, and letting the database own it means a client cannot
+  // announce a version it did not earn.
   const [row] = await db
     .insert(holdings)
     .values({
+      id: input.id,
       householdId,
-      memberId: parsed.memberId,
-      instrumentId: parsed.instrumentId,
-      assetClass,
-      investedAmount: parsed.investedAmount,
-      currentValue: parsed.currentValue,
-      units: parsed.units,
-      monthlySip: parsed.monthlySip,
-      startDate: parsed.startDate,
-      maturityDate: parsed.maturityDate,
-      nominee: parsed.nominee,
-      isEmergencyFund: parsed.isEmergencyFund,
-      notes: parsed.notes,
+      memberId: input.memberId,
+      ciphertext: input.ciphertext,
+      iv: input.iv,
+      alg: input.alg,
     })
     .returning()
-  return row as Holding
+  if (!row) throw new Error('Insert of a holding returned no row')
+  return row
 }
 
+/**
+ * Version-conditional update — the replacement for last-write-wins.
+ *
+ * The UPDATE carries `version = expectedVersion` in its WHERE clause, so two
+ * devices that both read version 3 cannot both write version 4: the second one
+ * matches zero rows and is reported as a conflict instead of silently
+ * discarding the first one's entire encrypted row. The existence check that
+ * runs first exists only to tell "someone else's row / no such row" (404)
+ * apart from "your copy is stale" (409); the atomicity lives in the UPDATE
+ * predicate, not in the check.
+ */
 export async function updateHolding(
   db: HoldingsDb & Pick<typeof Db, 'update'>,
   householdId: string,
   holdingId: string,
-  input: CreateHoldingInput,
-): Promise<Holding | null> {
+  input: UpdateHoldingInput,
+): Promise<UpdateOutcome<Holding>> {
   const existingRows = await db
     .select()
     .from(holdings)
     .where(and(eq(holdings.id, holdingId), eq(holdings.householdId, householdId)))
     .limit(1)
-  if (!existingRows[0]) return null
-
-  const parsed = holdingInputSchema.parse(input)
-  const { assetClass } = await resolveMemberAndInstrument(db, householdId, parsed.memberId, parsed.instrumentId)
+  if (!existingRows[0]) return { status: 'not_found' }
 
   const [row] = await db
     .update(holdings)
     .set({
-      memberId: parsed.memberId,
-      instrumentId: parsed.instrumentId,
-      assetClass,
-      investedAmount: parsed.investedAmount,
-      currentValue: parsed.currentValue,
-      units: parsed.units ?? null,
-      monthlySip: parsed.monthlySip ?? null,
-      startDate: parsed.startDate ?? null,
-      maturityDate: parsed.maturityDate ?? null,
-      nominee: parsed.nominee ?? null,
-      isEmergencyFund: parsed.isEmergencyFund,
-      notes: parsed.notes ?? null,
+      ciphertext: input.ciphertext,
+      iv: input.iv,
+      alg: input.alg,
+      version: input.expectedVersion + 1,
       updatedAt: new Date(),
     })
-    .where(and(eq(holdings.id, holdingId), eq(holdings.householdId, householdId)))
+    .where(
+      and(
+        eq(holdings.id, holdingId),
+        eq(holdings.householdId, householdId),
+        eq(holdings.version, input.expectedVersion),
+      ),
+    )
     .returning()
-  return row as Holding
+  if (!row) return { status: 'conflict' }
+  return { status: 'updated', row }
 }

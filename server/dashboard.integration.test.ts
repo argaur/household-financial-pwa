@@ -12,46 +12,61 @@ vi.mock('jose', () => ({
   },
 }))
 
+/**
+ * SEEDING NOTE — read before adding a fixture here.
+ *
+ * The dashboard is computed server-side from plaintext columns, and the write
+ * routes no longer accept plaintext at all: they take opaque envelopes. So the
+ * member/holding/protection fixtures below are pushed straight into the fake
+ * tables rather than POSTed through the API — they stand for rows written
+ * before encryption, which is exactly the data this computation can still see.
+ * The household is still created through its real route, because that is what
+ * proves the dashboard resolves the caller's household from the session.
+ *
+ * Encrypted rows are invisible to this computation by design; the client-side
+ * dashboard is what makes them count again.
+ */
 interface HouseholdRow {
   id: string
   ownerUserId: string
-  name: string
+  name: string | null
+  ciphertext: string | null
+  iv: string | null
+  alg: string | null
+  version: number
 }
 interface MemberRow {
   id: string
   householdId: string
-  name: string
-  relationship: string
-}
-interface InstrumentRow {
-  id: string
-  category: number
-  name: string
+  name: string | null
+  relationship: string | null
+  ciphertext: string | null
+  version: number
 }
 interface HoldingRow {
   id: string
   householdId: string
   memberId: string
-  instrumentId: string
-  assetClass: string
-  investedAmount: string
-  currentValue: string
+  assetClass: string | null
+  currentValue: string | null
   isEmergencyFund: boolean
+  ciphertext: string | null
+  version: number
 }
 interface ProtectionRow {
   id: string
   householdId: string
   memberId: string
-  type: string
-  coverAmount: string
-  status: string
+  status: string | null
+  ciphertext: string | null
+  version: number
 }
 
 let households: HouseholdRow[] = []
 let members: MemberRow[] = []
-let instrumentsRows: InstrumentRow[] = []
 let holdingsRows: HoldingRow[] = []
 let protectionRows: ProtectionRow[] = []
+let nextMemberId = 1
 let nextHoldingId = 1
 let nextProtectionId = 1
 
@@ -73,7 +88,6 @@ vi.mock('./lib/db.js', () => ({
             if (table === householdsTableRef) return households.filter((h) => matches(h, { owner_user_id: 'ownerUserId' }))
             if (table === familyMembersTableRef)
               return members.filter((m) => matches(m, { id: 'id', household_id: 'householdId' }))
-            if (table === instrumentsTableRef) return instrumentsRows.filter((i) => matches(i, { id: 'id' }))
             if (table === holdingsTableRef)
               return holdingsRows.filter((h) => matches(h, { id: 'id', household_id: 'householdId' }))
             if (table === protectionTableRef)
@@ -87,54 +101,26 @@ vi.mock('./lib/db.js', () => ({
         },
       }),
     }),
-    insert: (table: unknown) => ({
+    insert: () => ({
       values: (row: Record<string, unknown>) => ({
         returning: () => {
-          if (table === householdsTableRef) {
-            const created: HouseholdRow = { id: `h-${households.length + 1}`, ownerUserId: row.ownerUserId as string, name: row.name as string }
-            households.push(created)
-            return Promise.resolve([created])
+          const created: HouseholdRow = {
+            id: String(row.id),
+            ownerUserId: String(row.ownerUserId),
+            name: null,
+            ciphertext: (row.ciphertext as string) ?? null,
+            iv: (row.iv as string) ?? null,
+            alg: (row.alg as string) ?? null,
+            version: 1,
           }
-          if (table === familyMembersTableRef) {
-            const created: MemberRow = {
-              id: `m-${members.length + 1}`,
-              householdId: row.householdId as string,
-              name: row.name as string,
-              relationship: row.relationship as string,
-            }
-            members.push(created)
-            return Promise.resolve([created])
-          }
-          if (table === holdingsTableRef) {
-            const created: HoldingRow = {
-              id: `hold-${nextHoldingId++}`,
-              householdId: row.householdId as string,
-              memberId: row.memberId as string,
-              instrumentId: row.instrumentId as string,
-              assetClass: row.assetClass as string,
-              investedAmount: row.investedAmount as string,
-              currentValue: row.currentValue as string,
-              isEmergencyFund: (row.isEmergencyFund as boolean) ?? false,
-            }
-            holdingsRows.push(created)
-            return Promise.resolve([created])
-          }
-          const created: ProtectionRow = {
-            id: `prot-${nextProtectionId++}`,
-            householdId: row.householdId as string,
-            memberId: row.memberId as string,
-            type: row.type as string,
-            coverAmount: row.coverAmount as string,
-            status: row.status as string,
-          }
-          protectionRows.push(created)
+          households.push(created)
           return Promise.resolve([created])
         },
       }),
     }),
-    update: (_table: unknown) => ({
+    update: () => ({
       set: (patch: Record<string, unknown>) => ({
-        where: (cond: { __and?: Array<[{ name?: string }, string]> }) => ({
+        where: () => ({
           returning: () => Promise.resolve([patch]),
         }),
       }),
@@ -159,20 +145,25 @@ vi.mock('drizzle-orm', async (importOriginal) => {
 const schema = await import('../drizzle/schema.js')
 const householdsTableRef = schema.households
 const familyMembersTableRef = schema.familyMembers
-const instrumentsTableRef = schema.instruments
 const holdingsTableRef = schema.holdings
 const protectionTableRef = schema.protection
 
 const { app } = await import('./app.js')
 
+const HOUSEHOLD_A = '11111111-1111-4111-8111-111111111111'
+const HOUSEHOLD_B = '22222222-2222-4222-8222-222222222222'
+
+const envelope = {
+  ciphertext: 'Y2lwaGVydGV4dC1vbmU',
+  iv: 'aXYtYnl0ZXMtMTIx',
+  alg: 'AES-256-GCM',
+}
+
 interface HouseholdResponse {
   household: { id: string } | null
 }
-interface MemberResponse {
-  member: { id: string }
-}
 interface DashboardResponse {
-  household?: { id: string; name: string }
+  household?: { id: string; name: string | null }
   completeness?: { checks: Record<string, boolean>; score: number; tier: string }
   nudge?: {
     checkId: string
@@ -186,45 +177,56 @@ interface DashboardResponse {
   error?: string
 }
 
-async function createHousehold(token: string, name: string) {
+async function createHousehold(token: string, id: string) {
   const res = await app.request('/api/household', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ id, ...envelope }),
   })
   const body = (await res.json()) as HouseholdResponse
   return body.household!
 }
 
-async function createMember(token: string, name: string, relationship = 'self') {
-  const res = await app.request('/api/family-members', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name, relationship, dateOfBirth: '1990-01-01' }),
-  })
-  const body = (await res.json()) as MemberResponse
-  return body.member.id
+function seedMember(householdId: string, name: string, relationship = 'self') {
+  const row: MemberRow = {
+    id: `m-${nextMemberId++}`,
+    householdId,
+    name,
+    relationship,
+    ciphertext: null,
+    version: 1,
+  }
+  members.push(row)
+  return row.id
 }
 
-async function createHolding(
-  token: string,
+function seedHolding(
+  householdId: string,
   memberId: string,
-  instrumentId: string,
+  assetClass: string,
   currentValue: string,
   isEmergencyFund = false,
 ) {
-  await app.request('/api/holdings', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ memberId, instrumentId, investedAmount: currentValue, currentValue, isEmergencyFund }),
+  holdingsRows.push({
+    id: `hold-${nextHoldingId++}`,
+    householdId,
+    memberId,
+    assetClass,
+    currentValue,
+    isEmergencyFund,
+    ciphertext: null,
+    version: 1,
   })
 }
 
-async function createProtection(token: string, memberId: string, status = 'active') {
-  await app.request('/api/protection', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ memberId, type: 'term-life', coverAmount: '5000000', status }),
+function seedProtection(householdId: string, memberId: string, status = 'active') {
+  protectionRows.push({
+    id: `prot-${nextProtectionId++}`,
+    householdId,
+    memberId,
+    status,
+    ciphertext: null,
+    version: 1,
   })
 }
 
@@ -234,13 +236,9 @@ describe('dashboard route', () => {
     members = []
     holdingsRows = []
     protectionRows = []
+    nextMemberId = 1
     nextHoldingId = 1
     nextProtectionId = 1
-    instrumentsRows = [
-      { id: 'instr-equity', category: 1, name: 'Large Cap Index Fund' },
-      { id: 'instr-debt', category: 2, name: 'Corporate Bond Fund' },
-      { id: 'instr-gold', category: 3, name: 'Sovereign Gold Bond' },
-    ]
   })
 
   it('rejects a request with no Authorization header', async () => {
@@ -254,7 +252,7 @@ describe('dashboard route', () => {
   })
 
   it('fixture: household with 0 members — getting_started, empty allocation', async () => {
-    await createHousehold('user_a', 'Gupta Family')
+    await createHousehold('user_a', HOUSEHOLD_A)
     const res = await app.request('/api/dashboard', { headers: { authorization: 'Bearer user_a' } })
     expect(res.status).toBe(200)
     const body = (await res.json()) as DashboardResponse
@@ -265,8 +263,8 @@ describe('dashboard route', () => {
   })
 
   it('fixture: 1 member, no holdings — getting_started', async () => {
-    await createHousehold('user_a', 'Gupta Family')
-    await createMember('user_a', 'Gaurav Gupta')
+    await createHousehold('user_a', HOUSEHOLD_A)
+    seedMember(HOUSEHOLD_A, 'Ananya Verma')
     const res = await app.request('/api/dashboard', { headers: { authorization: 'Bearer user_a' } })
     const body = (await res.json()) as DashboardResponse
     expect(body.completeness?.score).toBe(0)
@@ -274,16 +272,16 @@ describe('dashboard route', () => {
   })
 
   it('fixture: full coverage across members/holdings/protection — strong tier, correct allocation', async () => {
-    const household = await createHousehold('user_a', 'Gupta Family')
-    const selfId = await createMember('user_a', 'Gaurav Gupta', 'self')
-    const spouseId = await createMember('user_a', 'Priya Gupta', 'spouse')
+    const household = await createHousehold('user_a', HOUSEHOLD_A)
+    const selfId = seedMember(HOUSEHOLD_A, 'Ananya Verma', 'self')
+    const spouseId = seedMember(HOUSEHOLD_A, 'Rohit Verma', 'spouse')
 
-    await createHolding('user_a', selfId, 'instr-equity', '6000', true)
-    await createHolding('user_a', spouseId, 'instr-debt', '3000')
-    await createHolding('user_a', selfId, 'instr-gold', '1000')
+    seedHolding(HOUSEHOLD_A, selfId, 'equity', '6000', true)
+    seedHolding(HOUSEHOLD_A, spouseId, 'debt', '3000')
+    seedHolding(HOUSEHOLD_A, selfId, 'gold', '1000')
 
-    await createProtection('user_a', selfId, 'active')
-    await createProtection('user_a', spouseId, 'active')
+    seedProtection(HOUSEHOLD_A, selfId, 'active')
+    seedProtection(HOUSEHOLD_A, spouseId, 'active')
 
     const res = await app.request('/api/dashboard', { headers: { authorization: 'Bearer user_a' } })
     expect(res.status).toBe(200)
@@ -310,12 +308,35 @@ describe('dashboard route', () => {
     ])
   })
 
+  it('skips encrypted rows rather than crashing on their null plaintext columns', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    const selfId = seedMember(HOUSEHOLD_A, 'Ananya Verma', 'self')
+    seedHolding(HOUSEHOLD_A, selfId, 'equity', '6000', true)
+    // An encrypted holding: every plaintext column is null, the envelope is set.
+    holdingsRows.push({
+      id: 'hold-encrypted',
+      householdId: HOUSEHOLD_A,
+      memberId: selfId,
+      assetClass: null,
+      currentValue: null,
+      isEmergencyFund: false,
+      ciphertext: 'Y2lwaGVydGV4dC1vbmU',
+      version: 1,
+    })
+
+    const res = await app.request('/api/dashboard', { headers: { authorization: 'Bearer user_a' } })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as DashboardResponse
+    expect(body.totalValue).toBe(6000)
+    expect(body.allocation).toEqual([{ assetClass: 'equity', value: 6000, percentage: 100 }])
+  })
+
   it('always forwards a nudge in the response — never zero (SPEC.md §7)', async () => {
     // Regression guard: getDashboard() computes a nudge, but the route once
     // hand-picked response fields and dropped it, so the live dashboard
     // rendered no NudgeCard despite the "exactly one, never zero" invariant.
     // A household with zero members has four unmet checks → member_coverage.
-    await createHousehold('user_a', 'Gupta Family')
+    await createHousehold('user_a', HOUSEHOLD_A)
     const res = await app.request('/api/dashboard', { headers: { authorization: 'Bearer user_a' } })
     expect(res.status).toBe(200)
     const body = (await res.json()) as DashboardResponse
@@ -329,10 +350,10 @@ describe('dashboard route', () => {
   })
 
   it("user B never sees user A's dashboard data", async () => {
-    await createHousehold('user_a', 'Gupta Family')
-    await createHousehold('user_b', 'Sharma Family')
-    const aMemberId = await createMember('user_a', 'Gaurav Gupta')
-    await createHolding('user_a', aMemberId, 'instr-equity', '5000')
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createHousehold('user_b', HOUSEHOLD_B)
+    const aMemberId = seedMember(HOUSEHOLD_A, 'Ananya Verma')
+    seedHolding(HOUSEHOLD_A, aMemberId, 'equity', '5000')
 
     const res = await app.request('/api/dashboard', { headers: { authorization: 'Bearer user_b' } })
     const body = (await res.json()) as DashboardResponse

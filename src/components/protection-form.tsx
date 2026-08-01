@@ -83,7 +83,7 @@ export function ProtectionForm({
     try {
       const token = await getToken()
       const record = editing
-        ? await updateProtection(token, initialProtection!.id, input)
+        ? await updateProtection(token, initialProtection!.id, input, initialProtection!.version)
         : await createProtection(token, input)
       track('feature_used', { feature_name: 'add_protection', editing, member_id: record.memberId, type: record.type })
       onSaved(record)

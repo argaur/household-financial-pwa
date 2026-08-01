@@ -32,9 +32,11 @@ vi.mock('@/lib/holdings-api', async (importOriginal) => {
 const member: FamilyMember = {
   id: 'm1',
   householdId: 'h1',
-  name: 'Gaurav Gupta',
+  name: 'Ananya Verma',
   relationship: 'self',
   dateOfBirth: '1990-01-01',
+  riskProfile: null,
+  version: 1,
   createdAt: '',
   updatedAt: '',
 }

@@ -2,13 +2,10 @@ import { describe, it, expect, vi } from 'vitest'
 import { familyMembers, protection } from '../../drizzle/schema.js'
 import { listProtection, createProtection, updateProtection, ProtectionError, type CreateProtectionInput } from './protection.js'
 
-function invalid(input: Record<string, unknown>): CreateProtectionInput {
-  return input as unknown as CreateProtectionInput
-}
-
-function fakeDb(rows: { members: unknown[]; protection: unknown[] }) {
-  const inserted: unknown[] = []
-  const updated: unknown[] = []
+/** Same shape as server/lib/holdings.test.ts's fake — see the note there. */
+function fakeDb(rows: { members: unknown[]; protection: unknown[] }, options: { updateMatches?: boolean } = {}) {
+  const inserted: Array<Record<string, unknown>> = []
+  const updated: Array<Record<string, unknown>> = []
   function pickRows(table: unknown): unknown[] {
     if (table === familyMembers) return rows.members
     if (table === protection) return rows.protection
@@ -26,20 +23,20 @@ function fakeDb(rows: { members: unknown[]; protection: unknown[] }) {
       })),
     })),
     insert: vi.fn(() => ({
-      values: vi.fn((row: unknown) => ({
+      values: vi.fn((row: Record<string, unknown>) => ({
         returning: vi.fn(() => {
-          const created = { id: 'new-protection', createdAt: new Date(), updatedAt: new Date(), ...(row as object) }
-          inserted.push(created)
-          return Promise.resolve([created])
+          inserted.push(row)
+          return Promise.resolve([{ version: 1, createdAt: new Date(), updatedAt: new Date(), ...row }])
         }),
       })),
     })),
     update: vi.fn(() => ({
-      set: vi.fn((patch: unknown) => ({
+      set: vi.fn((patch: Record<string, unknown>) => ({
         where: vi.fn(() => ({
           returning: vi.fn(() => {
-            const existing = rows.protection[0] as Record<string, unknown>
-            const merged = { ...existing, ...(patch as object), updatedAt: new Date() }
+            if (options.updateMatches === false) return Promise.resolve([])
+            const existing = (rows.protection[0] ?? {}) as Record<string, unknown>
+            const merged = { ...existing, ...patch }
             updated.push(merged)
             return Promise.resolve([merged])
           }),
@@ -51,22 +48,30 @@ function fakeDb(rows: { members: unknown[]; protection: unknown[] }) {
   }
 }
 
-const member = { id: 'm1', householdId: 'h1', name: 'Gaurav' }
+const member = { id: 'member-1', householdId: 'h1' }
+
+const envelope = {
+  ciphertext: 'Y2lwaGVydGV4dC1ieXRlcw',
+  iv: 'aXYtYnl0ZXMtMTIx',
+  alg: 'AES-256-GCM' as const,
+}
+
+const validInput: CreateProtectionInput = { id: 'prot-1', memberId: 'member-1', ...envelope }
 
 describe('createProtection', () => {
-  const validInput: CreateProtectionInput = {
-    memberId: 'm1',
-    type: 'term-life',
-    coverAmount: '5000000',
-    status: 'active',
-  }
-
-  it('creates a protection record scoped to the household', async () => {
+  it('stores the envelope under the caller household and nothing else', async () => {
     const db = fakeDb({ members: [member], protection: [] })
     const result = await createProtection(db as never, 'h1', validInput)
+
     expect(result.householdId).toBe('h1')
-    expect(result.memberId).toBe('m1')
-    expect(db._inserted).toHaveLength(1)
+    expect(Object.keys(db._inserted[0]).sort()).toEqual([
+      'alg',
+      'ciphertext',
+      'householdId',
+      'id',
+      'iv',
+      'memberId',
+    ])
   })
 
   it("rejects when the member does not belong to the caller's household", async () => {
@@ -74,73 +79,37 @@ describe('createProtection', () => {
     await expect(createProtection(db as never, 'h1', validInput)).rejects.toBeInstanceOf(ProtectionError)
     expect(db._inserted).toHaveLength(0)
   })
-
-  it('rejects a negative cover amount', async () => {
-    const db = fakeDb({ members: [member], protection: [] })
-    await expect(createProtection(db as never, 'h1', invalid({ ...validInput, coverAmount: '-5' }))).rejects.toBeInstanceOf(
-      Error,
-    )
-    expect(db._inserted).toHaveLength(0)
-  })
-
-  it('rejects an invalid type enum', async () => {
-    const db = fakeDb({ members: [member], protection: [] })
-    await expect(createProtection(db as never, 'h1', invalid({ ...validInput, type: 'car' }))).rejects.toBeInstanceOf(Error)
-    expect(db._inserted).toHaveLength(0)
-  })
-
-  it('rejects an invalid status enum', async () => {
-    const db = fakeDb({ members: [member], protection: [] })
-    await expect(
-      createProtection(db as never, 'h1', invalid({ ...validInput, status: 'expired' })),
-    ).rejects.toBeInstanceOf(Error)
-    expect(db._inserted).toHaveLength(0)
-  })
-
-  it('accepts optional premium and provider', async () => {
-    const db = fakeDb({ members: [member], protection: [] })
-    const result = await createProtection(db as never, 'h1', {
-      ...validInput,
-      premium: '12000',
-      provider: 'HDFC Life',
-    })
-    expect(result.premium).toBe('12000')
-    expect(result.provider).toBe('HDFC Life')
-  })
 })
 
 describe('listProtection', () => {
   it('returns protection records for the household', async () => {
-    const db = fakeDb({ members: [], protection: [{ id: 'p1', householdId: 'h1' }] })
-    const result = await listProtection(db as never, 'h1')
-    expect(result).toHaveLength(1)
+    const db = fakeDb({ members: [], protection: [{ id: 'prot-1', householdId: 'h1' }] })
+    await expect(listProtection(db as never, 'h1')).resolves.toHaveLength(1)
   })
 })
 
 describe('updateProtection', () => {
-  const validInput: CreateProtectionInput = {
-    memberId: 'm1',
-    type: 'health',
-    coverAmount: '1000000',
-    status: 'active',
-  }
+  const updateInput = { ...envelope, expectedVersion: 2 }
 
-  it('updates a protection record that belongs to the household', async () => {
-    const existing = { id: 'p1', householdId: 'h1', type: 'term-life' }
-    const db = fakeDb({ members: [member], protection: [existing] })
-    const result = await updateProtection(db as never, 'h1', 'p1', validInput)
-    expect(result?.type).toBe('health')
+  it('writes the new envelope and bumps the version to expectedVersion + 1', async () => {
+    const db = fakeDb({ members: [member], protection: [{ id: 'prot-1', householdId: 'h1', version: 2 }] })
+    const outcome = await updateProtection(db as never, 'h1', 'prot-1', updateInput)
+    expect(outcome.status).toBe('updated')
+    expect(db._updated[0].version).toBe(3)
   })
 
-  it("returns null when the record does not belong to the caller's household", async () => {
+  it("reports not_found when the record does not belong to the caller's household", async () => {
     const db = fakeDb({ members: [member], protection: [] })
-    const result = await updateProtection(db as never, 'h1', 'p-other', validInput)
-    expect(result).toBeNull()
+    await expect(updateProtection(db as never, 'h1', 'prot-other', updateInput)).resolves.toEqual({
+      status: 'not_found',
+    })
   })
 
-  it("rejects when the member does not belong to the caller's household", async () => {
-    const existing = { id: 'p1', householdId: 'h1', type: 'term-life' }
-    const db = fakeDb({ members: [], protection: [existing] })
-    await expect(updateProtection(db as never, 'h1', 'p1', validInput)).rejects.toBeInstanceOf(ProtectionError)
+  it('reports a conflict when the conditional update matches no row', async () => {
+    const db = fakeDb(
+      { members: [member], protection: [{ id: 'prot-1', householdId: 'h1', version: 7 }] },
+      { updateMatches: false },
+    )
+    await expect(updateProtection(db as never, 'h1', 'prot-1', updateInput)).resolves.toEqual({ status: 'conflict' })
   })
 })

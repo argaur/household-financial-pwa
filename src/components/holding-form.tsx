@@ -9,7 +9,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { track } from '@/lib/analytics'
 import { LIBRARY_SECTIONS } from '@/lib/library-sections'
-import { createHolding, updateHolding, HoldingsApiError, type Holding, type HoldingInput } from '@/lib/holdings-api'
+import {
+  createHolding,
+  updateHolding,
+  HoldingsApiError,
+  ASSET_CLASSES,
+  type Holding,
+  type HoldingInput,
+} from '@/lib/holdings-api'
 import type { FamilyMember } from '@/lib/family-members-api'
 import type { Instrument } from '@/lib/instruments-api'
 
@@ -61,16 +68,22 @@ export function HoldingForm({
   const assetClassLabel = selectedInstrument
     ? (LIBRARY_SECTIONS.find((s) => s.category === selectedInstrument.category)?.title ?? '')
     : ''
+  // The server used to denormalize asset_class from the instrument's category.
+  // It can't any more — the instrument is inside the ciphertext now — so the
+  // browser derives it here. `category` is 1-indexed and ASSET_CLASSES is in
+  // the same order as drizzle/schema.ts's assetClassEnum.
+  const assetClass = selectedInstrument ? ASSET_CLASSES[selectedInstrument.category - 1] : undefined
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (submitting || !memberId || !instrumentId) return
+    if (submitting || !memberId || !instrumentId || !assetClass) return
     setSubmitting(true)
     setError(null)
 
     const input: HoldingInput = {
       memberId,
       instrumentId,
+      assetClass,
       investedAmount,
       currentValue,
       ...(units ? { units } : {}),
@@ -84,7 +97,9 @@ export function HoldingForm({
 
     try {
       const token = await getToken()
-      const holding = editing ? await updateHolding(token, initialHolding!.id, input) : await createHolding(token, input)
+      const holding = editing
+        ? await updateHolding(token, initialHolding!.id, input, initialHolding!.version)
+        : await createHolding(token, input)
       track(editing ? 'holding_updated' : 'holding_created', {
         instrument_id: holding.instrumentId,
         asset_class: holding.assetClass,
@@ -262,7 +277,13 @@ export function HoldingForm({
         type="submit"
         className="w-full"
         disabled={
-          !online || submitting || !memberId || !instrumentId || investedAmount === '' || currentValue === ''
+          !online ||
+          submitting ||
+          !memberId ||
+          !instrumentId ||
+          !assetClass ||
+          investedAmount === '' ||
+          currentValue === ''
         }
       >
         {submitting ? submittingLabel : submitLabel}

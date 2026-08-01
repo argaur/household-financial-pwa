@@ -27,7 +27,7 @@ describe('OnboardingStep2', () => {
   })
 
   it('shows the empty-state prompt and a disabled Continue when there are no members yet', async () => {
-    listFamilyMembers.mockResolvedValue([])
+    listFamilyMembers.mockResolvedValue({ members: [], unreadableCount: 0, notYetEncryptedCount: 0 })
     render(<OnboardingStep2 onContinue={vi.fn()} />)
 
     await screen.findByText(/start by adding yourself/i)
@@ -35,37 +35,53 @@ describe('OnboardingStep2', () => {
   })
 
   it('lists existing members and enables Continue when at least one exists', async () => {
-    listFamilyMembers.mockResolvedValue([
-      { id: '1', householdId: 'h1', name: 'Gaurav Gupta', relationship: 'self', dateOfBirth: '1990-01-01' },
-    ])
+    listFamilyMembers.mockResolvedValue({
+      members: [
+        { id: '1', householdId: 'h1', name: 'Ananya Verma', relationship: 'self', dateOfBirth: '1990-01-01', riskProfile: null, version: 1 },
+      ],
+      unreadableCount: 0,
+      notYetEncryptedCount: 0,
+    })
     render(<OnboardingStep2 onContinue={vi.fn()} />)
 
-    await screen.findByText('Gaurav Gupta')
+    await screen.findByText('Ananya Verma')
     expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled()
   })
 
   it('calls onContinue when Continue is clicked with at least one member', async () => {
-    listFamilyMembers.mockResolvedValue([
-      { id: '1', householdId: 'h1', name: 'Gaurav Gupta', relationship: 'self', dateOfBirth: '1990-01-01' },
-    ])
+    listFamilyMembers.mockResolvedValue({
+      members: [
+        { id: '1', householdId: 'h1', name: 'Ananya Verma', relationship: 'self', dateOfBirth: '1990-01-01', riskProfile: null, version: 1 },
+      ],
+      unreadableCount: 0,
+      notYetEncryptedCount: 0,
+    })
     const onContinue = vi.fn()
     render(<OnboardingStep2 onContinue={onContinue} />)
 
-    await screen.findByText('Gaurav Gupta')
+    await screen.findByText('Ananya Verma')
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     expect(onContinue).toHaveBeenCalled()
   })
 
   it('adding a member via the sheet appends it to the list', async () => {
-    listFamilyMembers.mockResolvedValue([])
-    const created = { id: '2', householdId: 'h1', name: 'Priya Sharma', relationship: 'spouse', dateOfBirth: '1991-02-02' }
+    listFamilyMembers.mockResolvedValue({ members: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    const created = {
+      id: '2',
+      householdId: 'h1',
+      name: 'Rohit Verma',
+      relationship: 'spouse',
+      dateOfBirth: '1991-02-02',
+      riskProfile: null,
+      version: 1,
+    }
     createFamilyMember.mockResolvedValue(created)
 
     render(<OnboardingStep2 onContinue={vi.fn()} />)
     await screen.findByText(/start by adding yourself/i)
 
     fireEvent.click(screen.getByRole('button', { name: /add a family member/i }))
-    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Priya Sharma' } })
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Rohit Verma' } })
     fireEvent.change(screen.getByLabelText(/date of birth/i), { target: { value: '1991-02-02' } })
 
     // Radix Select isn't a native <select>; drive it via its combobox trigger + option role.
@@ -75,10 +91,10 @@ describe('OnboardingStep2', () => {
     fireEvent.click(screen.getByRole('button', { name: /add to plan/i }))
 
     await waitFor(() => expect(createFamilyMember).toHaveBeenCalledWith('test-token', {
-      name: 'Priya Sharma',
+      name: 'Rohit Verma',
       relationship: 'spouse',
       dateOfBirth: '1991-02-02',
     }))
-    await screen.findByText('Priya Sharma')
+    await screen.findByText('Rohit Verma')
   })
 })

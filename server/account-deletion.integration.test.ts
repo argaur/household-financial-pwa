@@ -21,12 +21,14 @@ vi.mock('jose', () => ({
 interface HouseholdRow {
   id: string
   ownerUserId: string
-  name: string
+  /** Legacy plaintext column — always null for rows written since encryption. */
+  name: string | null
 }
 interface MemberRow {
   id: string
   householdId: string
-  name: string
+  /** Legacy plaintext column — always null for rows written since encryption. */
+  name: string | null
 }
 interface ProtectionRow {
   id: string
@@ -61,7 +63,6 @@ let protectionRows: ProtectionRow[] = []
 let holdings: HoldingRow[] = []
 let goals: GoalRow[] = []
 let analyticsEvents: AnalyticsEventRow[] = []
-let nextProtectionId = 1
 
 vi.mock('./lib/db.js', () => ({
   db: {
@@ -96,17 +97,17 @@ vi.mock('./lib/db.js', () => ({
       values: (row: Record<string, unknown>) => ({
         returning: () => {
           if (table === householdsTableRef) {
-            const created: HouseholdRow = { id: `h-${households.length + 1}`, ownerUserId: row.ownerUserId as string, name: row.name as string }
+            const created: HouseholdRow = { id: row.id as string, ownerUserId: row.ownerUserId as string, name: null }
             households.push(created)
             return Promise.resolve([created])
           }
           if (table === familyMembersTableRef) {
-            const created: MemberRow = { id: `m-${members.length + 1}`, householdId: row.householdId as string, name: row.name as string }
+            const created: MemberRow = { id: row.id as string, householdId: row.householdId as string, name: null }
             members.push(created)
             return Promise.resolve([created])
           }
           const created: ProtectionRow = {
-            id: `prot-${nextProtectionId++}`,
+            id: row.id as string,
             householdId: row.householdId as string,
             memberId: row.memberId as string,
           }
@@ -201,31 +202,42 @@ interface ProtectionListResponse {
   protection: unknown[]
 }
 
-async function createHousehold(token: string, name: string) {
+// Rows are opaque envelopes now; the ids are client-generated (see
+// server/lib/envelope.ts), so the fixtures below supply them explicitly.
+const envelope = { ciphertext: 'Y2lwaGVydGV4dC1vbmU', iv: 'aXYtYnl0ZXMtMTIx', alg: 'AES-256-GCM' }
+
+const HOUSEHOLD_A = '11111111-1111-4111-8111-111111111111'
+const HOUSEHOLD_B = '22222222-2222-4222-8222-222222222222'
+const MEMBER_A = 'aaaaaaaa-1111-4111-8111-111111111111'
+const MEMBER_B = 'bbbbbbbb-2222-4222-8222-222222222222'
+const PROTECTION_A = 'cccccccc-3333-4333-8333-333333333333'
+const PROTECTION_B = 'dddddddd-4444-4444-8444-444444444444'
+
+async function createHousehold(token: string, id: string) {
   const res = await app.request('/api/household', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ id, ...envelope }),
   })
   const body = (await res.json()) as HouseholdResponse
   return body.household!
 }
 
-async function createMember(token: string, name: string) {
+async function createMember(token: string, id: string) {
   const res = await app.request('/api/family-members', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name, relationship: 'self', dateOfBirth: '1990-01-01' }),
+    body: JSON.stringify({ id, ...envelope }),
   })
   const body = (await res.json()) as MemberResponse
   return body.member.id
 }
 
-async function createProtection(token: string, memberId: string) {
+async function createProtection(token: string, id: string, memberId: string) {
   const res = await app.request('/api/protection', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ memberId, type: 'term-life', coverAmount: '5000000', status: 'active' }),
+    body: JSON.stringify({ id, memberId, ...envelope }),
   })
   const body = (await res.json()) as ProtectionResponse
   return body.protection!.id
@@ -239,7 +251,6 @@ describe('Slice 9 — full create→populate→delete→verify-zero-rows cycle (
     holdings = []
     goals = []
     analyticsEvents = []
-    nextProtectionId = 1
   })
 
   it('rejects a webhook call with no signature headers', async () => {
@@ -267,7 +278,7 @@ describe('Slice 9 — full create→populate→delete→verify-zero-rows cycle (
   })
 
   it('ignores non-"user.deleted" event types (acknowledges, does not delete)', async () => {
-    const household = await createHousehold('user_a', 'Gupta Family')
+    const household = await createHousehold('user_a', HOUSEHOLD_A)
     const body = JSON.stringify({ type: 'user.updated', data: { id: 'user_a' } })
     const res = await postWebhook(body)
     expect(res.status).toBe(200)
@@ -282,9 +293,9 @@ describe('Slice 9 — full create→populate→delete→verify-zero-rows cycle (
     // protection) plus fixture rows for holdings/goals/analytics_events
     // (see the interface comments above for why those two aren't driven
     // through HTTP in this file).
-    const household = await createHousehold('user_a', 'Gupta Family')
-    const memberId = await createMember('user_a', 'Gaurav Gupta')
-    await createProtection('user_a', memberId)
+    const household = await createHousehold('user_a', HOUSEHOLD_A)
+    const memberId = await createMember('user_a', MEMBER_A)
+    await createProtection('user_a', PROTECTION_A, memberId)
     holdings.push({ id: 'hold-1', householdId: household.id })
     goals.push({ id: 'goal-1', householdId: household.id })
     analyticsEvents.push({ id: 'ae-1', userId: 'user_a' })
@@ -326,10 +337,10 @@ describe('Slice 9 — full create→populate→delete→verify-zero-rows cycle (
   })
 
   it("never touches a different household's data when deleting one user", async () => {
-    await createHousehold('user_a', 'Gupta Family')
-    const householdB = await createHousehold('user_b', 'Sharma Family')
-    const memberB = await createMember('user_b', 'Priya Sharma')
-    await createProtection('user_b', memberB)
+    await createHousehold('user_a', HOUSEHOLD_A)
+    const householdB = await createHousehold('user_b', HOUSEHOLD_B)
+    const memberB = await createMember('user_b', MEMBER_B)
+    await createProtection('user_b', PROTECTION_B, memberB)
 
     await postWebhook(JSON.stringify({ type: 'user.deleted', data: { id: 'user_a' } }))
 
