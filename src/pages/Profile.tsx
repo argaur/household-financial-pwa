@@ -7,10 +7,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { ProtectionForm } from '@/components/protection-form'
 import { MemberForm } from '@/components/member-form'
+import { ChangePassphraseForm, ResetRecoveryCodeForm } from '@/components/credential-change-forms'
 import { track } from '@/lib/analytics'
 import { listFamilyMembers, removeFamilyMember, type FamilyMember } from '@/lib/family-members-api'
 import { listProtection, type Protection } from '@/lib/protection-api'
 import { fetchHousehold, updateHousehold, type Household } from '@/lib/household-api'
+import { fetchHouseholdKeys, type HouseholdKeys } from '@/lib/household-keys-api'
 import { clearDashboardCache } from '@/lib/pwa-cache'
 
 type State = 'loading' | 'loaded' | 'error'
@@ -69,6 +71,10 @@ export function Profile() {
   const [removingMember, setRemovingMember] = useState<FamilyMember | null>(null)
   const [removingMemberBusy, setRemovingMemberBusy] = useState(false)
 
+  const [householdKeys, setHouseholdKeys] = useState<HouseholdKeys | null>(null)
+  const [passphraseSheetOpen, setPassphraseSheetOpen] = useState(false)
+  const [recoverySheetOpen, setRecoverySheetOpen] = useState(false)
+
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null)
@@ -78,15 +84,20 @@ export function Profile() {
     ;(async () => {
       try {
         const token = await getToken()
-        const [householdResult, membersResult, protectionResult] = await Promise.all([
+        const [householdResult, membersResult, protectionResult, keysResult] = await Promise.all([
           fetchHousehold(token),
           listFamilyMembers(token),
           listProtection(token),
+          // Key material is the only one of the four that is allowed to fail
+          // without failing the screen: the Security card simply does not
+          // appear. Everything else on Profile still works without it.
+          fetchHouseholdKeys(token).catch(() => null),
         ])
         if (cancelled) return
         setHousehold(householdResult.state === 'ok' ? householdResult.household : null)
         setMembers(membersResult.members)
         setProtectionRecords(protectionResult.protection)
+        setHouseholdKeys(keysResult)
         setState('loaded')
       } catch {
         if (cancelled) return
@@ -363,6 +374,37 @@ export function Profile() {
           )}
         </section>
 
+        {/* Security card — Slice 6b: passphrase change and recovery-code reset.
+            Two separate actions in two separate sheets, on purpose: each one
+            overwrites a wrapped copy that is one of only two ways back into
+            this household's data, so they must never share a submit path. */}
+        {state === 'loaded' && householdKeys && (
+          <section className="rounded-lg border p-4 space-y-4">
+            <p className="text-caption font-semibold uppercase tracking-wide text-muted-foreground">Security</p>
+            <p className="text-body text-muted-foreground">
+              Your passphrase and your recovery code each open the same key, here in your browser. Replacing one leaves
+              the other working, and leaves everything you have recorded exactly as it is.
+            </p>
+
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                className="w-full min-h-11 justify-start"
+                onClick={() => setPassphraseSheetOpen(true)}
+              >
+                Change passphrase
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full min-h-11 justify-start"
+                onClick={() => setRecoverySheetOpen(true)}
+              >
+                Reset recovery code
+              </Button>
+            </div>
+          </section>
+        )}
+
         {/* Account card — Slice 9: sign-out and delete-account */}
         <section className="rounded-lg border p-4 space-y-4">
           <p className="text-caption font-semibold uppercase tracking-wide text-muted-foreground">Account</p>
@@ -413,6 +455,44 @@ export function Profile() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {householdKeys && (
+        <Sheet open={passphraseSheetOpen} onOpenChange={setPassphraseSheetOpen}>
+          <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Change your passphrase</SheetTitle>
+            </SheetHeader>
+            <div className="mt-4">
+              <ChangePassphraseForm
+                keys={householdKeys}
+                onChanged={(updated) => {
+                  setHouseholdKeys(updated)
+                  setPassphraseSheetOpen(false)
+                }}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {householdKeys && (
+        <Sheet open={recoverySheetOpen} onOpenChange={setRecoverySheetOpen}>
+          <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Reset your recovery code</SheetTitle>
+            </SheetHeader>
+            <div className="mt-4">
+              <ResetRecoveryCodeForm
+                keys={householdKeys}
+                onReset={(updated) => {
+                  setHouseholdKeys(updated)
+                  setRecoverySheetOpen(false)
+                }}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       <Dialog open={removingMember !== null} onOpenChange={(open) => !open && setRemovingMember(null)}>
         <DialogContent>

@@ -4,6 +4,7 @@ import 'fake-indexeddb/auto'
 import {
   fetchHouseholdKeys,
   createHouseholdKeys,
+  rewrapHouseholdKeys,
   HouseholdKeysApiError,
   type HouseholdKeyMaterial,
 } from './household-keys-api'
@@ -61,6 +62,38 @@ describe('household-keys-api', () => {
   it('throws on a 400 rather than silently losing the key material', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'invalid_household_keys' }, 400))
     await expect(createHouseholdKeys('t', MATERIAL)).rejects.toBeInstanceOf(HouseholdKeysApiError)
+  })
+
+  it('PATCHes a re-wrapped credential on the same single path segment and returns the stored row', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ householdKeys: { householdId: 'h1', ...MATERIAL } }))
+    const row = await rewrapHouseholdKeys('t', {
+      credential: 'passphrase',
+      passphraseSalt: 'c2FsdC1uZXc',
+      wrappedDekPassphrase: 'd3JhcHBlZC1uZXc',
+      passphraseWrapIv: 'aXYtbmV3',
+    })
+    expect(row.householdId).toBe('h1')
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as unknown as [string, RequestInit]
+    // A second path segment (e.g. /api/household-keys/rotate) 404s at Vercel
+    // before Hono sees it — the credential travels in the body instead.
+    expect(url).toBe('/api/household-keys')
+    expect(init.method).toBe('PATCH')
+    expect(init.cache).toBe('no-store')
+  })
+
+  it('throws instead of reporting success when the update is refused', async () => {
+    for (const status of [400, 404, 429, 500]) {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'nope' }, status))
+      await expect(
+        rewrapHouseholdKeys('t', {
+          credential: 'recovery',
+          recoverySalt: 'c2FsdC1uZXc',
+          wrappedDekRecovery: 'd3JhcHBlZC1uZXc',
+          recoveryWrapIv: 'aXYtbmV3',
+        }),
+      ).rejects.toBeInstanceOf(HouseholdKeysApiError)
+    }
   })
 })
 

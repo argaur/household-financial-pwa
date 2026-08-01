@@ -38,6 +38,15 @@ vi.mock('@/lib/family-members-api', async (importOriginal) => {
   }
 })
 
+const fetchHouseholdKeys = vi.fn()
+vi.mock('@/lib/household-keys-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/household-keys-api')>()
+  return {
+    ...actual,
+    fetchHouseholdKeys: (...args: unknown[]) => fetchHouseholdKeys(...args),
+  }
+})
+
 const listProtection = vi.fn()
 const createProtection = vi.fn()
 const updateProtection = vi.fn()
@@ -86,6 +95,21 @@ const protectionRecord = {
   updatedAt: '',
 }
 
+// Synthetic, opaque base64url blobs — no real key material.
+const householdKeys = {
+  householdId: 'h1',
+  createdAt: '',
+  updatedAt: '',
+  kdfAlg: 'PBKDF2-SHA256',
+  kdfIterations: 600_000,
+  passphraseSalt: 'c2FsdC1vbmU',
+  wrappedDekPassphrase: 'd3JhcHBlZC1wYXNz',
+  passphraseWrapIv: 'aXYtcGFzcw',
+  recoverySalt: 'c2FsdC10d28',
+  wrappedDekRecovery: 'd3JhcHBlZC1yZWM',
+  recoveryWrapIv: 'aXYtcmVj',
+}
+
 describe('Profile', () => {
   beforeEach(() => {
     fetchHousehold.mockReset()
@@ -103,6 +127,8 @@ describe('Profile', () => {
     // the list clients return counts alongside the decrypted rows.
     fetchHousehold.mockResolvedValue({ state: 'ok', household })
     listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
+    fetchHouseholdKeys.mockReset()
+    fetchHouseholdKeys.mockResolvedValue(householdKeys)
   })
 
   it('shows the empty state and a CTA when there is no protection cover', async () => {
@@ -268,5 +294,63 @@ describe('Profile', () => {
 
     await screen.findByText(/we couldn't delete your account/i)
     expect(signOut).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Slice 6b — the Security card.
+ *
+ * Two clearly separated actions. Each overwrites a wrapped copy that is one of
+ * only two ways back into the household's data, so they never share a form, a
+ * sheet, or a submit path.
+ */
+describe('Profile — security card', () => {
+  beforeEach(() => {
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+  })
+
+  it('offers changing the passphrase and resetting the recovery code as separate actions', async () => {
+    render(<Profile />)
+    await screen.findByText('Ananya Verma')
+
+    expect(screen.getByRole('button', { name: /change passphrase/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reset recovery code/i })).toBeInTheDocument()
+  })
+
+  it('opens the change-passphrase sheet, and only that form', async () => {
+    render(<Profile />)
+    await screen.findByText('Ananya Verma')
+    fireEvent.click(screen.getByRole('button', { name: /change passphrase/i }))
+
+    await screen.findByRole('heading', { name: /change your passphrase/i })
+    expect(screen.getByTestId('change-passphrase-form')).toBeInTheDocument()
+    expect(screen.queryByTestId('reset-recovery-form')).not.toBeInTheDocument()
+  })
+
+  it('opens the reset-recovery-code sheet, and only that form', async () => {
+    render(<Profile />)
+    await screen.findByText('Ananya Verma')
+    fireEvent.click(screen.getByRole('button', { name: /reset recovery code/i }))
+
+    await screen.findByRole('heading', { name: /reset your recovery code/i })
+    expect(screen.getByTestId('reset-recovery-form')).toBeInTheDocument()
+    expect(screen.queryByTestId('change-passphrase-form')).not.toBeInTheDocument()
+  })
+
+  it('hides both actions when the household has no key material to rotate', async () => {
+    fetchHouseholdKeys.mockResolvedValue(null)
+    render(<Profile />)
+    await screen.findByText('Ananya Verma')
+
+    expect(screen.queryByRole('button', { name: /change passphrase/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reset recovery code/i })).not.toBeInTheDocument()
+  })
+
+  it('still renders the rest of the screen when key material cannot be loaded', async () => {
+    fetchHouseholdKeys.mockRejectedValue(new Error('offline'))
+    render(<Profile />)
+
+    await screen.findByText('Ananya Verma')
+    expect(screen.queryByRole('button', { name: /change passphrase/i })).not.toBeInTheDocument()
   })
 })

@@ -105,6 +105,23 @@ vi.mock('./lib/db.js', () => ({
         }
       },
     }),
+    // Mirrors a single SQL UPDATE ... WHERE household_id = $1 RETURNING *:
+    // it mutates the matched row's named columns and nothing else, and it
+    // never inserts. An empty returning() is how the route detects "no row".
+    update: (table: unknown) => ({
+      set: (values: Record<string, unknown>) => ({
+        where: (cond: { __eq?: [{ name?: string }, string] }) => ({
+          returning: () => {
+            if (table !== householdKeysTableRef) return Promise.resolve([])
+            const householdId = cond.__eq?.[1]
+            const row = keyRows.find((k) => k.householdId === householdId)
+            if (!row) return Promise.resolve([])
+            Object.assign(row, values)
+            return Promise.resolve([row])
+          },
+        }),
+      }),
+    }),
   },
 }))
 
@@ -176,6 +193,34 @@ function post(token: string, body: unknown) {
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   })
+}
+
+function patch(token: string, body: unknown) {
+  return app.request('/api/household-keys', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+}
+
+/** A passphrase change: the three passphrase columns and nothing else. */
+function passphraseUpdate(tag: string) {
+  return {
+    credential: 'passphrase' as const,
+    passphraseSalt: `salt-passphrase-${tag}`,
+    wrappedDekPassphrase: `wrapped-passphrase-${tag}`,
+    passphraseWrapIv: `iv-passphrase-${tag}`,
+  }
+}
+
+/** A recovery-code reset: the three recovery columns and nothing else. */
+function recoveryUpdate(tag: string) {
+  return {
+    credential: 'recovery' as const,
+    recoverySalt: `salt-recovery-${tag}`,
+    wrappedDekRecovery: `wrapped-recovery-${tag}`,
+    recoveryWrapIv: `iv-recovery-${tag}`,
+  }
 }
 
 describe('household-keys routes', () => {
@@ -391,5 +436,243 @@ describe('household-keys routes', () => {
     for (let i = 0; i <= HOUSEHOLD_KEYS_RATE_LIMIT.limit; i += 1) await get('user_a')
     expect((await get('user_a')).status).toBe(429)
     expect((await get('user_b')).status).toBe(404)
+  })
+})
+
+/**
+ * PATCH /api/household-keys — re-wrap ONE credential.
+ *
+ * The single most dangerous write in the app: every one of these updates
+ * overwrites a copy that is the only way back to a household's data. The two
+ * credentials are kept apart by two strict schemas rather than by convention,
+ * and each update is one SQL statement, so a body can neither name the other
+ * credential's columns nor land half-applied.
+ */
+describe('household-keys PATCH — credential rotation', () => {
+  beforeEach(() => {
+    households = []
+    keyRows = []
+    householdSeq = 0
+    householdKeysRateLimiter.reset()
+  })
+
+  async function seeded(token = 'user_a') {
+    await createHousehold(token, 'Household One')
+    expect((await post(token, validBody('a'))).status).toBe(201)
+    return { ...keyRows[0] }
+  }
+
+  it('rejects PATCH with no Authorization header, writing nothing', async () => {
+    const before = await seeded()
+    const res = await app.request('/api/household-keys', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(passphraseUpdate('new')),
+    })
+    expect(res.status).toBe(401)
+    expect(keyRows[0]).toEqual(before)
+  })
+
+  it('rejects a token that fails verification', async () => {
+    await seeded()
+    expect((await patch('invalid', passphraseUpdate('new'))).status).toBe(401)
+  })
+
+  it('replaces only the passphrase columns, leaving the recovery copy byte-identical', async () => {
+    const before = await seeded()
+
+    const res = await patch('user_a', passphraseUpdate('new'))
+    expect(res.status).toBe(200)
+
+    const row = keyRows[0]
+    expect(row.passphraseSalt).toBe('salt-passphrase-new')
+    expect(row.wrappedDekPassphrase).toBe('wrapped-passphrase-new')
+    expect(row.passphraseWrapIv).toBe('iv-passphrase-new')
+    // The recovery credential must survive a passphrase change untouched.
+    expect(row.recoverySalt).toBe(before.recoverySalt)
+    expect(row.wrappedDekRecovery).toBe(before.wrappedDekRecovery)
+    expect(row.recoveryWrapIv).toBe(before.recoveryWrapIv)
+    // And the KDF parameters, which BOTH copies are derived at.
+    expect(row.kdfAlg).toBe(before.kdfAlg)
+    expect(row.kdfIterations).toBe(before.kdfIterations)
+  })
+
+  it('replaces only the recovery columns, leaving the passphrase copy byte-identical', async () => {
+    const before = await seeded()
+
+    const res = await patch('user_a', recoveryUpdate('new'))
+    expect(res.status).toBe(200)
+
+    const row = keyRows[0]
+    expect(row.recoverySalt).toBe('salt-recovery-new')
+    expect(row.wrappedDekRecovery).toBe('wrapped-recovery-new')
+    expect(row.recoveryWrapIv).toBe('iv-recovery-new')
+    expect(row.passphraseSalt).toBe(before.passphraseSalt)
+    expect(row.wrappedDekPassphrase).toBe(before.wrappedDekPassphrase)
+    expect(row.passphraseWrapIv).toBe(before.passphraseWrapIv)
+    expect(row.kdfIterations).toBe(before.kdfIterations)
+  })
+
+  it('returns the full stored row so the client can keep working from it', async () => {
+    await seeded()
+    const res = await patch('user_a', passphraseUpdate('new'))
+    const body = (await res.json()) as HouseholdKeysResponse
+    expect(body.householdKeys).toMatchObject({
+      householdId: HOUSEHOLD_IDS[0],
+      kdfAlg: 'PBKDF2-SHA256',
+      kdfIterations: 600_000,
+      wrappedDekPassphrase: 'wrapped-passphrase-new',
+      wrappedDekRecovery: 'wrapped-recovery-a',
+    })
+  })
+
+  it('refuses a passphrase change that also tries to set recovery fields', async () => {
+    const before = await seeded()
+    for (const smuggled of [
+      { ...passphraseUpdate('new'), wrappedDekRecovery: 'wrapped-recovery-evil' },
+      { ...passphraseUpdate('new'), recoverySalt: 'salt-recovery-evil' },
+      { ...passphraseUpdate('new'), recoveryWrapIv: 'iv-recovery-evil' },
+    ]) {
+      const res = await patch('user_a', smuggled)
+      expect(res.status).toBe(400)
+    }
+    expect(keyRows[0]).toEqual(before)
+  })
+
+  it('refuses a recovery reset that also tries to set passphrase fields', async () => {
+    const before = await seeded()
+    for (const smuggled of [
+      { ...recoveryUpdate('new'), wrappedDekPassphrase: 'wrapped-passphrase-evil' },
+      { ...recoveryUpdate('new'), passphraseSalt: 'salt-passphrase-evil' },
+      { ...recoveryUpdate('new'), passphraseWrapIv: 'iv-passphrase-evil' },
+    ]) {
+      const res = await patch('user_a', smuggled)
+      expect(res.status).toBe(400)
+    }
+    expect(keyRows[0]).toEqual(before)
+  })
+
+  it('refuses a body that tries to move the household, the KDF, or the iteration count', async () => {
+    const before = await seeded()
+    for (const smuggled of [
+      { ...passphraseUpdate('new'), householdId: HOUSEHOLD_IDS[1] },
+      { ...passphraseUpdate('new'), kdfIterations: 100_000 },
+      { ...passphraseUpdate('new'), kdfAlg: 'rot13' },
+      { ...passphraseUpdate('new'), plaintextPassphrase: 'hunter2' },
+    ]) {
+      expect((await patch('user_a', smuggled)).status).toBe(400)
+    }
+    expect(keyRows[0]).toEqual(before)
+  })
+
+  it('refuses a body with no credential discriminator, or an unknown one', async () => {
+    const before = await seeded()
+    const { credential: _dropped, ...noDiscriminator } = passphraseUpdate('new')
+    for (const bad of [
+      noDiscriminator,
+      { ...passphraseUpdate('new'), credential: 'both' },
+      { ...passphraseUpdate('new'), credential: 'recovery' },
+      {},
+      null,
+    ]) {
+      expect((await patch('user_a', bad)).status).toBe(400)
+    }
+    expect(keyRows[0]).toEqual(before)
+  })
+
+  it('refuses a partial credential — every column of the one being changed must be present', async () => {
+    const before = await seeded()
+    const full = passphraseUpdate('new')
+    for (const field of ['passphraseSalt', 'wrappedDekPassphrase', 'passphraseWrapIv'] as const) {
+      const partial: Record<string, unknown> = { ...full }
+      delete partial[field]
+      expect((await patch('user_a', partial)).status).toBe(400)
+    }
+    expect(keyRows[0]).toEqual(before)
+  })
+
+  it('refuses non-base64url and over-long blobs', async () => {
+    const before = await seeded()
+    expect((await patch('user_a', { ...passphraseUpdate('new'), passphraseSalt: 'not base64url!!' })).status).toBe(400)
+    expect((await patch('user_a', { ...passphraseUpdate('new'), wrappedDekPassphrase: 'a'.repeat(5000) })).status).toBe(400)
+    expect((await patch('user_a', { ...recoveryUpdate('new'), recoveryWrapIv: '=' })).status).toBe(400)
+    expect(keyRows[0]).toEqual(before)
+  })
+
+  it('rejects a non-JSON body with 400', async () => {
+    const before = await seeded()
+    const res = await app.request('/api/household-keys', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer user_a' },
+      body: 'not json',
+    })
+    expect(res.status).toBe(400)
+    expect(keyRows[0]).toEqual(before)
+  })
+
+  it('returns 404 when there is no key row, and never creates one', async () => {
+    await createHousehold('user_a', 'Household One')
+    const res = await patch('user_a', passphraseUpdate('new'))
+    expect(res.status).toBe(404)
+    expect(((await res.json()) as HouseholdKeysResponse).error).toBe('household_keys_not_found')
+    expect(keyRows).toHaveLength(0)
+  })
+
+  it('returns 404 when the caller has no household at all, and creates nothing', async () => {
+    const res = await patch('user_no_household', passphraseUpdate('new'))
+    expect(res.status).toBe(404)
+    expect(keyRows).toHaveLength(0)
+    expect(households).toHaveLength(0)
+  })
+
+  it("cannot touch another household's key material", async () => {
+    await createHousehold('user_a', 'Household One')
+    await createHousehold('user_b', 'Household Two')
+    await post('user_a', validBody('a'))
+    await post('user_b', validBody('b'))
+    const bBefore = { ...keyRows.find((k) => k.householdId === HOUSEHOLD_IDS[1])! }
+
+    // Every shape a client could use to try to name the other household.
+    expect((await patch('user_a', { ...passphraseUpdate('new'), householdId: HOUSEHOLD_IDS[1] })).status).toBe(400)
+    expect((await patch('user_a', passphraseUpdate('new'))).status).toBe(200)
+
+    expect(keyRows.find((k) => k.householdId === HOUSEHOLD_IDS[1])).toEqual(bBefore)
+    expect(keyRows.find((k) => k.householdId === HOUSEHOLD_IDS[0])?.wrappedDekPassphrase).toBe('wrapped-passphrase-new')
+  })
+
+  it('sets Cache-Control: no-store on every PATCH response', async () => {
+    await seeded()
+    expect((await patch('user_a', passphraseUpdate('new'))).headers.get('cache-control')).toBe('no-store')
+    expect((await patch('user_a', { bogus: true })).headers.get('cache-control')).toBe('no-store')
+    expect((await patch('user_no_household', passphraseUpdate('new'))).headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('rate-limits the credential-change route per authenticated user', async () => {
+    await seeded()
+    // seeded() already spent 2 of the window (POST + the GET-free create path
+    // uses one check), so drive the rest through PATCH until it blocks.
+    let blocked: Response | null = null
+    for (let i = 0; i < HOUSEHOLD_KEYS_RATE_LIMIT.limit + 2; i += 1) {
+      const res = await patch('user_a', passphraseUpdate(`n${i}`))
+      if (res.status === 429) {
+        blocked = res
+        break
+      }
+    }
+    expect(blocked).not.toBeNull()
+    expect(((await blocked!.json()) as HouseholdKeysResponse).error).toBe('rate_limited')
+    expect(Number(blocked!.headers.get('retry-after'))).toBeGreaterThan(0)
+    expect(blocked!.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('one user exhausting the limit does not block another user from rotating', async () => {
+    await createHousehold('user_a', 'Household One')
+    await createHousehold('user_b', 'Household Two')
+    await post('user_a', validBody('a'))
+    await post('user_b', validBody('b'))
+
+    for (let i = 0; i <= HOUSEHOLD_KEYS_RATE_LIMIT.limit; i += 1) await patch('user_a', passphraseUpdate('x'))
+    expect((await patch('user_a', passphraseUpdate('y'))).status).toBe(429)
+    expect((await patch('user_b', passphraseUpdate('b2'))).status).toBe(200)
   })
 })

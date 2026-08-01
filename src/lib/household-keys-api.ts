@@ -85,3 +85,53 @@ export async function createHouseholdKeys(
     throw err
   }
 }
+
+/** The passphrase copy's three columns, tagged so the server can pick its schema. */
+export interface PassphraseRewrap {
+  credential: 'passphrase'
+  passphraseSalt: string
+  wrappedDekPassphrase: string
+  passphraseWrapIv: string
+}
+
+/** The recovery copy's three columns. */
+export interface RecoveryRewrap {
+  credential: 'recovery'
+  recoverySalt: string
+  wrappedDekRecovery: string
+  recoveryWrapIv: string
+}
+
+/**
+ * One credential's re-wrapped copy.
+ *
+ * A union of two disjoint shapes, mirroring the server's discriminated union of
+ * two `.strict()` schemas. There is no type here that can carry both
+ * credentials, so "change the passphrase and accidentally overwrite the
+ * recovery copy" is not a request this client can construct.
+ */
+export type HouseholdKeyRewrap = PassphraseRewrap | RecoveryRewrap
+
+/**
+ * PATCH the wrapped copy of ONE credential.
+ *
+ * Same single path segment as GET and POST — Vercel's zero-config routing only
+ * serves `/api/*` with one segment, so the credential being rotated is carried
+ * by the body's discriminator, never by a sub-path.
+ *
+ * The caller must have already proven, locally, that the new blob unwraps to a
+ * working data key. This function only moves bytes; it cannot check anything,
+ * and neither can the server.
+ */
+export async function rewrapHouseholdKeys(
+  token: string | null,
+  rewrap: HouseholdKeyRewrap,
+): Promise<HouseholdKeys> {
+  const res = await encryptedFetch('/api/household-keys', token, fail, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(rewrap),
+  })
+  const body = (await res.json()) as { householdKeys: HouseholdKeys }
+  return body.householdKeys
+}
