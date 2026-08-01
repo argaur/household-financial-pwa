@@ -89,9 +89,8 @@ The fix was one line of route code. The durable output was the regression test t
   │  analytics_events                        │
   └──────────────────────────────────────────┘
 
-  Cross-cutting: one track() wrapper → PostHog (funnels/retention)
-                 and the internal analytics_events table (North Star).
-                 Sentry for client errors.
+  Cross-cutting: one track() wrapper → PostHog (funnels, retention,
+                 North Star). Sentry for client errors.
 ```
 
 Two boundary choices worth naming. **Multi-tenancy is enforced in the application layer**, not Postgres row-level security — every request resolves `household_id` from the verified session before it touches data. **Session verification is hand-rolled JWT checking against Clerk's JWKS** rather than the official middleware, because that middleware hits an unresolved Vercel Edge bundler failure; the constraint is documented in the repo so the next person does not rediscover it the hard way.

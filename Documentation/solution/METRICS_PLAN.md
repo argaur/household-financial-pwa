@@ -1,7 +1,7 @@
 # Metrics Plan — Household Financial Planning PWA
 
 **Date:** 2026-06-23
-**Analytics service:** PostHog (cloud), kept alongside an internal `analytics_events` Postgres table (Phase 1 Q5 — both, intentionally not deduplicated to one source)
+**Analytics service:** PostHog (cloud), sole sink. **Corrected 2026-08-01 (D-012):** this previously read "kept alongside an internal `analytics_events` Postgres table (Phase 1 Q5 — both, intentionally not deduplicated to one source)". That dual sink was decided in D-005 and never built. Every metric below is measured in PostHog only.
 **Error tracking:** Sentry free tier
 
 ---
@@ -88,7 +88,7 @@ One row per v1 feature from `SOLUTION_BRIEF.md` (feature # in parentheses). Ever
 
 ## Analytics Implementation Notes
 
-- SDK: PostHog JS (frontend); `analytics_events` table written via the same Hono API layer that handles all writes (no separate backend SDK needed for v1's scale)
+- SDK: PostHog JS (frontend), via the single `track()` wrapper in `src/lib/analytics.ts`. **No server-side write path exists** — the `analytics_events` table described here was never wired up (D-012). Scope every PostHog query with `project = 'financial-planning'`: this is the shared "Web Fleet" project.
 - Public surface: one `track(event_name: string, properties: object)` wrapper only — no raw PostHog SDK calls in feature code; the wrapper fans out to both PostHog and the internal table in one call
 - Initialised in: Slice 0 (Walking Skeleton)
 - Each feature's events added in the same commit as the feature code

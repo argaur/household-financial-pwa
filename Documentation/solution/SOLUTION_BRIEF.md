@@ -17,7 +17,7 @@
 
 | # | Original criterion (from PRD) | Falsifiable form | Measured by (event/metric) |
 |---|---|---|---|
-| 1 | Users complete onboarding without abandoning | **60%** of users who start onboarding will complete all 3 steps (household → members → holdings) within their first session | `onboarding_started` → `onboarding_completed` funnel in `analytics_events` + PostHog |
+| 1 | Users complete onboarding without abandoning | **60%** of users who start onboarding will complete all 3 steps (household → members → holdings) within their first session | `onboarding_started` → `onboarding_completed` funnel in PostHog (corrected 2026-08-01, D-012: the `analytics_events` half was never built) |
 | 2 | Users return to update holdings or check nudges | **25%** of users who complete onboarding will return at least once within 14 days | Distinct `session_started` events per `user_id` with a 14-day gap check |
 | 3 | Completeness Score increases as users add data | **50%** of households will increase their Completeness Score by ≥1 tier within 30 days of signup | `completeness_score_changed` event, before/after tier |
 | 4 | ~~Demo-household lets a visitor experience value with zero entry~~ | Cut — demo-household button removed from v1 (Phase 1, Q3) | n/a |
@@ -75,7 +75,7 @@ A new user completes a 3-step, fact-only onboarding (household → members → f
 | 9 | Custom PWA install prompt (post-activation) | Locked over native auto-prompt for UX control |
 | 10 | "Why these choices?" in-app page | Recruiter/portfolio narrative surface (Q7 craft+architecture signal still benefits from this existing, even if not the primary pitch) |
 | 11 | Global education-not-advice disclaimer + consent modal | Regulatory hard constraint, non-negotiable |
-| 12 | Analytics: internal `analytics_events` table + PostHog | Both kept per Q5 — internal table for North Star funnel, PostHog for funnel/retention dashboards |
+| 12 | Analytics: PostHog only | Q5 chose both (internal table + PostHog). Only PostHog was built; **superseded by D-012 on 2026-08-01.** PostHog carries funnels, retention and the North Star. |
 | 13 | Sentry error tracking | Default per template, no DIY substitute (Q5) |
 
 ---

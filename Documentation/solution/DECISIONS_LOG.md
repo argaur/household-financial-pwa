@@ -57,6 +57,8 @@ Every entry records the decision AND the rejected alternative. A decision withou
 
 ### D-005 — Analytics: keep both PostHog and internal `analytics_events` table
 
+> **SUPERSEDED 2026-08-01 by D-012.** This decision was never implemented. The internal table was defined in the schema but no code ever wrote to it. Read D-012 before relying on anything below.
+
 - **Date:** 2026-06-23
 - **Phase:** 1 Solution
 - **Decision:** Use both PostHog (funnels/retention dashboards) and the internal Postgres `analytics_events` table (North Star funnel), via one shared `track()` wrapper.
@@ -117,3 +119,13 @@ Every entry records the decision AND the rejected alternative. A decision withou
 - **Rejected alternative(s):** Adding dedicated emergency-fund and term-insurance instruments (30 → 32) and pointing the affected nudges at them — the fix assumed when the finding was first logged.
 - **Why:** Two reasons, one measured and one structural. **Measured:** the fix would not have closed the finding. Only *one* of six nudge destinations (`emergency_fund` → the fixed-deposit page) resolves to an instrument page at all; the other five navigate to `/portfolio`, `/profile` and `/explore` (see `NUDGE_HREF` in `nudge-card.tsx`). Adding two cards would have converted exactly one sentinel and left four, so the field would still have needed a hardcoded route-name list to interpret. **Structural:** neither concept is an asset class. The library's six categories are an investment taxonomy; term insurance is a protection product (already modelled in the `protection` table), and an emergency fund is a *purpose* attached to a holding — already modelled as the `is_emergency_fund` flag. Forcing both into the instrument taxonomy to satisfy an analytics field would have bent the domain model to serve telemetry. The one insurance-adjacent instrument that does exist (`hybrid-traditional-insurance`) is the exact product class this project rejects on principle, so it is not a fallback either.
 - **Revisit if:** A genuine content need appears for standalone explainers that aren't instruments — in which case they belong in a separate "concepts" surface with its own routing, not appended to the 6×5 instrument grid.
+
+### D-012 — Supersede D-005: PostHog is the only analytics sink; the internal `analytics_events` table was never built
+
+- **Date:** 2026-08-01
+- **Phase:** 6 Ship gate
+- **Decision:** Drop the internal `analytics_events` write path. PostHog is the sole analytics sink. The table stays in the schema, unwritten, because the cascade-delete code and its tests reference it and removing it is a migration this project does not need. **D-005 is superseded.**
+- **Rejected alternative(s):** Build the fan-out now, so D-005 is honoured as written. Rejected: it is new code introduced during a ship gate, to populate a table with no reader, when the metric it was meant to serve is already measured and verified in PostHog (North Star funnel, insight `bMF690Mf`).
+- **Why:** D-005 was decided, planned, and never implemented. `src/lib/analytics.ts:45-47` is the whole of `track()`: it calls `posthog.capture()` and returns. `analytics_events` appears in exactly four files — the schema that defines it, the cascade-delete code that preserves it, and two tests — and **no code writes a row to it**. Confirmed empty in the database on 2026-08-01. Every downstream document then described the table as if it existed, including `CASE_STUDY.md`, which told a recruiter about an architecture that was never built. One artifact stayed honest: the box at `IMPLEMENTATION_PLAN.md:19` was never ticked.
+- **How it survived:** the same seam-shaped failure as B-001. The Slice 9 integration test asserts `analytics_events` rows survive account deletion, and it passes — because the test inserts its own fixture row first. A green test sat on top of a table nothing populates. Nothing asserted that the application ever writes one.
+- **Revisit if:** A query is needed that PostHog genuinely cannot answer, or event data must be owned outside a third party. Both were D-005's original motivations, and neither has been exercised in v1.

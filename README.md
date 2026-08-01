@@ -33,7 +33,7 @@ check in that fixed order, which keeps it deterministic and tunable by nobody.
 - **API** — Hono, deployed as Vercel Functions
 - **Data** — Drizzle ORM over Neon serverless Postgres (7 tables)
 - **Auth** — Clerk (hosted UI; sessions verified server-side against Clerk's JWKS via `jose`)
-- **Observability** — PostHog + an internal `analytics_events` table (D-005), Sentry for errors
+- **Observability** — PostHog for product analytics, Sentry for client errors (D-012; the dual-sink `analytics_events` table planned in D-005 was never built)
 - **Hosting** — Vercel
 
 ## Architecture

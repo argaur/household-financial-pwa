@@ -254,7 +254,7 @@ instruments    1 ──── N  holdings            (each holding references on
 - All user data (family_members, holdings, protection, goals) is owned by a household and only readable/writable by the Clerk user who owns that household.
 - Isolation enforcement: application layer only. Every Hono route resolves `household_id` from `households.owner_user_id = clerkUserId` before any data query. Queries never accept a raw `household_id` from the client — it is always resolved server-side.
 - `instruments` are read-only for all authenticated users. No write routes exposed for them.
-- `analytics_events` is write-only from the application layer. No user-facing read route.
+- `analytics_events` was specified as write-only from the application layer, with no user-facing read route. **Corrected 2026-08-01 (D-012): the write path was never built.** The table exists in the schema and is empty. It is retained only because the cascade-delete code and its tests reference it.
 - On `user.deleted` (Clerk webhook): hard delete `households` row → cascade deletes family_members, holdings, protection, goals. `analytics_events` rows are retained (orphaned `user_id`).
 
 ---

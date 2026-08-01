@@ -16,7 +16,7 @@ No feature code. Proves the deployment pipeline before complexity arrives.
 - [ ] PostHog initialised (one test event visible in dashboard)
 - [ ] Sentry initialised (one test error visible)
 - [ ] `/docs` route stub live
-- [ ] Typed event registry installed (`analytics.ts`), CI event check wired — one shared `track()` wrapper fanning out to PostHog + `analytics_events` table (per METRICS_PLAN.md implementation notes)
+- [x] Typed event registry installed (`analytics.ts`), CI event check wired — one shared `track()` wrapper. **The fan-out to `analytics_events` was never built** and this box stayed unticked for the whole project as a result. Closed 2026-08-01 by D-012, which drops the second sink rather than adding it: the registry and the CI check (`scripts/check_events.py`) do exist and work; only the table write was missing.
 - [ ] CI green on main
 
 **Deployed URL:** [filled when live]
