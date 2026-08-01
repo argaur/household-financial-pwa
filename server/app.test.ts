@@ -23,6 +23,13 @@ describe('CORS', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://household-financial-pwa.vercel.app')
   })
 
+  it('reflects Access-Control-Allow-Origin for the custom-domain production origin', async () => {
+    const res = await app.request('/api/health', {
+      headers: { Origin: 'https://finance.gauravg.dev' },
+    })
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://finance.gauravg.dev')
+  })
+
   it('reflects Access-Control-Allow-Origin for the localhost dev origin', async () => {
     const res = await app.request('/api/health', {
       headers: { Origin: 'http://localhost:3000' },

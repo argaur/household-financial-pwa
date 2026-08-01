@@ -81,6 +81,15 @@ curl -s https://household-financial-pwa.vercel.app/api/health
 # commit_sha must now be the last-good SHA, and db must still read "ok"
 ```
 
+**You get one step back, not a menu.** `vercel ls` prints every past Production deployment, which
+makes it look like you may roll back to any of them. You may not. Vercel marks only the current
+production deployment and the one immediately before it as rollback candidates; every older row is
+ineligible, and selecting one fails. Verified 2026-08-01 against this project's deployment list
+(`isRollbackCandidate` was `true` on exactly two of twenty). So if the bad code has already survived
+two deploys, Instant Rollback cannot reach the last-good build and the route back is
+`git revert` plus a normal deploy. (Added 2026-08-01: the step above previously implied a free choice
+of any Production row.)
+
 Dashboard equivalent: Vercel → project → Deployments → the target deployment → **Instant Rollback**.
 Same effect; use whichever is reachable at 2am.
 
@@ -287,7 +296,8 @@ and assert the response changed. Per-secret probes:
 | Secret | Provider console | Probe that proves it took effect |
 |---|---|---|
 | `DATABASE_URL` | Neon (via Vercel Storage tab) | `curl -s .../api/health` → `db:"ok"` |
-| `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk → API Keys | sign in on the live app; an authed `GET /api/dashboard` returns 200, not 401 |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk → API Keys | sign in on the live app; an authed `GET /api/dashboard` returns 200, not 401 |
+| `CLERK_SECRET_KEY` | Clerk → API Keys | **No probe exists, because no code reads it.** Auth is hand-rolled JWT verification against Clerk's JWKS (`server/lib/auth.ts`), which derives its endpoint from the *publishable* key alone; `@clerk/backend`, the package that would need the secret key, is deliberately not used (Vercel Edge bundler failure). The variable is documented in `.env.example` and currently inert. Do not verify it by signing in: signing in exercises the publishable key and would report a false pass. (Corrected 2026-08-01: this row previously shared a line with the publishable key and claimed the sign-in probe covered both.) |
 | `CLERK_WEBHOOK_SECRET` | Clerk → Webhooks → signing secret | unsigned `POST /api/clerk-webhook` → **401** (500 means unset) |
 | `VITE_POSTHOG_KEY` | PostHog → project 486719 | load the app, then confirm a `page_viewed` event arrives **scoped to `project = 'financial-planning'`** |
 | `VITE_SENTRY_DSN` / `SENTRY_DSN` | Sentry → project settings → Client Keys | trigger a client error, confirm it lands in Sentry |

@@ -17,7 +17,9 @@ import { clerkWebhookRoutes } from './routes/clerk-webhook.js'
 export const app = new Hono().basePath('/api')
 
 // Defence in depth, not the primary auth boundary: the SPA and /api/* are
-// same-origin in production (both served from household-financial-pwa.vercel.app),
+// same-origin in production (both served from finance.gauravg.dev, and from
+// household-financial-pwa.vercel.app, which is retained as a redirect origin
+// so links published before the 2026-08 domain move keep working),
 // and every route below is bearer-JWT authenticated against Clerk's JWKS
 // (server/lib/auth.ts) — there's no cookie/ambient-authority path for CORS to
 // protect. This just stops a browser page on another origin from using a
@@ -37,6 +39,7 @@ app.use(
   '/*',
   cors({
     origin: [
+      'https://finance.gauravg.dev',
       'https://household-financial-pwa.vercel.app',
       'http://localhost:3000',
       'http://localhost:4173',
