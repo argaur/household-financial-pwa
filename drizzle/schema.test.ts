@@ -8,6 +8,8 @@ import {
   holdings,
   protection,
   householdKeys,
+  instruments,
+  goals,
 } from './schema'
 
 /**
@@ -135,22 +137,78 @@ describe('drizzle/schema.ts — additive encryption-prep migration', () => {
   })
 })
 
+/**
+ * Nullability relaxation for columns that become client-side encrypted.
+ * These columns lose NOT NULL so an encrypted-only INSERT (which leaves the
+ * plaintext column empty) doesn't fail every write. Old plaintext rows and
+ * new encrypted rows coexist until the final destructive migration.
+ */
+const relaxedColumns: Record<string, readonly string[]> = {
+  households: ['name'],
+  familyMembers: ['name', 'relationship', 'dateOfBirth'],
+  holdings: ['instrumentId', 'assetClass', 'investedAmount', 'currentValue'],
+  protection: ['type', 'coverAmount', 'status'],
+}
+
+// Columns that carry tenant separation, cascade deletes, or the concurrency
+// check — these must stay NOT NULL on every table touched by this migration.
+const mustStayNotNull: Record<string, readonly string[]> = {
+  households: ['id', 'ownerUserId', 'createdAt', 'updatedAt', 'version'],
+  familyMembers: ['id', 'householdId', 'createdAt', 'updatedAt', 'version'],
+  holdings: ['id', 'householdId', 'memberId', 'createdAt', 'updatedAt', 'version'],
+  protection: ['id', 'householdId', 'memberId', 'createdAt', 'updatedAt', 'version'],
+}
+
+describe('drizzle/schema.ts — NOT NULL relaxation for encrypted columns', () => {
+  describe.each(Object.entries(encryptionTables))('%s', (tableName, table) => {
+    const columns = getTableColumns(table as typeof households)
+
+    it('has the columns that become encrypted marked nullable', () => {
+      const expectedRelaxed = relaxedColumns[tableName] ?? []
+      for (const colKey of expectedRelaxed) {
+        expect(columns[colKey], `expected column "${colKey}" to exist on "${tableName}"`).toBeDefined()
+        expect(columns[colKey].notNull, `expected "${tableName}.${colKey}" to be nullable`).toBe(false)
+      }
+    })
+
+    it('still has tenant/cascade/concurrency columns as NOT NULL', () => {
+      const expectedNotNull = mustStayNotNull[tableName] ?? []
+      for (const colKey of expectedNotNull) {
+        expect(columns[colKey], `expected column "${colKey}" to exist on "${tableName}"`).toBeDefined()
+        expect(columns[colKey].notNull, `expected "${tableName}.${colKey}" to stay NOT NULL`).toBe(true)
+      }
+    })
+  })
+
+  it('does not relax instruments.name — public teaching content stays fully readable', () => {
+    const columns = getTableColumns(instruments)
+    expect(columns.name).toBeDefined()
+    expect(columns.name.notNull).toBe(true)
+  })
+
+  it('does not relax goals.name — v1.5 schema-only, no UI, would be a defect to touch', () => {
+    const columns = getTableColumns(goals)
+    expect(columns.name).toBeDefined()
+    expect(columns.name.notNull).toBe(true)
+  })
+})
+
 describe('generated migration SQL is additive-only', () => {
   const migrationsDir = path.resolve(__dirname, 'migrations')
 
-  function latestMigrationFile(): string {
+  function migrationFileByPrefix(prefix: string): string {
     const files = fs
       .readdirSync(migrationsDir)
-      .filter((f) => f.endsWith('.sql'))
+      .filter((f) => f.endsWith('.sql') && f.startsWith(prefix))
       .sort()
     if (files.length === 0) {
-      throw new Error('No migration SQL files found — run `npm run db:generate` first.')
+      throw new Error(`No migration SQL file starting with "${prefix}" found — run \`npm run db:generate\` first.`)
     }
-    return files[files.length - 1]
+    return files[0]
   }
 
-  it('contains no DROP TABLE, DROP COLUMN, or SET NOT NULL statements', () => {
-    const file = latestMigrationFile()
+  it('0001 contains no DROP TABLE, DROP COLUMN, or SET NOT NULL statements', () => {
+    const file = migrationFileByPrefix('0001')
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8').toUpperCase()
 
     expect(sql).not.toMatch(/DROP\s+TABLE/)
@@ -158,8 +216,8 @@ describe('generated migration SQL is additive-only', () => {
     expect(sql).not.toMatch(/SET\s+NOT\s+NULL/)
   })
 
-  it('contains ADD COLUMN statements for the new encryption-prep columns', () => {
-    const file = latestMigrationFile()
+  it('0001 contains ADD COLUMN statements for the new encryption-prep columns', () => {
+    const file = migrationFileByPrefix('0001')
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8').toUpperCase()
 
     expect(sql).toMatch(/ADD\s+COLUMN\s+"?CIPHERTEXT"?/)
@@ -167,5 +225,39 @@ describe('generated migration SQL is additive-only', () => {
     expect(sql).toMatch(/ADD\s+COLUMN\s+"?ALG"?/)
     expect(sql).toMatch(/ADD\s+COLUMN\s+"?VERSION"?/)
     expect(sql).toMatch(/CREATE\s+TABLE\s+"?HOUSEHOLD_KEYS"?/)
+  })
+})
+
+describe('drizzle/migrations/0002 — NOT NULL relaxation, additive only', () => {
+  const migrationsDir = path.resolve(__dirname, 'migrations')
+
+  function migration0002File(): string {
+    const files = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql') && f.startsWith('0002'))
+      .sort()
+    if (files.length === 0) {
+      throw new Error('No migration SQL file starting with "0002" found — run `npm run db:generate` first.')
+    }
+    return files[0]
+  }
+
+  it('contains no DROP TABLE, DROP COLUMN, SET NOT NULL, RENAME, or TRUNCATE statements', () => {
+    const file = migration0002File()
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8').toUpperCase()
+
+    expect(sql).not.toMatch(/DROP\s+TABLE/)
+    expect(sql).not.toMatch(/DROP\s+COLUMN/)
+    expect(sql).not.toMatch(/SET\s+NOT\s+NULL/)
+    expect(sql).not.toMatch(/RENAME/)
+    expect(sql).not.toMatch(/TRUNCATE/)
+  })
+
+  it('contains exactly eleven ALTER COLUMN ... DROP NOT NULL statements', () => {
+    const file = migration0002File()
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8').toUpperCase()
+
+    const dropNotNullMatches = sql.match(/ALTER\s+TABLE\s+\S+\s+ALTER\s+COLUMN\s+\S+\s+DROP\s+NOT\s+NULL/g) ?? []
+    expect(dropNotNullMatches).toHaveLength(11)
   })
 })
