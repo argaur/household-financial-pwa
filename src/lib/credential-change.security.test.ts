@@ -64,6 +64,8 @@ async function seed() {
     legacyRow,
     keys: {
       householdId: HOUSEHOLD,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
       kdfAlg: KDF_ALG,
       kdfIterations: ITER,
       passphraseSalt: toBase64Url(pSalt),
