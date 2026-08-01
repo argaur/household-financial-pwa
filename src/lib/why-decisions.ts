@@ -87,11 +87,11 @@ export const WHY_SECTIONS: WhySection[] = [
         why: 'This project’s zero-config Vercel build only routes single-segment /api/* paths to the function; a second segment 404s at the platform before the code runs. Found in the build manifest, then designed around rather than fought.',
       },
       {
-        heading: 'Works offline, and says so honestly',
+        heading: 'Offline reading, and an honest limit',
         decision:
-          'Offline, the last dashboard and the whole library still load; write forms disable themselves and state that nothing is queued. Signing out purges the cached dashboard.',
-        insteadOf: 'A background write-queue that replays edits when you reconnect.',
-        why: 'A sync queue is a data-integrity minefield for v1. Read-only offline that tells the truth about its limits is more trustworthy than a queue that silently drops edits. The sign-out purge is a data-isolation fix, not a nicety.',
+          'Offline, the whole 30-instrument library and this page load from cache. The signed-in dashboard does not: the auth library is fetched from Clerk at runtime, so with no network there is no session, and no session means nothing to show. Rather than fake it, the app is explicit that offline covers the public reading surface only.',
+        insteadOf: 'Claiming a full offline dashboard, or rendering cached financial data without a verified session.',
+        why: 'The cache was never the hard part. Showing a household\'s balances because they happen to sit in a cache, with nothing checking who is asking, is a data-isolation hole dressed up as a feature. A smaller promise that is actually true beats a larger one that is not.',
       },
     ],
   },

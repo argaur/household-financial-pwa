@@ -73,7 +73,7 @@ The fix was one line of route code. The durable output was the regression test t
   │  Vite + React + TS · Tailwind + shadcn   │
   │  Recharts (allocation donut)             │
   │  Service worker: precached library +     │
-  │  last-known dashboard (read-only offline)│
+  │  library + /why (read-only offline)      │
   └───────────────┬──────────────────────────┘
                   │  HTTPS /api/*
                   ▼

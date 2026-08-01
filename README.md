@@ -31,7 +31,7 @@ check in that fixed order, which keeps it deterministic and tunable by nobody.
 ## Stack
 
 - **Frontend** — Vite · React 18 · TypeScript · Tailwind · shadcn/ui · Recharts · React Router
-- **PWA** — vite-plugin-pwa (precached instrument library + last-known dashboard; read-only offline)
+- **PWA** — vite-plugin-pwa; the instrument library and `/why` are precached and work offline. The signed-in dashboard does not (B-005, D-013): Clerk's library loads from a remote script, so there is no session offline.
 - **API** — Hono, deployed as Vercel Functions
 - **Data** — Drizzle ORM over Neon serverless Postgres (7 tables)
 - **Auth** — Clerk (hosted UI; sessions verified server-side against Clerk's JWKS via `jose`)

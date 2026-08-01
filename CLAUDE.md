@@ -19,7 +19,7 @@ A public PWA for Indian households to learn what financial instruments exist, re
 - **Known gaps:** Vercel Preview-environment env vars (Clerk, Sentry) not yet set — Production only. `signup_failed`/`login_failed` analytics events unimplemented (Clerk's prebuilt UI has no failure callback without a custom auth form). Server-side Sentry error capture still deferred — only the client is wired (`server/app.ts:14`).
 
 ## Architecture
-Vite + React SPA ↔ Hono API (Vercel Functions) ↔ Drizzle ORM ↔ Neon Postgres. Clerk for auth. PWA shell via vite-plugin-pwa (precached library + last-known dashboard, read-only offline). PostHog for analytics; Sentry for errors. The `analytics_events` table exists in the schema but **nothing writes to it** — D-005 planned a dual sink, it was never built, and D-012 supersedes it.
+Vite + React SPA ↔ Hono API (Vercel Functions) ↔ Drizzle ORM ↔ Neon Postgres. Clerk for auth. PWA shell via vite-plugin-pwa — **library and `/why` are offline-capable; the authenticated dashboard is not** (B-005: Clerk's library loads from a remote script, so offline there is no session; scope corrected in D-013). PostHog for analytics; Sentry for errors. The `analytics_events` table exists in the schema but **nothing writes to it** — D-005 planned a dual sink, it was never built, and D-012 supersedes it.
 
 ## Stack
 Vite + React + TypeScript + Tailwind + shadcn/ui + Recharts (frontend) · Hono on Vercel Functions (API) · Drizzle (ORM) · Neon (DB) · Clerk (auth) · PostHog + Sentry.

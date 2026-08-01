@@ -71,7 +71,7 @@ A new user completes a 3-step, fact-only onboarding (household → members → f
 | 5 | Single ordered inline nudge → learn-card link | Closes the loop from "what's missing" to "go learn about it," enforcing education-not-advice (Q9) |
 | 6 | Instrument library — 6 sections × 5 instruments (30 total) | Expresses the literacy half of the positioning at a bounded, finishable content scope (Q10) |
 | 7 | Bottom tab nav (Home·Explore·Portfolio·Profile) + "+" FAB | Locked product navigation shape from the 2026-06-14 brainstorm |
-| 8 | PWA shell (vite-plugin-pwa) — precached library + last-known dashboard | Locked offline/installability requirement; read-only, no write-queue |
+| 8 | PWA shell (vite-plugin-pwa) — precached library + `/why` | Locked offline/installability requirement; read-only, no write-queue. **Scope corrected 2026-08-01 (D-013):** this row previously included "last-known dashboard". The offline dashboard was never achievable as built — Clerk's library loads from a remote script, so offline there is no session. See B-005. |
 | 9 | Custom PWA install prompt (post-activation) | Locked over native auto-prompt for UX control |
 | 10 | "Why these choices?" in-app page | Recruiter/portfolio narrative surface (Q7 craft+architecture signal still benefits from this existing, even if not the primary pitch) |
 | 11 | Global education-not-advice disclaimer + consent modal | Regulatory hard constraint, non-negotiable |

@@ -298,7 +298,14 @@ Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`d
 
 **Copy written for this slice, flagged for COPY_DECK backfill:** the offline banner and the offline-write message. `COPY_DECK.md` covers the install prompt (used verbatim) but has no entry for either.
 
-**Live verification:** owed to Gaurav — human click-through of the 12 steps above, on a real deployment. This slice is the one most dependent on live verification in the whole plan: service workers, install prompts, and offline behaviour cannot be meaningfully exercised by unit tests or by `vercel dev`.
+**Live verification: performed 2026-08-01 on `https://finance.gauravg.dev`. Steps 6, 7, 9 and 10 FAILED. Logged as B-005; scope corrected in D-013 rather than fixed.**
+
+- **Step 1 PASS** — service worker registered and activated (confirmed by Gaurav in DevTools → Application).
+- **Step 8 PASS** — the library renders offline from precache. Verified on `/why` rather than an instrument page: all 8 decision cards present in the accessibility tree with the network offline.
+- **Steps 6, 7, 9, 10 FAIL** — offline, the authenticated app renders **nothing**. Not a degraded dashboard, not a missing banner: the accessibility tree contains no application content at all. Console: `Clerk: Failed to load Clerk, failed to load script: https://clerk.finance.gauravg.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js` (`failed_to_load_clerk_js`), then `failed_to_load_clerk_js_timeout`. Clerk's library is fetched from a remote origin at runtime and is not cached, so offline there is no session and the shell never renders its children. The service worker's cached dashboard is never reached. Confirmed offline-specific: the same URL renders fully once the network is restored.
+- **Steps 2–5, 11, 12 NOT RUN** — steps 2–5 are the install flow and 11–12 depend on an offline dashboard existing. With the offline dashboard removed from scope (D-013), step 12's sign-out cache purge is no longer the data-isolation guard it was written to be, because there is no cached dashboard to leak. The purge code remains and is unit-tested.
+
+**This is why the slice matters.** The three sections above assert that offline behaviour "cannot be meaningfully exercised by unit tests" — and they were right. Every Slice 8 test passes with Clerk mocked out, which is exactly the seam that broke. The live pass this slice always owed was never run until 2026-08-01, and it failed on first contact. Same shape as B-001.
 
 ---
 
