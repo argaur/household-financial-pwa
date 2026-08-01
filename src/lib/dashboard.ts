@@ -16,6 +16,14 @@ export interface CompletenessResult {
   tier: CompletenessTier
 }
 
+/**
+ * Alias kept for the components that used to import this shape from the
+ * now-deleted src/lib/dashboard-api.ts (Slice 6's server-fetch client). Same
+ * shape as {@link CompletenessResult} — this is the name the component layer
+ * (health-tier-card.tsx) knows it by.
+ */
+export type Completeness = CompletenessResult
+
 // Narrow input shapes for computeCompleteness — only the fields the 5 checks
 // actually read, so it's testable against plain fixture objects without
 // pulling in full drizzle row types (member/holding/protection).

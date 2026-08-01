@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { NudgeCard } from './nudge-card'
-import type { Nudge } from '@/lib/dashboard-api'
+import type { Nudge } from '@/lib/nudge'
 
 const track = vi.fn()
 vi.mock('@/lib/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))

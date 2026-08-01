@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AllocationDonut } from './allocation-donut'
-import type { AllocationSlice } from '@/lib/dashboard-api'
+import type { AllocationSlice } from '@/lib/allocation'
 
 const allocation: AllocationSlice[] = [
   { assetClass: 'equity', value: 6000, percentage: 60 },

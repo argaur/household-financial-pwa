@@ -1,4 +1,4 @@
-import type { Completeness, CompletenessTier } from '@/lib/dashboard-api'
+import type { Completeness, CompletenessTier } from '@/lib/dashboard'
 
 // Copy: Documentation/design/COPY_DECK.md — "Household Health panel".
 const TIER_LABELS: Record<CompletenessTier, string> = {

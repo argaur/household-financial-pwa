@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { HealthTierCard } from './health-tier-card'
-import type { Completeness } from '@/lib/dashboard-api'
+import type { Completeness } from '@/lib/dashboard'
 
 const allUnmet: Completeness = {
   checks: {

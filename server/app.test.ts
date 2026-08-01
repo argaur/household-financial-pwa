@@ -65,3 +65,17 @@ describe('CORS', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
   })
 })
+
+// The dashboard moved entirely client-side (Household Health tier, the
+// allocation donut and the nudge are now computed in the browser from
+// already-decrypted rows — see src/pages/Dashboard.tsx). `server/routes/
+// dashboard.ts` and `server/lib/dashboard.ts` were deleted along with it;
+// this asserts the route is actually gone at the app level, not just that
+// the file was removed — a stray `app.route('/dashboard', ...)` left behind
+// would still serve it.
+describe('removed: GET /api/dashboard', () => {
+  it('no longer exists', async () => {
+    const res = await app.request('/api/dashboard', { headers: { authorization: 'Bearer user_a' } })
+    expect(res.status).toBe(404)
+  })
+})

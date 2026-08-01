@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { track } from '@/lib/analytics'
 import { getSectionByUrlSlug } from '@/lib/library-sections'
-import type { Nudge, NudgeCheckId } from '@/lib/dashboard-api'
+import type { Nudge, NudgeCheckId } from '@/lib/nudge'
 
 // Copy: Documentation/design/COPY_DECK.md — "Nudge (single — first unmet
 // check in order)". Two deviations from that deck, both deliberate and

@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell } from 'recharts'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { AllocationSlice, AssetClass } from '@/lib/dashboard-api'
+import type { AllocationSlice, AssetClass } from '@/lib/allocation'
 
 // Copy: Documentation/design/COPY_DECK.md — "Allocation donut section".
 const ASSET_LABELS: Record<AssetClass, string> = {
