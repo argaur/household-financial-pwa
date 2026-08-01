@@ -57,6 +57,7 @@ describe('public surface', () => {
         'normalizeRecoveryCode',
         'padToBlock',
         'recoveryCodeToBytes',
+        'rewrapDataKey',
         'toBase64Url',
         'unpadFromBlock',
         'unwrapDataKey',

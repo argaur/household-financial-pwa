@@ -60,6 +60,7 @@ export {
   generateDataKey,
   wrapDataKey,
   unwrapDataKey,
+  rewrapDataKey,
   type WrappedDataKey,
 } from './keys'
 

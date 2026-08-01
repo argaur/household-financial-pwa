@@ -183,6 +183,22 @@ export async function unwrapDataKey(
   iv: string,
   wrappingKey: CryptoKey,
 ): Promise<CryptoKey> {
+  return unwrap(wrapped, iv, wrappingKey, false)
+}
+
+/**
+ * The shared unwrap. `extractable` is a private parameter on purpose: it is
+ * never exposed as an option on {@link unwrapDataKey}, because a boolean any
+ * caller can flip is one autocomplete away from persisting an extractable data
+ * key. The only path that may set it is {@link rewrapDataKey}, which keeps the
+ * resulting key as a local and returns bytes rather than a `CryptoKey`.
+ */
+async function unwrap(
+  wrapped: string,
+  iv: string,
+  wrappingKey: CryptoKey,
+  extractable: boolean,
+): Promise<CryptoKey> {
   const ivBytes = fromBase64Url(iv)
   if (ivBytes.length !== IV_BYTES) {
     throw new CryptoError(
@@ -202,7 +218,7 @@ export async function unwrapDataKey(
       wrappingKey,
       { name: 'AES-GCM', iv: ivBytes },
       { name: 'AES-GCM', length: DATA_KEY_BITS },
-      false,
+      extractable,
       ['encrypt', 'decrypt'],
     )
   } catch (cause) {
@@ -212,4 +228,37 @@ export async function unwrapDataKey(
       { cause },
     )
   }
+}
+
+/**
+ * Re-wrap the household data key under a new credential.
+ *
+ * This is what a passphrase change and a recovery-code reset both do. Neither
+ * touches a single stored row: the data key stays the same, only the wrapper
+ * around it changes. That is the entire reason the data key exists separately
+ * from the passphrase.
+ *
+ * WebCrypto will not wrap a non-extractable key, and every key handed out by
+ * {@link unwrapDataKey} is non-extractable — so the rewrap has to open its own
+ * short-lived extractable copy. That copy is a local inside this function: it
+ * is never returned, never stored, and never reachable from the caller, so the
+ * key at rest in IndexedDB remains non-extractable at all times. The caller
+ * gets bytes back, not a key handle.
+ *
+ * Requires the *current* credential, so a passphrase change cannot be driven by
+ * someone who merely has an unlocked tab.
+ */
+export async function rewrapDataKey(
+  current: WrappedDataKey,
+  currentWrappingKey: CryptoKey,
+  newWrappingKey: CryptoKey,
+): Promise<WrappedDataKey> {
+  const extractableDataKey = await unwrap(
+    current.wrapped,
+    current.iv,
+    currentWrappingKey,
+    true,
+  )
+  // A fresh IV, because this is a new wrap under a different key.
+  return wrapDataKey(extractableDataKey, newWrappingKey)
 }
