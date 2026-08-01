@@ -58,14 +58,14 @@ describe('OnboardingStep2', () => {
 
   it('adding a member via the sheet appends it to the list', async () => {
     listFamilyMembers.mockResolvedValue([])
-    const created = { id: '2', householdId: 'h1', name: 'Rinku Gupta', relationship: 'spouse', dateOfBirth: '1991-02-02' }
+    const created = { id: '2', householdId: 'h1', name: 'Priya Sharma', relationship: 'spouse', dateOfBirth: '1991-02-02' }
     createFamilyMember.mockResolvedValue(created)
 
     render(<OnboardingStep2 onContinue={vi.fn()} />)
     await screen.findByText(/start by adding yourself/i)
 
     fireEvent.click(screen.getByRole('button', { name: /add a family member/i }))
-    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Rinku Gupta' } })
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Priya Sharma' } })
     fireEvent.change(screen.getByLabelText(/date of birth/i), { target: { value: '1991-02-02' } })
 
     // Radix Select isn't a native <select>; drive it via its combobox trigger + option role.
@@ -75,10 +75,10 @@ describe('OnboardingStep2', () => {
     fireEvent.click(screen.getByRole('button', { name: /add to plan/i }))
 
     await waitFor(() => expect(createFamilyMember).toHaveBeenCalledWith('test-token', {
-      name: 'Rinku Gupta',
+      name: 'Priya Sharma',
       relationship: 'spouse',
       dateOfBirth: '1991-02-02',
     }))
-    await screen.findByText('Rinku Gupta')
+    await screen.findByText('Priya Sharma')
   })
 })

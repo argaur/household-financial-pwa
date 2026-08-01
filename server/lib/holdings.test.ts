@@ -101,7 +101,7 @@ describe('createHolding', () => {
       ...validInput,
       units: '12.5',
       monthlySip: '2000',
-      nominee: 'Rinku',
+      nominee: 'Priya',
       isEmergencyFund: true,
     })
     expect(result.isEmergencyFund).toBe(true)
