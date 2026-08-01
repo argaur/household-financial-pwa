@@ -175,9 +175,22 @@ point a code rollback stops being recoverable on its own.
 
 ### Backups & Point-in-Time Restore
 
-**Status: not configured, not tested, restore never rehearsed.** This is the single largest
-genuine risk on the deployment checklist — the only item whose failure mode is *permanent*
-loss of household financial data, not degraded service. See
+**Status as of 2026-08-01: confirmed in-console, and the restore is rehearsed and proven.** See
+"Restore rehearsal" at the end of this section for the evidence. What follows below was written
+before that and is kept because the procedure is still correct; only the "not verified" hedges are
+now resolved.
+
+**Confirmed in the Neon console 2026-08-01, not inferred from docs:** plan **Free**, **history
+retention 6 hours**, Postgres 17, region AWS us-east-1. The project is `neon-cerulean-coin`
+(`autumn-queen-58900480`). That closes the "plausible, not verified" flag this section used to carry
+about which plan a Vercel-Marketplace-provisioned database lands on.
+
+**The 6-hour window is the real limit, and it is small.** A data-loss incident on Friday evening,
+noticed Monday, is **not recoverable**. Accepted deliberately with a written trigger rather than
+paid around: **the first real user who is not Gaurav or a test account signs up, upgrade to Launch
+(7-day window) before that session ends.** Today the database holds only synthetic test households.
+
+See
 `Documentation/deployment/DEPLOYMENT_CHECKLIST.md` line "Database backups configured" (kept
 unticked deliberately — documenting a backup is not having one).
 
@@ -279,8 +292,40 @@ recovery workflows](https://neon.com/branching/recovery-workflows) (checked 2026
 these describe creating a branch from a parent/point-in-time as the supported pattern for
 safe, non-production testing against real data shape.
 
-**Rehearsal record:** not yet performed. First entry due before the checklist backup item can
-be ticked.
+**Restore rehearsal: PERFORMED AND PROVEN 2026-08-01.** Run by Claude in the Neon console, driven
+through Chrome. Production was never touched.
+
+*What made it a real test.* Minutes earlier, Slice 9 step 12 had permanently deleted the "Sharma
+Family" household via Clerk's `user.deleted` webhook — a household, 2 members, 3 holdings and 1
+protection record, gone from production. The rehearsal then recovered exactly that data from history.
+
+*Method.* Branches → New Branch → **"Branch data and schema from a past point in time"** → 2026-08-01
+**11:30 IST** (after the household was populated, before it was deleted). Branch `restore-rehearsal-3`,
+forked in **0.60 seconds**, auto-expiring after 1 day.
+
+*Result, queried on both branches with the same statement:*
+
+| | `main` (production, post-delete) | `restore-rehearsal-3` (11:30) |
+|---|---|---|
+| households | 2 | **3** |
+| household names | Gaurav's Family, Renamed Household | Gaurav's Family, Renamed Household, **Sharma Family** |
+| family_members | 3 | **5** |
+| holdings | 1 | **4** |
+| protection | 0 | **1** |
+| instruments | 30 | 30 |
+
+Permanently deleted data was recovered. Point-in-time restore works on this project, on this plan.
+
+> **The trap that made the first two attempts worthless, so it does not happen again at 2am.** The
+> Create-branch dialog defaults to **"Branch data and schema"**, which means *up to this moment* —
+> a copy of production, not a rewind. You must explicitly pick **"from a past point in time"** and set
+> the timestamp. Two earlier attempts on 2026-08-01 came back byte-identical to production and were
+> rejected as vacuous rather than recorded as passes.
+>
+> **A second, subtler trap:** a rewind only proves anything if something actually *changed* in the
+> window. The first attempt branched from two hours earlier on a database that had not been written to
+> in four days, so the branch was necessarily identical and proved nothing. **Choose a timestamp that
+> straddles a known write or delete**, then assert on the difference.
 
 ## Rotate a Secret
 
