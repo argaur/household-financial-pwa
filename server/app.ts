@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from './lib/db.js'
 import { computeHealth } from './lib/health.js'
 import { householdRoutes } from './routes/household.js'
+import { householdKeysRoutes } from './routes/household-keys.js'
 import { familyMembersRoutes } from './routes/family-members.js'
 import { instrumentsRoutes } from './routes/instruments.js'
 import { holdingsRoutes } from './routes/holdings.js'
@@ -56,6 +57,8 @@ app.get('/health', async (c) => {
 })
 
 app.route('/household', householdRoutes)
+// Single path segment — see server/routes/household-keys.ts for why.
+app.route('/household-keys', householdKeysRoutes)
 app.route('/family-members', familyMembersRoutes)
 app.route('/instruments', instrumentsRoutes)
 app.route('/holdings', holdingsRoutes)
