@@ -8,7 +8,7 @@
 
 ## Capability: Slice 0 — Walking Skeleton (system status page)
 
-**Setup:** Visit https://household-financial-pwa.vercel.app in any browser. No login or test data needed.
+**Setup:** Visit https://finance.gauravg.dev in any browser. No login or test data needed.
 
 **Steps:**
 1. Load the page.
@@ -32,7 +32,7 @@
 
 ## Capability: Slice 1 — Auth + household creation
 
-**Setup:** Visit https://household-financial-pwa.vercel.app in any browser. No existing account needed — sign-up flow is being tested.
+**Setup:** Visit https://finance.gauravg.dev in any browser. No existing account needed — sign-up flow is being tested.
 
 **Steps:**
 1. Load the page. You should land on a "Welcome back." sign-in screen (not the old system-status page).
@@ -54,7 +54,7 @@
 - [ ] Touch targets ≥44px on the Continue button
 - [x] Text readable (WCAG AA contrast) — closed by Slice 10 accessibility pass, 2026-07-21: 0 axe violations (wcag2a/2aa/21aa) on all five live screens
 
-**Result:** PASS — 2026-07-10, verified live at https://household-financial-pwa.vercel.app. Sign-up, household creation, and household-scoped persistence across refresh/sign-out-sign-in all confirmed working. One deploy-time gotcha found and fixed along the way: a stale PWA service worker (installed during the Slice 0 visit) served the old cached shell after this deploy went live, masking the new code until the service worker was unregistered and the page hard-refreshed — worth remembering for every future slice's live smoke-test, not just this one. Accessibility checklist not walked this pass — deferred to Slice 10 per Slice 0's precedent.
+**Result:** PASS — 2026-07-10, verified live at https://finance.gauravg.dev. Sign-up, household creation, and household-scoped persistence across refresh/sign-out-sign-in all confirmed working. One deploy-time gotcha found and fixed along the way: a stale PWA service worker (installed during the Slice 0 visit) served the old cached shell after this deploy went live, masking the new code until the service worker was unregistered and the page hard-refreshed — worth remembering for every future slice's live smoke-test, not just this one. Accessibility checklist not walked this pass — deferred to Slice 10 per Slice 0's precedent.
 
 ---
 
@@ -88,7 +88,7 @@
 
 ## Capability: Slice 3 — Instrument library (seed + browse)
 
-**Setup:** Visit https://household-financial-pwa.vercel.app. No sign-in needed — this capability is public. Fastest path: append `/explore` to the URL directly, or sign in and tap "Explore what you can invest in" from the post-onboarding confirmation screen.
+**Setup:** Visit https://finance.gauravg.dev. No sign-in needed — this capability is public. Fastest path: append `/explore` to the URL directly, or sign in and tap "Explore what you can invest in" from the post-onboarding confirmation screen.
 
 **Steps:**
 1. Load `/explore`. You should see "What can you invest in?" with 6 section cards: Equity, Debt, Gold, Hybrid & Guaranteed, Real Estate, Alternative.
@@ -111,7 +111,7 @@
 
 **Real bug found and fixed along the way, not a local-tooling fluke:** the original design used a `/api/instruments/:slug` path parameter for instrument detail. This 404'd under local `vercel dev`, then 404'd identically on a real production deploy — `vercel build`'s generated `.vercel/output/config.json` showed Vercel's zero-config routing for this project (`framework: "vite"`, not Next.js) only maps single-path-segment requests under `/api/` to the catch-all function; anything with a second segment hits a hardcoded 404 rule the platform generates itself. Confirmed this isn't specific to the new route — `/api/family-members/anything` 404s the same way on the already-shipped Slice 2 code, it just never happened to be exercised. Fixed by switching instrument-detail lookup to a query param (`/api/instruments?slug=...`), the same fix-pattern this project already used twice for Vercel platform limitations (manual JWT verification instead of `@hono/clerk-auth`; moving server code out of `api/`). Re-verified live on production after the fix — see below.
 
-**Live verification:** confirmed on production (https://household-financial-pwa.vercel.app) after the query-param fix: `/api/instruments` (list, 30 rows), `/api/instruments?category=N` (filtered, 5 rows), and `/api/instruments?slug=equity-direct-stocks` (single instrument, 200) all return real data; `/api/instruments?slug=does-not-exist` returns 404. **Human click-through: PASSED 2026-07-21** (browser-driven against production in a real signed-in Chrome). Explore → section → detail verified end to end: all 6 sections × 5 instruments present, rate line renders where applicable (PPF `7.1%` with its as-of date) and is correctly absent where not (Direct Stocks). Slice 3 is fully signed off — it is not on the pending list.
+**Live verification:** confirmed on production (https://finance.gauravg.dev) after the query-param fix: `/api/instruments` (list, 30 rows), `/api/instruments?category=N` (filtered, 5 rows), and `/api/instruments?slug=equity-direct-stocks` (single instrument, 200) all return real data; `/api/instruments?slug=does-not-exist` returns 404. **Human click-through: PASSED 2026-07-21** (browser-driven against production in a real signed-in Chrome). Explore → section → detail verified end to end: all 6 sections × 5 instruments present, rate line renders where applicable (PPF `7.1%` with its as-of date) and is correctly absent where not (Direct Stocks). Slice 3 is fully signed off — it is not on the pending list.
 
 ---
 

@@ -36,7 +36,7 @@ bash scripts/predeploy-check.sh <PRODUCTION_URL>   # must exit 0
 
 ## Definition of Shipped — all six must be true
 
-1. [x] **Deployed and publicly accessible** — https://household-financial-pwa.vercel.app
+1. [x] **Deployed and publicly accessible** — https://finance.gauravg.dev
 2. [x] **`/health` + Sentry confirming it's alive** — `/api/health` returns 200 with a live DB round-trip; Sentry client-side (server-side deferred, above).
 3. [x] **PostHog North Star funnel verified end-to-end** — 2026-07-28. Funnel built and saved as insight [`bMF690Mf`](https://us.posthog.com/project/486719/insights/bMF690Mf) ("North Star — Onboarding funnel"), screenshot at `Documentation/product/screenshots/north-star-onboarding-funnel-2026-07-28.jpg`. All four steps of the core journey are queryable and populated: `onboarding_started` → `onboarding_step_completed` → `onboarding_completed` → `dashboard_viewed`, 100% conversion, median time-to-convert 2m 3s across the whole funnel. Scoped with `project = 'financial-planning'` — required, because this is the shared "Web Fleet" PostHog project and every event carries that registered property.
 

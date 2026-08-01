@@ -1,6 +1,6 @@
 # How to use Household Financial Planning
 
-Live: https://household-financial-pwa.vercel.app
+Live: https://finance.gauravg.dev
 
 > Rendered at the `/docs` route. Stub created in Slice 0; each development slice adds its capability section **in the same commit as the feature code**. By deployment, this is complete — never written retroactively.
 
@@ -65,7 +65,7 @@ Removing an individual family member (without deleting the whole account) has th
 
 **What's enforced:** household rename and member edit/remove use the same server-side household-scoping pattern as every other route in this app — a member ID that doesn't belong to your household 404s rather than 400s, so a guessed ID never leaks whether it exists elsewhere. The account-deletion webhook is **not** a normal session-authed route (there's no user session — Clerk calls it server-to-server) — it verifies a Svix HMAC signature over the raw request body against a secret only this app and Clerk know, and rejects anything unsigned, wrongly signed, or older than 5 minutes (replay protection) before touching the database. It's mounted at a flat `/api/clerk-webhook` path (not `/api/webhooks/clerk`) for the same Vercel single-path-segment routing reason as every other `?id=`-style route in this app — verified against a real `vercel build` output, not assumed.
 
-**Manual step needed before this works in production:** the Clerk dashboard needs (1) a webhook endpoint registered pointing at `https://household-financial-pwa.vercel.app/api/clerk-webhook`, subscribed to the `user.deleted` event, with its signing secret set as the `CLERK_WEBHOOK_SECRET` environment variable in Vercel, and (2) "Allow users to delete their own account" enabled under User & Authentication settings (Clerk's self-service account deletion is off by default) — neither of these was done as part of this slice, per the standing rule that live third-party dashboard changes and deploys need Gaurav's explicit go-ahead.
+**Manual step needed before this works in production:** the Clerk dashboard needs (1) a webhook endpoint registered pointing at `https://finance.gauravg.dev/api/clerk-webhook`, subscribed to the `user.deleted` event, with its signing secret set as the `CLERK_WEBHOOK_SECRET` environment variable in Vercel, and (2) "Allow users to delete their own account" enabled under User & Authentication settings (Clerk's self-service account deletion is off by default) — neither of these was done as part of this slice, per the standing rule that live third-party dashboard changes and deploys need Gaurav's explicit go-ahead.
 
 ### Understanding your Household Health score
 

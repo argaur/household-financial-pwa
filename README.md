@@ -1,8 +1,10 @@
 # Household Financial Planning PWA
 
-**Live: https://household-financial-pwa.vercel.app** · [Why these choices? (in-app)](https://household-financial-pwa.vercel.app/why)
+**Live: https://finance.gauravg.dev** · [Why these choices? (in-app)](https://finance.gauravg.dev/why)
 
-<!-- SCREENSHOT PLACEHOLDER — no hero image yet. The only live household is an empty test account, so any screenshot today would show empty states. Add a 390px mobile shot of the dashboard (allocation donut + Health tier + nudge) once a synthetic household is populated. -->
+![The dashboard after onboarding: Household Health tier, asset-class allocation donut, and the single prioritised next step](Documentation/product/screenshots/hero-dashboard-2026-08-01.png)
+
+<sub>Captured live on 2026-08-01 from a synthetic household. This repo is public, so no real household data appears anywhere in it.</sub>
 
 ## What this is, and why
 
@@ -47,9 +49,9 @@ React SPA (Vercel static)  ->  Hono API (Vercel Functions)  ->  Drizzle  ->  Neo
 The whole API is one catch-all Vercel Function (`api/[[...route]].ts`) mounting a Hono app; all route, lib and
 server-test code lives in `server/` because Vercel treats every file directly under `api/` as its own deployable
 function. Multi-tenancy is enforced at the application layer — Hono resolves `household_id` from the Clerk
-session on every request and scopes each query to it, rather than relying on Postgres RLS. Analytics events are
-written twice on purpose: to PostHog for funnel/retention dashboards, and to the internal table so the
-Completeness Score funnel stays fully queryable and owned.
+session on every request and scopes each query to it, rather than relying on Postgres RLS. Analytics go to
+PostHog only, through the single `track()` wrapper in `src/lib/analytics.ts`. D-005 planned a second internal
+sink as well; it was never built, and D-012 records that decision rather than pretending otherwise.
 
 ## Documentation
 
@@ -59,7 +61,7 @@ Completeness Score funnel stays fully queryable and owned.
 | [`Documentation/product/HOW_TO_USE.md`](Documentation/product/HOW_TO_USE.md) | User-facing guide, capability by capability (also served at `/docs`) |
 | [`Documentation/solution/DECISIONS_LOG.md`](Documentation/solution/DECISIONS_LOG.md) | Append-only decision log; every entry names its rejected alternative |
 | [`Documentation/solution/SOLUTION_BRIEF.md`](Documentation/solution/SOLUTION_BRIEF.md) | Approved v1 scope, non-goals, risk register, cost and kill budget |
-| [`/why`](https://household-financial-pwa.vercel.app/why) | The same reasoning, in-app and readable without an account |
+| [`/why`](https://finance.gauravg.dev/why) | The same reasoning, in-app and readable without an account |
 
 ## Local development
 

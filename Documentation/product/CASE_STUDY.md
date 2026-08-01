@@ -15,10 +15,12 @@ An Indian household's money is scattered across a dozen products and two or thre
 
 A public, installable PWA where a household is the unit of account. Three fact-only onboarding steps — household, members, first holding — land you on a dashboard showing your real asset-class allocation, a Household Health tier scored on five binary checks, and exactly one prioritised next step linking to a plain-language explainer. No buy buttons: the product is education-first by hard constraint, not by style preference. A 30-instrument library across six asset classes covers what an Indian household actually holds.
 
-**Live:** https://household-financial-pwa.vercel.app
+**Live:** https://finance.gauravg.dev
 **Code:** https://github.com/argaur/household-financial-pwa (public, deliberately — see D-004)
 
-*Hero screenshot to be captured per `PORTFOLIO_ANGLE.md`: the moment right after onboarding step 3, with the allocation donut, health tier, and nudge appearing together. Not yet in the repo.*
+![Dashboard after onboarding: Household Health tier, allocation donut, and one prioritised next step](screenshots/hero-dashboard-2026-08-01.png)
+
+*Captured live 2026-08-01, the moment right after onboarding step 3, per `PORTFOLIO_ANGLE.md`. Synthetic household: this repo is public and never carries real financial data.*
 
 **Outcome:** eleven vertical slices from empty repo to feature-complete and live in six weeks (first deploy 2026-07-10, thirteen days inside a self-imposed 30-day kill criterion; feature-complete 2026-07-21), at ₹0/month infrastructure cost on free tiers, with a 310-test suite and zero axe accessibility violations across all five screens in production.
 

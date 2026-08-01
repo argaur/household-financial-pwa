@@ -3,7 +3,7 @@
 **Audience:** You, during an incident, possibly at 2am. Exact commands only — no "hopeful paragraphs."
 
 **The system, in one line:** Vite/React SPA + Hono API on Vercel Functions → Drizzle → Neon Postgres,
-auth by Clerk. Live at <https://household-financial-pwa.vercel.app>.
+auth by Clerk. Live at <https://finance.gauravg.dev>.
 
 | Thing | Identifier |
 |---|---|
@@ -27,13 +27,13 @@ Vercel owns deploys.
 
 ```bash
 # 1. Gate first. Must exit 0 — this is the honest reviewer, the checklist is not.
-bash scripts/predeploy-check.sh https://household-financial-pwa.vercel.app
+bash scripts/predeploy-check.sh https://finance.gauravg.dev
 
 # 2. Deploy.
 git push origin main            # Vercel builds automatically
 
 # 3. Confirm the new deployment is live and talking to the database.
-curl -s https://household-financial-pwa.vercel.app/api/health
+curl -s https://finance.gauravg.dev/api/health
 # expect: {"status":"ok","version":"...","commit_sha":"...","db":"ok"}
 # `db:"ok"` is the real signal — it round-trips to Neon. `status:"ok"` alone only proves boot.
 
@@ -77,7 +77,7 @@ vercel rollback https://household-financial-<id>-argaurs-projects.vercel.app
 vercel rollback status household-financial-pwa
 
 # 4. Verify — do not trust the CLI's word for it.
-curl -s https://household-financial-pwa.vercel.app/api/health
+curl -s https://finance.gauravg.dev/api/health
 # commit_sha must now be the last-good SHA, and db must still read "ok"
 ```
 
@@ -99,7 +99,27 @@ Same effect; use whichever is reachable at 2am.
 git revert <bad-sha> && git push origin main
 ```
 
-**Rollback rehearsal:** executed on YYYY-MM-DD, took [N] minutes, verified by [what you checked]. Mandatory on first deploy — the first rollback must not happen during an incident.
+**Rollback rehearsal: executed 2026-08-01.** Rolled production from `93bbe5f` back to `06b2534`, then forward
+again. Each direction: `vercel rollback` returned success in **8 seconds**, and the new build was serving within
+**13 seconds** (measured on the roll-forward, where `/api/health` was probed immediately). Verified by
+`commit_sha` at `/api/health` in both directions, with `db` still reading `"ok"`. Migration scope was checked
+first and was empty, so a code-only rollback was sufficient.
+
+> **The rehearsal found something, and it is the most important line in this section.** After an Instant
+> Rollback, **Vercel stops auto-promoting new deployments.** The alias stays pinned to the rolled-back build.
+> The next `git push` builds green, reports Ready, shows `target: production` — and does not go live. Its
+> `Aliases` list is empty. `vercel rollback status` says "No deployment rollback in progress", so nothing warns
+> you. During a real incident this is the trap: you roll back, push the fix, watch it succeed, and production
+> never changes.
+>
+> **So after any rollback, the recovery deploy must be promoted explicitly:**
+>
+> ```bash
+> vercel promote <new-deployment-url>   # restores normal auto-promotion too
+> curl -s https://finance.gauravg.dev/api/health   # confirm commit_sha actually moved
+> ```
+>
+> Observed on 2026-08-01: a push sat un-aliased for 20 minutes after the rehearsal before this was noticed.
 
 ## Logs
 
