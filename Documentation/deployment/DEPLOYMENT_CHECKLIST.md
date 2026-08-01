@@ -53,15 +53,21 @@ bash scripts/predeploy-check.sh <PRODUCTION_URL>   # must exit 0
 
     **It found a trap, which is the point of rehearsing.** After an Instant Rollback, Vercel stops auto-promoting. The next push built green, reported Ready and `target: production` — and never went live, because its alias list was empty. `vercel rollback status` reports "No deployment rollback in progress", so nothing warns you. In a real incident you would roll back, push the fix, watch it succeed, and production would not move. It cost 20 minutes here before being noticed. `RUNBOOK.md` now carries the mandatory `vercel promote` step. Previously read: **not done, but no longer unstartable.** As of 2026-07-29 `RUNBOOK.md` carries an actual rollback procedure (identify last-good deployment via `vercel ls` → `vercel rollback <url>` → `vercel rollback status` → verify `commit_sha` at `/api/health` → `git revert` to stop the next push re-deploying the bad code), plus the migration warning that a code rollback does not revert the database. Previously this box was blocked on the runbook being an empty template — there was literally nothing to rehearse. The rehearsal record at `RUNBOOK.md:93` still reads "executed on YYYY-MM-DD" and is deliberately left that way: writing a date there without running the rehearsal is the exact failure this box exists to prevent.
 
-**Verdict as of 2026-08-01: 5 of 6 true, 1 outstanding — the case study needs Gaurav's signature, and nothing else.** The rollback rehearsal is done and timed. The evidence layer that was missing a week ago (funnel, README, hero screenshot, rehearsal) is complete.
+## Verdict, 2026-08-01: **SHIPPED. Definition of Shipped 6 of 6.**
 
-Three things stay unticked above, and all three are deliberate rather than pending:
+Every item is true, and each one is ticked against an observation rather than a belief. The rollback was rehearsed and timed. The restore was rehearsed by recovering data that had genuinely been deleted. The webhook was proven by a real deletion cascading correctly, not by a probe that could not tell the right secret from the wrong one. The hero screenshot was taken from a live populated household, having been deliberately left undone for a week rather than faked against a zero-state.
 
-- **Rate limiting (SEC-001)** — an honest FAIL with a scoped exposure and a written trigger. Not silently ignored.
-- **Database backups** — Neon Free confirmed 2026-08-01 (6-hour window, 1 GB cap). The restore rehearsal is still owed, and this box will not be ticked on a documented procedure alone. The first attempt on 2026-08-01 was **vacuous and rejected as such**: the database had not been written to in four days, so a branch from two hours earlier was byte-identical to production and proved nothing. It will be redone against a timestamp before today's data.
-- **Slice 8 offline** — verified live for the first time on 2026-08-01 and **failed** (B-005). Scope corrected in D-013 rather than fixed. Offline now means the library and `/why`, both genuinely verified. That is a smaller claim that is true, replacing a larger one that was not.
+**One box above stays unticked, deliberately:**
 
-The honest summary: this app is shipped on every axis it claims, and the claims themselves are now narrower than they were this morning because two of them turned out to be false when finally tested (D-012 analytics, D-013 offline). Both were found by doing the verification that had been outstanding, not by reading the code.
+- **Rate limiting (SEC-001)** — an honest FAIL, with the exposure scoped (Clerk throttles auth; the unthrottled surface is a signed-in user's own household, so it is a cost and availability risk, not a data one) and an explicit trigger: first real traffic, or any Neon quota warning.
+
+**One capability was reduced rather than fixed:**
+
+- **Slice 8 offline** — verified live for the first time on 2026-08-01 and **failed** (B-005). Offline now means the instrument library and `/why`, both genuinely verified. Scope corrected in D-013 instead of shipping a late fix or leaving a false claim on a recruiter-facing page.
+
+**The honest summary of the day.** Three things that had been claimed for weeks turned out to be untrue the moment they were actually tested: the internal analytics sink (D-012, never built), the offline dashboard (D-013, never worked), and the "rollback rehearsal" itself, which could not have been run because the runbook had no procedure in it. None were found by reading code. All three were found by doing verification that had been outstanding and quietly rolled forward, which is the whole argument for gates that require evidence instead of assertion.
+
+So this app ships with narrower claims than it had this morning, and that is the point.
 
 ---
 
