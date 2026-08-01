@@ -72,6 +72,21 @@ async function readBack(dataKey: CryptoKey, wire: HouseholdWire | null): Promise
   return outcome.row
 }
 
+/**
+ * Does a household row exist for this user, and what is its id?
+ *
+ * Deliberately does NOT open the vault. {@link fetchHousehold} cannot run
+ * before the vault is unlocked, but deciding *whether* to show an unlock screen
+ * at all requires knowing whether there is a household to unlock — a question
+ * that has to be answerable while locked. Only the id crosses back: the name
+ * stays ciphertext and is never touched here.
+ */
+export async function probeHousehold(token: string | null): Promise<{ exists: boolean; id: string | null }> {
+  const res = await encryptedFetch('/api/household', token, fail)
+  const body = (await res.json()) as HouseholdResponse
+  return body.household ? { exists: true, id: body.household.id } : { exists: false, id: null }
+}
+
 export async function fetchHousehold(token: string | null): Promise<HouseholdRead> {
   const vault = await openVault()
   const res = await encryptedFetch('/api/household', token, fail)

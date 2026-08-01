@@ -68,6 +68,8 @@ One row per v1 feature from `SOLUTION_BRIEF.md` (feature # in parentheses). Ever
 | `pwa_shell_loaded` | cache_status (hit/miss) | (8) PWA shell | App boots from precached assets |
 | `pwa_install_prompted` / `pwa_installed` | surface | (9) Custom install prompt | Custom install button shown/clicked through to install |
 | `why_page_viewed` | — | (10) "Why these choices?" page | User opens the in-app decision-log page |
+| `key_setup_started` / `key_setup_completed` | — | (14) Client-side encryption | User reaches / finishes the passphrase + recovery-code setup screen. No secret is ever a property. |
+| `vault_unlocked` | method (passphrase/recovery_code) | (14) Client-side encryption | User opens an existing household on a new device or after clearing storage |
 | `consent_accepted` | disclaimer_version | (11) Disclaimer + consent modal | User accepts the education-not-advice consent modal |
 | *(infra, no dedicated event)* | — | (12) Analytics infra, (13) Sentry | Implementation layer — covered by every other event firing correctly / `error_shown` baseline |
 

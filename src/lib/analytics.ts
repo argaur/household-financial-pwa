@@ -39,6 +39,12 @@ export interface EventMap {
   pwa_install_prompted: { surface: string }
   pwa_installed: { surface: string }
   why_page_viewed: Record<string, never>
+  // Client-side encryption setup (key setup + unlock). Properties are
+  // deliberately empty/enumerated: a passphrase, a recovery code, a salt, an IV
+  // or a wrapped key must never become an analytics property.
+  key_setup_started: Record<string, never>
+  key_setup_completed: Record<string, never>
+  vault_unlocked: { method: 'passphrase' | 'recovery_code' }
   consent_accepted: { disclaimer_version: string }
 }
 
