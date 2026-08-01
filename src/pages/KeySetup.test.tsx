@@ -6,6 +6,7 @@ import { deriveKeyFromRecoveryCode, fromBase64Url, unwrapDataKey } from '@/lib/c
 import { getVault, clearVault } from '@/lib/crypto/key-store'
 import { getPendingKeyMaterial, clearPendingKeyMaterial } from '@/lib/crypto/pending-key-material'
 import { expectStructuralA11y } from '@/test/a11y'
+import { expectNoAxeViolations } from '@/test/axe'
 import { KeySetup } from './KeySetup'
 
 const track = vi.fn()
@@ -220,12 +221,25 @@ describe('KeySetup — accessibility', () => {
     expectStructuralA11y(container)
   })
 
+  it('has zero axe violations on the passphrase step', async () => {
+    const { container } = render(<KeySetup onReady={vi.fn()} />)
+    await expectNoAxeViolations(container)
+  })
+
   it('passes the structural checks on the recovery-code step', async () => {
     const { container } = render(<KeySetup onReady={vi.fn()} />)
     await typeStrongPassphrase()
     fireEvent.click(submitButton())
     await screen.findByTestId('recovery-code', undefined, { timeout: 20_000 })
     expectStructuralA11y(container)
+  }, 30_000)
+
+  it('has zero axe violations on the recovery-code step', async () => {
+    const { container } = render(<KeySetup onReady={vi.fn()} />)
+    await typeStrongPassphrase()
+    fireEvent.click(submitButton())
+    await screen.findByTestId('recovery-code', undefined, { timeout: 20_000 })
+    await expectNoAxeViolations(container)
   }, 30_000)
 
   it('announces the strength meter and the error without needing focus to move', () => {

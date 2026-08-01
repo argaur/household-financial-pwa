@@ -132,7 +132,7 @@ export function KeySetup({ onReady }: KeySetupProps) {
     return (
       <main className="min-h-screen bg-background text-foreground font-sans">
         <div className="container max-w-lg py-12 space-y-6">
-          <Progress value={100} className="h-1" />
+          <Progress value={100} className="h-1" aria-label="Setup progress: step 2 of 2" />
           <p className="text-caption text-muted-foreground">Setting up your key — step 2 of 2</p>
 
           <header className="space-y-2">
@@ -200,7 +200,7 @@ export function KeySetup({ onReady }: KeySetupProps) {
   return (
     <main className="min-h-screen bg-background text-foreground font-sans">
       <div className="container max-w-lg py-12 space-y-6">
-        <Progress value={50} className="h-1" />
+        <Progress value={50} className="h-1" aria-label="Setup progress: step 1 of 2" />
         <p className="text-caption text-muted-foreground">Setting up your key — step 1 of 2</p>
 
         <header className="space-y-2">

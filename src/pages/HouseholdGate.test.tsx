@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { HouseholdApiError } from '@/lib/household-api'
 import { expectStructuralA11y } from '@/test/a11y'
+import { expectNoAxeViolations } from '@/test/axe'
 import { HouseholdGate } from './HouseholdGate'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
@@ -242,6 +243,13 @@ describe('HouseholdGate — accessibility of the new panels', () => {
     expectStructuralA11y(container)
   })
 
+  it('has zero axe violations on the unrecoverable panel', async () => {
+    resolveVaultState.mockResolvedValue({ state: 'unrecoverable', householdId: 'h1' })
+    const { container } = render(<HouseholdGate />)
+    await screen.findByText(/cannot be recovered/i)
+    await expectNoAxeViolations(container)
+  })
+
   it('passes the structural checks on the unreadable-household panel', async () => {
     resolveVaultState.mockResolvedValue({ state: 'ready', vault: VAULT })
     fetchHousehold.mockResolvedValue({ state: 'unreadable', id: 'h1', reason: 'UNWRAP_FAILED' })
@@ -250,11 +258,27 @@ describe('HouseholdGate — accessibility of the new panels', () => {
     expectStructuralA11y(container)
   })
 
+  it('has zero axe violations on the unreadable-household panel', async () => {
+    resolveVaultState.mockResolvedValue({ state: 'ready', vault: VAULT })
+    fetchHousehold.mockResolvedValue({ state: 'unreadable', id: 'h1', reason: 'UNWRAP_FAILED' })
+    const { container } = render(<HouseholdGate />)
+    await screen.findByText(/doesn't match/i)
+    await expectNoAxeViolations(container)
+  })
+
   it('passes the structural checks on the not-yet-encrypted panel', async () => {
     resolveVaultState.mockResolvedValue({ state: 'ready', vault: VAULT })
     fetchHousehold.mockResolvedValue({ state: 'not-yet-encrypted', id: 'h1' })
     const { container } = render(<HouseholdGate />)
     await screen.findByText(/before your data was encrypted/i)
     expectStructuralA11y(container)
+  })
+
+  it('has zero axe violations on the not-yet-encrypted panel', async () => {
+    resolveVaultState.mockResolvedValue({ state: 'ready', vault: VAULT })
+    fetchHousehold.mockResolvedValue({ state: 'not-yet-encrypted', id: 'h1' })
+    const { container } = render(<HouseholdGate />)
+    await screen.findByText(/before your data was encrypted/i)
+    await expectNoAxeViolations(container)
   })
 })

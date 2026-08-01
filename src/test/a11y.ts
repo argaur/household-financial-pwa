@@ -1,58 +1,30 @@
 import { expect } from 'vitest'
 
 /**
- * Structural accessibility checks for a rendered screen.
+ * Structural checks that real `axe-core` (see `src/test/axe.ts`) genuinely
+ * does NOT cover in jsdom, kept as a hand-rolled supplement rather than a
+ * replacement.
  *
- * HONEST SCOPE — read this before trusting it. This is **not** axe. `axe-core`
- * is not a dependency of this project and adding one is not this change's call
- * to make, so what follows is a hand-written subset covering the rule families
- * that jsdom can actually evaluate: labelling, roles, heading order, tab order
- * and tap-target sizing. It cannot evaluate colour contrast, computed layout,
- * or anything that needs a real layout engine.
+ * Everything axe already covers has been deleted from here — accessible
+ * names on form controls (axe `label`), dangling `aria-describedby` /
+ * `aria-labelledby` targets (axe `aria-valid-attr-value`), skipped heading
+ * levels (axe `heading-order`), positive `tabindex` (axe `tabindex`), and
+ * `img` without `alt` (axe `image-alt`). Running both would be two checks
+ * doing one job.
  *
- * The project's standing claim is "all screens scan 0 axe violations", and that
- * claim is earned in a real browser against the deployed app, not here. These
- * assertions stop a regression reaching that scan; they do not replace it.
+ * What's left needs either layout (tap-target size) or a whole-page
+ * invariant axe has no opinion on (exactly one h1 — axe's
+ * `page-has-heading-one` only requires *at least* one).
  */
 export function expectStructuralA11y(container: HTMLElement): void {
-  // Every form control is reachable by name. This is the single largest source
-  // of real axe violations on form-heavy screens.
-  const controls = container.querySelectorAll<HTMLElement>('input, select, textarea')
-  for (const control of controls) {
-    const id = control.getAttribute('id')
-    const labelled =
-      (id && container.querySelector(`label[for="${id}"]`)) ||
-      control.getAttribute('aria-label') ||
-      control.getAttribute('aria-labelledby')
-    expect(labelled, `control ${control.outerHTML.slice(0, 80)} has no accessible name`).toBeTruthy()
-  }
-
-  // Every aria-describedby / aria-labelledby target actually exists.
-  for (const el of container.querySelectorAll<HTMLElement>('[aria-describedby], [aria-labelledby]')) {
-    for (const attribute of ['aria-describedby', 'aria-labelledby']) {
-      const value = el.getAttribute(attribute)
-      if (!value) continue
-      for (const id of value.split(/\s+/)) {
-        expect(container.querySelector(`#${id}`), `${attribute}="${id}" points at nothing`).not.toBeNull()
-      }
-    }
-  }
-
-  // Exactly one h1, and no skipped heading levels.
-  const headings = [...container.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')]
-  const levels = headings.map((h) => Number(h.tagName.slice(1)))
-  expect(levels.filter((l) => l === 1).length, 'a screen must have exactly one h1').toBe(1)
-  for (let i = 1; i < levels.length; i += 1) {
-    expect(levels[i] - levels[i - 1], `heading level jumps from h${levels[i - 1]} to h${levels[i]}`).toBeLessThanOrEqual(1)
-  }
-
-  // A positive tabindex rewrites the document's tab order for the whole page.
-  for (const el of container.querySelectorAll<HTMLElement>('[tabindex]')) {
-    expect(Number(el.getAttribute('tabindex')), 'positive tabindex breaks tab order').toBeLessThanOrEqual(0)
-  }
+  // Exactly one h1 per screen. Axe requires at least one (page-has-heading-one)
+  // but does not flag a second — this is this project's own stricter rule.
+  const h1s = container.querySelectorAll('h1')
+  expect(h1s.length, 'a screen must have exactly one h1').toBe(1)
 
   // Buttons and links are ≥44px tall (SPEC.md §6). Checked by class, because
   // jsdom has no layout — h-11 and min-h-11 are the project's 44px tokens.
+  // Axe cannot check this under jsdom at all: it needs computed layout.
   //
   // A small control counts when its own label row is the 44px target: a
   // checkbox inside `<label class="min-h-11">` is toggled by tapping anywhere
@@ -65,10 +37,5 @@ export function expectStructuralA11y(container: HTMLElement): void {
   for (const el of container.querySelectorAll<HTMLElement>('button, a[href]')) {
     const ownRowIsSized = sizedTo44(el) || sizedTo44(el.closest('label'))
     expect(ownRowIsSized, `tap target is not sized to 44px: ${el.textContent?.trim().slice(0, 40) || el.id}`).toBe(true)
-  }
-
-  // An image with no alt text is invisible to a screen reader.
-  for (const img of container.querySelectorAll<HTMLElement>('img')) {
-    expect(img.hasAttribute('alt'), 'img without alt').toBe(true)
   }
 }

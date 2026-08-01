@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Explore } from './Explore'
+import { expectNoAxeViolations } from '@/test/axe'
 
 const track = vi.fn()
 vi.mock('@/lib/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))
@@ -40,5 +41,17 @@ describe('Explore', () => {
       </MemoryRouter>,
     )
     expect(track).toHaveBeenCalledWith('nav_tab_clicked', { tab_name: 'explore' })
+  })
+
+  // /explore is one of the five screens documented at zero axe violations
+  // live (see CLAUDE.md). Cheap to re-prove; a real finding here would be a
+  // regression, not something to fix quietly.
+  it('has zero axe violations', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Explore />
+      </MemoryRouter>,
+    )
+    await expectNoAxeViolations(container)
   })
 })

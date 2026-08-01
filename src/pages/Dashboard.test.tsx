@@ -7,6 +7,7 @@ import type { Household } from '@/lib/household-api'
 import type { FamilyMember } from '@/lib/family-members-api'
 import type { Holding } from '@/lib/holdings-api'
 import type { Protection } from '@/lib/protection-api'
+import { expectNoAxeViolations } from '@/test/axe'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
 vi.mock('@clerk/clerk-react', () => ({
@@ -199,6 +200,17 @@ describe('Dashboard', () => {
     await screen.findByText('Gupta Family')
     expect(screen.getByText('Getting Started')).toBeInTheDocument()
     expect(screen.getByText('Nothing recorded yet.')).toBeInTheDocument()
+  })
+
+  // /dashboard is one of the five screens documented at zero axe violations
+  // live (see CLAUDE.md). Scanned in its fullest state (the Recharts donut
+  // rendered, all five checks complete) so the scan is at least as thorough
+  // as the empty state, not less.
+  it('has zero axe violations', async () => {
+    mockFullCoverage()
+    const { container } = renderDashboard()
+    await screen.findByText('Strong')
+    await expectNoAxeViolations(container)
   })
 
   it('computes the same tier, allocation and nudge from decrypted rows the server route used to return', async () => {

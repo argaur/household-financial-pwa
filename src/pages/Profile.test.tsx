@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { expectNoAxeViolations } from '@/test/axe'
 import { Profile } from './Profile'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
@@ -352,5 +353,49 @@ describe('Profile — security card', () => {
 
     await screen.findByText('Ananya Verma')
     expect(screen.queryByRole('button', { name: /change passphrase/i })).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * `/profile` is one of the five screens documented at zero axe violations
+ * live (see CLAUDE.md). This section proves that baseline still holds for
+ * the loaded screen (Security card included, since it renders whenever key
+ * material is available) and extends it to Slice 9's two credential-change
+ * sheets, which Radix portals to `document.body` — so those scans run
+ * against `document.body`, not the render container, or the portaled sheet
+ * content would never be checked.
+ */
+describe('Profile — accessibility', () => {
+  beforeEach(() => {
+    // Self-contained on purpose — do not rely on state left behind by
+    // whichever describe block happened to run last.
+    fetchHousehold.mockResolvedValue({ state: 'ok', household })
+    listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    fetchHouseholdKeys.mockReset()
+    fetchHouseholdKeys.mockResolvedValue(householdKeys)
+  })
+
+  it('has zero axe violations on the loaded screen, including the Security card', async () => {
+    const { container } = render(<Profile />)
+    await screen.findByText('Ananya Verma')
+    await screen.findByRole('button', { name: /change passphrase/i })
+    await expectNoAxeViolations(container)
+  })
+
+  it('has zero axe violations with the change-passphrase sheet open', async () => {
+    render(<Profile />)
+    await screen.findByText('Ananya Verma')
+    fireEvent.click(screen.getByRole('button', { name: /change passphrase/i }))
+    await screen.findByRole('heading', { name: /change your passphrase/i })
+    await expectNoAxeViolations(document.body)
+  })
+
+  it('has zero axe violations with the reset-recovery-code sheet open', async () => {
+    render(<Profile />)
+    await screen.findByText('Ananya Verma')
+    fireEvent.click(screen.getByRole('button', { name: /reset recovery code/i }))
+    await screen.findByRole('heading', { name: /reset your recovery code/i })
+    await expectNoAxeViolations(document.body)
   })
 })

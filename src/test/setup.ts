@@ -1,4 +1,9 @@
 import '@testing-library/jest-dom'
+import { expect } from 'vitest'
+import { toHaveNoViolations } from 'jest-axe'
+
+// Registers `expect(axeResults).toHaveNoViolations()`, used by src/test/axe.ts.
+expect.extend(toHaveNoViolations)
 
 // jsdom doesn't implement these; Radix UI's Select/Popover/etc. call them
 // internally, throwing unhandled rejections in tests that open them.

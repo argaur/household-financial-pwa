@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Portfolio } from './Portfolio'
+import { expectNoAxeViolations } from '@/test/axe'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
 vi.mock('@clerk/clerk-react', () => ({
@@ -109,6 +110,16 @@ describe('Portfolio', () => {
     await screen.findByText("Ananya Verma's holdings")
     expect(screen.getByText('Large Cap Index Fund')).toBeInTheDocument()
     expect(screen.getAllByText(/1 holding · ₹10,500/i)).toHaveLength(2)
+  })
+
+  // /portfolio is one of the five screens documented at zero axe violations
+  // live (see CLAUDE.md). Scanned with a holding listed, not the empty state,
+  // so the row/summary markup is actually exercised.
+  it('has zero axe violations', async () => {
+    listHoldings.mockResolvedValue({ holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 })
+    const { container } = render(<Portfolio />)
+    await screen.findByText("Ananya Verma's holdings")
+    await expectNoAxeViolations(container)
   })
 
   it('opens the add sheet from the empty-state CTA and appends the created holding', async () => {

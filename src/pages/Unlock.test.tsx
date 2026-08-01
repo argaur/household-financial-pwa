@@ -16,6 +16,7 @@ import {
 import { getVault, clearVault } from '@/lib/crypto/key-store'
 import type { HouseholdKeys } from '@/lib/household-keys-api'
 import { expectStructuralA11y } from '@/test/a11y'
+import { expectNoAxeViolations } from '@/test/axe'
 import { Unlock } from './Unlock'
 
 const track = vi.fn()
@@ -219,9 +220,20 @@ describe('Unlock — accessibility', () => {
     expectStructuralA11y(container)
   })
 
+  it('has zero axe violations on the passphrase step', async () => {
+    const { container } = render(<Unlock keys={keys} onUnlocked={vi.fn()} />)
+    await expectNoAxeViolations(container)
+  })
+
   it('passes the structural checks on the recovery-code step', () => {
     const { container } = render(<Unlock keys={keys} onUnlocked={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /recovery code instead/i }))
     expectStructuralA11y(container)
+  })
+
+  it('has zero axe violations on the recovery-code step', async () => {
+    const { container } = render(<Unlock keys={keys} onUnlocked={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /recovery code instead/i }))
+    await expectNoAxeViolations(container)
   })
 })
