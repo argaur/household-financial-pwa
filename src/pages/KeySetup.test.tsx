@@ -185,6 +185,23 @@ describe('KeySetup — analytics', () => {
     expect(track).toHaveBeenCalledWith('key_setup_started', expect.anything())
   })
 
+  // key_setup_started fires on mount and key_setup_completed only fires after
+  // the recovery code has been shown AND acknowledged — two sub-steps with no
+  // checkpoint between them. Without this event, a household that never
+  // manages a strong-enough passphrase and one that generates a key but
+  // abandons the recovery-code screen look identical in the funnel: both are
+  // "started, never completed." This event splits them.
+  it('reports the passphrase step finishing, distinguishing passphrase drop-off from recovery-code drop-off', async () => {
+    render(<KeySetup onReady={vi.fn()} />)
+    expect(track).not.toHaveBeenCalledWith('key_setup_step_completed', expect.anything())
+
+    await typeStrongPassphrase()
+    fireEvent.click(submitButton())
+    await screen.findByTestId('recovery-code', undefined, { timeout: 20_000 })
+
+    expect(track).toHaveBeenCalledWith('key_setup_step_completed', { step: 'passphrase' })
+  }, 30_000)
+
   it('never puts the passphrase, the recovery code or key material in a property', async () => {
     render(<KeySetup onReady={vi.fn()} />)
     await typeStrongPassphrase()

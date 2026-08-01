@@ -71,6 +71,10 @@ export function KeySetup({ onReady }: KeySetupProps) {
     setBusy(true)
     try {
       setPrepared(await prepareKeySetup(passphrase))
+      // The only checkpoint between key_setup_started and key_setup_completed —
+      // splits drop-off during passphrase entry from drop-off on the
+      // recovery-code screen. No secret here either.
+      track('key_setup_step_completed', { step: 'passphrase' })
     } catch (err) {
       // WeakPassphraseError carries its reasons but never the passphrase.
       setError(

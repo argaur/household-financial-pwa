@@ -153,13 +153,11 @@ export function Dashboard() {
     if (state !== 'loaded' || !data || viewedFired.current) return
     viewedFired.current = true
 
-    const allocationSummary = data.allocation.map((s) => `${s.assetClass}:${s.percentage}%`).join(',')
-    track('dashboard_viewed', { household_id: data.householdId, allocation_summary: allocationSummary })
+    track('dashboard_viewed', { household_id: data.householdId })
 
     // Slice 7 — exactly one nudge is always present, so this fires once per
     // dashboard load, gated by the same viewedFired ref as dashboard_viewed.
     track('nudge_shown', {
-      check_id: data.nudge.checkId,
       learn_card_slug: data.nudge.learnCardSlug,
       target_type: data.nudge.targetType,
     })
@@ -169,8 +167,6 @@ export function Dashboard() {
     if (lastTier && lastTier !== data.completeness.tier) {
       track('completeness_score_changed', {
         household_id: data.householdId,
-        before_tier: lastTier,
-        after_tier: data.completeness.tier,
       })
     }
     window.localStorage.setItem(key, data.completeness.tier)

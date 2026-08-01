@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { NudgeCard } from './nudge-card'
 import type { Nudge } from '@/lib/nudge'
+import { expectNoPortfolioShape } from '@/test/analytics-guard'
 
 const track = vi.fn()
 vi.mock('@/lib/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))
@@ -105,7 +106,7 @@ describe('NudgeCard — CTA destinations', () => {
 })
 
 describe('NudgeCard — analytics', () => {
-  it('fires learn_card_clicked with check_id, learn_card_slug and target_type on CTA click', () => {
+  it('fires learn_card_clicked with learn_card_slug and target_type, without check_id, on CTA click', () => {
     // emergency_fund is the one nudge whose CTA resolves to a real instrument
     // page, so it is the one that should report target_type 'learn_card'.
     renderCard({
@@ -115,17 +116,17 @@ describe('NudgeCard — analytics', () => {
     })
     fireEvent.click(screen.getByRole('link'))
     expect(track).toHaveBeenCalledWith('learn_card_clicked', {
-      check_id: 'emergency_fund',
       learn_card_slug: 'debt-fixed-deposit',
       target_type: 'learn_card',
     })
+    const call = track.mock.calls.find((c) => c[0] === 'learn_card_clicked')!
+    expectNoPortfolioShape(call[1] as Record<string, unknown>)
   })
 
   it('reports target_type route when the CTA goes to an app screen, not a learn card', () => {
     renderCard({ checkId: 'member_coverage', learnCardSlug: 'portfolio', targetType: 'route' })
     fireEvent.click(screen.getByRole('link'))
     expect(track).toHaveBeenCalledWith('learn_card_clicked', {
-      check_id: 'member_coverage',
       learn_card_slug: 'portfolio',
       target_type: 'route',
     })

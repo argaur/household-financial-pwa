@@ -22,15 +22,25 @@ export interface EventMap {
   onboarding_started: { step: 'household' | 'members' | 'holdings' }
   onboarding_step_completed: { step: 'household' | 'members' | 'holdings'; duration_ms: number }
   onboarding_completed: Record<string, never>
-  holding_created: { instrument_id: string; asset_class: string; member_id: string }
-  holding_updated: { instrument_id: string; asset_class: string; member_id: string }
-  dashboard_viewed: { household_id: string; allocation_summary: string }
-  completeness_score_changed: { household_id: string; before_tier: string; after_tier: string }
+  // instrument_id and asset_class removed 2026-08-01: they describe what a
+  // household holds, not that a holding was saved. member_id stays — it is a
+  // household-scoped opaque id, not portfolio shape.
+  holding_created: { member_id: string }
+  holding_updated: { member_id: string }
+  // allocation_summary removed 2026-08-01: it was the household's asset-class
+  // percentages by another name.
+  dashboard_viewed: { household_id: string }
+  // before_tier/after_tier removed 2026-08-01: a tier is a coarse read on
+  // portfolio shape. The event still fires — a household can be counted, just
+  // not read.
+  completeness_score_changed: { household_id: string }
   // target_type distinguishes an instrument page from an app route — five of
   // the six nudge destinations are routes, so learn_card_slug alone is not
   // interpretable in PostHog (server/lib/nudge.ts NUDGE_TARGET).
-  nudge_shown: { check_id: string; learn_card_slug: string; target_type: 'learn_card' | 'route' }
-  learn_card_clicked: { check_id: string; learn_card_slug: string; target_type: 'learn_card' | 'route' }
+  // check_id removed 2026-08-01: it names which of the 5 household checks
+  // failed, which is portfolio shape by another name.
+  nudge_shown: { learn_card_slug: string; target_type: 'learn_card' | 'route' }
+  learn_card_clicked: { learn_card_slug: string; target_type: 'learn_card' | 'route' }
   library_section_viewed: { section: string }
   instrument_viewed: { section: string; instrument_slug: string }
   nav_tab_clicked: { tab_name: string }
@@ -43,6 +53,11 @@ export interface EventMap {
   // deliberately empty/enumerated: a passphrase, a recovery code, a salt, an IV
   // or a wrapped key must never become an analytics property.
   key_setup_started: Record<string, never>
+  // Fires once the passphrase step succeeds (the recovery-code screen is
+  // reached) — the only checkpoint between key_setup_started and
+  // key_setup_completed, so drop-off during passphrase entry can be told
+  // apart from drop-off during recovery-code review. No secret here either.
+  key_setup_step_completed: { step: 'passphrase' }
   key_setup_completed: Record<string, never>
   vault_unlocked: { method: 'passphrase' | 'recovery_code' }
   consent_accepted: { disclaimer_version: string }

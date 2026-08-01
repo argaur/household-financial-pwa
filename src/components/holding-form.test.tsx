@@ -4,13 +4,15 @@ import { HoldingForm } from './holding-form'
 import type { FamilyMember } from '@/lib/family-members-api'
 import type { Instrument } from '@/lib/instruments-api'
 import type { Holding } from '@/lib/holdings-api'
+import { expectNoPortfolioShape } from '@/test/analytics-guard'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
 vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({ getToken }),
 }))
 
-vi.mock('@/lib/analytics', () => ({ track: vi.fn() }))
+const track = vi.fn()
+vi.mock('@/lib/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))
 
 const createHolding = vi.fn()
 const updateHolding = vi.fn()
@@ -76,6 +78,7 @@ describe('HoldingForm', () => {
   beforeEach(() => {
     createHolding.mockReset()
     updateHolding.mockReset()
+    track.mockReset()
   })
 
   it('submit is disabled until member, instrument, and both amounts are filled', () => {
@@ -128,6 +131,53 @@ describe('HoldingForm', () => {
       }),
     )
     expect(onSaved).toHaveBeenCalledWith(holding)
+  })
+
+  it('fires holding_created without asset_class or instrument_id — those describe portfolio shape', async () => {
+    createHolding.mockResolvedValue(holding)
+    render(
+      <HoldingForm
+        members={[member]}
+        instruments={[instrument]}
+        submitLabel="Add to plan"
+        submittingLabel="Adding…"
+        analyticsSurface="test"
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('combobox', { name: /instrument/i }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Large Cap Index Fund' }))
+    await waitFor(() => expect(screen.getByLabelText(/asset class/i)).toHaveValue('Equity'))
+    fireEvent.change(screen.getByLabelText(/amount invested/i), { target: { value: '10000' } })
+    fireEvent.change(screen.getByLabelText(/current value/i), { target: { value: '10500' } })
+    fireEvent.click(screen.getByRole('button', { name: /add to plan/i }))
+
+    await waitFor(() => expect(track).toHaveBeenCalledWith('holding_created', { member_id: 'm1' }))
+    const call = track.mock.calls.find((c) => c[0] === 'holding_created')!
+    expectNoPortfolioShape(call[1] as Record<string, unknown>)
+  })
+
+  it('fires holding_updated without asset_class or instrument_id — those describe portfolio shape', async () => {
+    updateHolding.mockResolvedValue({ ...holding, currentValue: '12000' })
+    render(
+      <HoldingForm
+        members={[member]}
+        instruments={[instrument]}
+        initialHolding={holding}
+        submitLabel="Save changes"
+        submittingLabel="Saving…"
+        analyticsSurface="test"
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/current value/i), { target: { value: '12000' } })
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(track).toHaveBeenCalledWith('holding_updated', { member_id: 'm1' }))
+    const call = track.mock.calls.find((c) => c[0] === 'holding_updated')!
+    expectNoPortfolioShape(call[1] as Record<string, unknown>)
   })
 
   it('pre-fills fields from initialHolding and calls updateHolding on save (edit mode)', async () => {

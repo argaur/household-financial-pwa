@@ -4,6 +4,27 @@
 **Analytics service:** PostHog (cloud), sole sink. **Corrected 2026-08-01 (D-012):** this previously read "kept alongside an internal `analytics_events` Postgres table (Phase 1 Q5 — both, intentionally not deduplicated to one source)". That dual sink was decided in D-005 and never built. Every metric below is measured in PostHog only.
 **Error tracking:** Sentry free tier
 
+**2026-08-01 — portfolio-shape properties stripped from six events.** `holding_created`/`holding_updated`
+lost `asset_class`/`instrument_id`; `dashboard_viewed` lost `allocation_summary`; `completeness_score_changed`
+lost `before_tier`/`after_tier`; `nudge_shown`/`learn_card_clicked` lost `check_id`. The app encrypts household
+data client-side so the server cannot read it — sending that same shape to PostHog as event properties made
+that claim false. The events still fire and still count; only the properties describing *what a household
+owns or which check failed* are gone. **This is accepted measurement debt, not a bug to be quietly worked
+around:**
+- The North Star funnel verified 2026-07-28 (PostHog insight `bMF690Mf`) leaned on `holding_created.asset_class`
+  to show *which* asset classes were being added, not just that a holding was added. That breakdown is gone.
+  The funnel's step-to-step conversion (the thing `bMF690Mf` actually measures) is unaffected.
+- The "50% of households that completed onboarding will have raised their tier by ≥1 in 30 days" North Star
+  target (`SOLUTION_BRIEF.md`) leaned on `completeness_score_changed.before_tier`/`after_tier` to compute the
+  before/after comparison directly from event properties. Without those properties this target cannot be
+  computed from a single event's payload — it now needs a person/group property holding current tier
+  (e.g. set via `posthog.identify`/`group`) queried at two points in time, which does not exist yet.
+- The nudge click-through funnel can no longer be segmented by `check_id` (which of the 5 checks a household
+  was nudged on), only by `target_type` (learn_card vs route) — see Dashboard Spec below.
+
+**Reworking either target's measurement path is agreed as a separate task, not solved here.** Do not read the
+absence of a rework in this change as an oversight.
+
 ---
 
 ## North Star Metric
@@ -59,16 +80,16 @@ One row per v1 feature from `SOLUTION_BRIEF.md` (feature # in parentheses). Ever
 | Event | Key properties | Feature it maps to | Fires when |
 |---|---|---|---|
 | `onboarding_started` / `onboarding_step_completed` / `onboarding_completed` | step (household/members/holdings), duration_ms | (1) Guided onboarding | User starts/advances/finishes the 3-step flow |
-| `holding_created` / `holding_updated` | instrument_id, asset_class, member_id | (2) Manual holdings entry | User saves a holding form |
-| `dashboard_viewed` | household_id, allocation_summary | (3) Portfolio dashboard | User lands on the post-onboarding or returning dashboard |
-| `completeness_score_changed` | household_id, before_tier, after_tier | (4) Household Health panel | Any of the 5 checks flips state |
-| `nudge_shown` / `learn_card_clicked` | check_id, learn_card_slug, target_type | (5) Single ordered nudge | Dashboard renders the first unmet check; user clicks its learn-card link |
+| `holding_created` / `holding_updated` | member_id | (2) Manual holdings entry | User saves a holding form |
+| `dashboard_viewed` | household_id | (3) Portfolio dashboard | User lands on the post-onboarding or returning dashboard |
+| `completeness_score_changed` | household_id | (4) Household Health panel | Any of the 5 checks flips state |
+| `nudge_shown` / `learn_card_clicked` | learn_card_slug, target_type | (5) Single ordered nudge | Dashboard renders the first unmet check; user clicks its learn-card link |
 | `library_section_viewed` / `instrument_viewed` | section, instrument_slug | (6) Instrument library | User opens a section or an instrument detail card |
 | `nav_tab_clicked` / `fab_clicked` | tab_name | (7) Bottom tab nav + FAB | User navigates via the bottom bar or the "+" action |
 | `pwa_shell_loaded` | cache_status (hit/miss) | (8) PWA shell | App boots from precached assets |
 | `pwa_install_prompted` / `pwa_installed` | surface | (9) Custom install prompt | Custom install button shown/clicked through to install |
 | `why_page_viewed` | — | (10) "Why these choices?" page | User opens the in-app decision-log page |
-| `key_setup_started` / `key_setup_completed` | — | (14) Client-side encryption | User reaches / finishes the passphrase + recovery-code setup screen. No secret is ever a property. |
+| `key_setup_started` / `key_setup_step_completed` / `key_setup_completed` | — / step / — | (14) Client-side encryption | User reaches the passphrase screen / finishes the passphrase step (recovery code shown) / acknowledges the recovery code and continues. No secret is ever a property. |
 | `vault_unlocked` | method (passphrase/recovery_code) | (14) Client-side encryption | User opens an existing household on a new device or after clearing storage |
 | `consent_accepted` | disclaimer_version | (11) Disclaimer + consent modal | User accepts the education-not-advice consent modal |
 | *(infra, no dedicated event)* | — | (12) Analytics infra, (13) Sentry | Implementation layer — covered by every other event firing correctly / `error_shown` baseline |
@@ -82,7 +103,7 @@ One row per v1 feature from `SOLUTION_BRIEF.md` (feature # in parentheses). Ever
 | Onboarding funnel | Funnel | `onboarding_started` → `onboarding_step_completed` (x3) → `onboarding_completed` | — |
 | 14-day return | Retention | `onboarding_completed` → `session_started` within 14 days | — |
 | Completeness tier distribution | Bar | Households by current tier (0–1 / 2–3 / 4–5) | — |
-| Nudge click-through | Funnel | `nudge_shown` → `learn_card_clicked` | check_id |
+| Nudge click-through | Funnel | `nudge_shown` → `learn_card_clicked` | ~~check_id~~ — removed 2026-08-01, see Measurement debt below. Segment by `target_type` instead (coarser: learn_card vs route, not which of the 5 checks). |
 | Library engagement | Bar | `instrument_viewed` count by `section` | — |
 | Error rate | Trend | `error_shown` / `page_viewed` | surface |
 

@@ -101,8 +101,6 @@ export function HoldingForm({
         ? await updateHolding(token, initialHolding!.id, input, initialHolding!.version)
         : await createHolding(token, input)
       track(editing ? 'holding_updated' : 'holding_created', {
-        instrument_id: holding.instrumentId,
-        asset_class: holding.assetClass,
         member_id: holding.memberId,
       })
       onSaved(holding)

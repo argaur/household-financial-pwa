@@ -8,6 +8,7 @@ import type { FamilyMember } from '@/lib/family-members-api'
 import type { Holding } from '@/lib/holdings-api'
 import type { Protection } from '@/lib/protection-api'
 import { expectNoAxeViolations } from '@/test/axe'
+import { expectNoPortfolioShape, expectNoCallCarriesPortfolioShape } from '@/test/analytics-guard'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
 vi.mock('@clerk/clerk-react', () => ({
@@ -243,7 +244,7 @@ describe('Dashboard', () => {
     expect(screen.getByText(/Meera has no holdings recorded yet\./)).toBeInTheDocument()
   })
 
-  it('fires dashboard_viewed once with an allocation summary', async () => {
+  it('fires dashboard_viewed once, without an allocation summary — that describes portfolio shape', async () => {
     mockFullCoverage()
     renderDashboard()
 
@@ -253,10 +254,11 @@ describe('Dashboard', () => {
     await waitFor(() =>
       expect(track).toHaveBeenCalledWith('dashboard_viewed', {
         household_id: 'h1',
-        allocation_summary: 'equity:60%,debt:30%,gold:10%',
       }),
     )
     expect(track).toHaveBeenCalledTimes(2)
+    const call = track.mock.calls.find((c) => c[0] === 'dashboard_viewed')!
+    expectNoPortfolioShape(call[1] as Record<string, unknown>)
   })
 
   it('renders exactly one nudge card, never zero (SPEC.md §7)', async () => {
@@ -269,22 +271,23 @@ describe('Dashboard', () => {
     }
   })
 
-  it('fires nudge_shown once per load with the selected check', async () => {
+  it('fires nudge_shown once per load, without check_id — that names which check failed', async () => {
     mockOk()
     renderDashboard()
 
     await screen.findByText('Next step')
     await waitFor(() =>
       expect(track).toHaveBeenCalledWith('nudge_shown', {
-        check_id: 'member_coverage',
         learn_card_slug: 'portfolio',
         target_type: 'route',
       }),
     )
     expect(track.mock.calls.filter((c) => c[0] === 'nudge_shown')).toHaveLength(1)
+    const call = track.mock.calls.find((c) => c[0] === 'nudge_shown')!
+    expectNoPortfolioShape(call[1] as Record<string, unknown>)
   })
 
-  it('fires completeness_score_changed when the tier differs from the last-seen tier in localStorage', async () => {
+  it('fires completeness_score_changed when the tier differs, without before/after tier', async () => {
     window.localStorage.setItem('dashboard:last-tier:h1', 'getting_started')
     mockFullCoverage()
     renderDashboard()
@@ -292,10 +295,10 @@ describe('Dashboard', () => {
     await screen.findByText('Strong')
     expect(track).toHaveBeenCalledWith('completeness_score_changed', {
       household_id: 'h1',
-      before_tier: 'getting_started',
-      after_tier: 'strong',
     })
     expect(window.localStorage.getItem('dashboard:last-tier:h1')).toBe('strong')
+    const call = track.mock.calls.find((c) => c[0] === 'completeness_score_changed')!
+    expectNoPortfolioShape(call[1] as Record<string, unknown>)
   })
 
   it('does not fire completeness_score_changed when the tier is unchanged', async () => {
@@ -305,6 +308,16 @@ describe('Dashboard', () => {
 
     await screen.findByText('Strong')
     expect(track).not.toHaveBeenCalledWith('completeness_score_changed', expect.anything())
+  })
+
+  it('sweeps every event fired on a load for portfolio shape, not just the ones named above', async () => {
+    window.localStorage.setItem('dashboard:last-tier:h1', 'getting_started')
+    mockFullCoverage()
+    renderDashboard()
+
+    await screen.findByText('Strong')
+    await waitFor(() => expect(track).toHaveBeenCalledWith('completeness_score_changed', expect.anything()))
+    expectNoCallCarriesPortfolioShape(track)
   })
 
   it('shows no offline banner while online', async () => {
