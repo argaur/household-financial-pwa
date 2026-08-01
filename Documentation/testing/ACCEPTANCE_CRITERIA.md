@@ -348,7 +348,15 @@ Check 2's CTA keeps COPY_DECK's wording but points at the Fixed Deposit card (`d
 
 **Setup note for resuming:** steps 9–12 need data to be meaningful — step 10 asks you to confirm surviving members after signing back in, and step 12's cascade check is vacuous against an already-empty household. Repopulate with at least 1 member + 1 holding + 1 protection record before continuing.
 
-**Still owed:** steps 6–12, ending in the destructive deletion. Two safeguards before resuming — step 7's removal must target a member with no holdings or protection (currently that is "Test Member Two", added at step 6), and step 12 permanently deletes the account, so it needs an explicit go-ahead. After it fires, confirm the cascade server-side (household / members / holdings / protection all empty, `analytics_events` retained) rather than trusting the UI's confirmation.
+**Still owed: steps 9–12**, ending in the destructive deletion. (Corrected 2026-07-29 — this line previously read "steps 6–12", contradicting the two paragraphs above it that record steps 6, 7 and 8 as passed on 2026-07-28. Steps 1–8 are done.)
+
+Three things gate the remainder:
+
+1. **Repopulate first** — see the setup note above. Against the current empty household, step 10 and step 12 both pass vacuously.
+2. **Step 9 signs out**, and Claude does not hold the disposable account's password (`gking.gupta@gmail.com`), so step 10's sign-back-in cannot proceed without Gaurav. The whole tail is human-gated, not just the destructive step.
+3. **Step 12 permanently deletes the account** and needs an explicit go-ahead. After it fires, confirm the cascade server-side (household / members / holdings / protection all empty, `analytics_events` retained) rather than trusting the UI's confirmation.
+
+The earlier safeguard about step 7 targeting a member with no holdings or protection no longer applies — step 7 and step 8 have both been performed, and the cascade behaviour it was protecting against was instead observed deliberately (see "Cascade delete verified live" above).
 
 ---
 

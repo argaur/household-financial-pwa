@@ -1,19 +1,93 @@
-# Runbook — [Project Name]
+# Runbook — Household Financial Planning PWA
 
 **Audience:** You, during an incident, possibly at 2am. Exact commands only — no "hopeful paragraphs."
+
+**The system, in one line:** Vite/React SPA + Hono API on Vercel Functions → Drizzle → Neon Postgres,
+auth by Clerk. Live at <https://household-financial-pwa.vercel.app>.
+
+| Thing | Identifier |
+|---|---|
+| Vercel project | `household-financial-pwa`, scope `argaurs-projects` (`prj_oxXer9gsia37CTH29I018gz8yNUs`) |
+| GitHub | `argaur/household-financial-pwa` (public), deploys from `main` |
+| Database | Neon Postgres, auto-provisioned via the **Vercel Marketplace** integration |
+| Errors | Sentry org `personal-lab-0p`, project `household-financial-pwa` |
+| Analytics | PostHog project **486719** — the *shared* "Web Fleet" project |
+| Health | `GET /api/health` — **not** `/health`, see the playbook |
+
+All CLI commands below assume you are in the `app/` directory, which holds the linked `.vercel/`.
+Verified against **Vercel CLI 56.5.0** on 2026-07-29; re-check `--help` if the CLI has been upgraded.
 
 ---
 
 ## Deploy
 
+**Deploys are Git-driven. Pushing to `main` is the deploy.** There is no manual deploy step in the
+normal path, and no deploy step in CI — `.github/workflows/ci.yml` runs typecheck/test/build only,
+Vercel owns deploys.
+
+```bash
+# 1. Gate first. Must exit 0 — this is the honest reviewer, the checklist is not.
+bash scripts/predeploy-check.sh https://household-financial-pwa.vercel.app
+
+# 2. Deploy.
+git push origin main            # Vercel builds automatically
+
+# 3. Confirm the new deployment is live and talking to the database.
+curl -s https://household-financial-pwa.vercel.app/api/health
+# expect: {"status":"ok","version":"...","commit_sha":"...","db":"ok"}
+# `db:"ok"` is the real signal — it round-trips to Neon. `status:"ok"` alone only proves boot.
+
+# 4. Confirm the commit_sha above matches what you just pushed.
+git rev-parse --short HEAD
 ```
-[exact commands / platform steps]
+
+Build config lives in `vercel.json`: `buildCommand: npm run build`, `outputDirectory: dist`,
+`framework: vite`. Do not duplicate it in the Vercel dashboard.
+
+**Escape hatch — manual deploy** (only if the Git integration is down):
+
+```bash
+vercel --prod
 ```
 
 ## Rollback (proven, timed)
 
+**Read this first: a rollback reverts code, not the database.** `drizzle-kit` generates no
+down-migrations for this project and none were hand-written (see `DEPLOYMENT_CHECKLIST.md`,
+"Database migrations applied and reversible"). If the deployment you are rolling *back across*
+included a migration, you will land old code on new schema. In that case the code rollback is only
+half the job — see "Backups & Point-in-Time Restore" below and restore Neon to a timestamp before
+the migration. Check before you roll back:
+
+```bash
+git log --oneline <last-good-sha>..HEAD -- drizzle/migrations/
+# any output = a migration is in scope, code rollback alone is NOT sufficient
 ```
-[exact commands to roll back to prior version]
+
+**The rollback itself:**
+
+```bash
+# 1. Identify the last-good deployment. Newest first; you want the Production row above the bad one.
+vercel ls household-financial-pwa
+
+# 2. Roll back to it. Takes a deployment URL or ID.
+vercel rollback https://household-financial-<id>-argaurs-projects.vercel.app
+
+# 3. Watch it land (rollback waits up to 3m by default).
+vercel rollback status household-financial-pwa
+
+# 4. Verify — do not trust the CLI's word for it.
+curl -s https://household-financial-pwa.vercel.app/api/health
+# commit_sha must now be the last-good SHA, and db must still read "ok"
+```
+
+Dashboard equivalent: Vercel → project → Deployments → the target deployment → **Instant Rollback**.
+Same effect; use whichever is reachable at 2am.
+
+**Then close the loop in Git**, or the next push re-deploys the bad code:
+
+```bash
+git revert <bad-sha> && git push origin main
 ```
 
 **Rollback rehearsal:** executed on YYYY-MM-DD, took [N] minutes, verified by [what you checked]. Mandatory on first deploy — the first rollback must not happen during an incident.
@@ -22,14 +96,53 @@
 
 | What | Where | Command/URL |
 |---|---|---|
-| App logs | | |
-| Error tracking | Sentry | |
-| Analytics | PostHog | |
+| App / API logs | Vercel Functions | `vercel logs --environment production -x` (add `-f` to stream, `-j` for JSON Lines) |
+| Error tracking | Sentry | <https://personal-lab-0p.sentry.io/projects/household-financial-pwa/> |
+| Analytics | PostHog | <https://us.posthog.com/project/486719> |
+
+**Two traps in this table, both of which have already cost time on this project:**
+
+- **Sentry only sees the client.** Server-side capture is deferred at `server/app.ts:14`
+  (`@sentry/node` is not Edge-compatible), so an unhandled error inside a Hono route appears in
+  **Vercel function logs and nowhere else**. A quiet Sentry does not mean a healthy API. When
+  triaging anything API-shaped, read Vercel logs *first*, not Sentry.
+- **PostHog project 486719 is the shared "Web Fleet" project.** Every event this app sends carries
+  a registered `project` property. **Any query without `project = 'financial-planning'` is wrong** —
+  it returns the whole fleet, and on 2026-07-28 that led to concluding there was no data when the
+  data was sitting right there. Scope every query, every insight, every funnel.
+
+> **Secrets warning — applies to every command in this section.** Vercel function logs can contain
+> the Neon connection string and Clerk tokens inside third-party tracebacks. Never pipe raw log
+> output anywhere it will be pasted, shared, or handed to an agent. Filter at the source
+> (`vercel logs ... | grep -c 'pattern'`), never dump and skim.
 
 ## Database
 
-- Access: `[exact command]`
-- Migrations: apply `[cmd]` / revert `[cmd]`
+Neon Postgres. `DATABASE_URL` is injected by the Vercel Marketplace integration in Production; use
+your local `.env.local` for anything run from this machine.
+
+```bash
+# Interactive access (reads DATABASE_URL from the local env — never paste the URL on the command line)
+psql "$DATABASE_URL"
+
+# Browsable UI over the same schema
+npm run db:studio
+```
+
+**Migrations** — drizzle-kit, config at `drizzle.config.ts`, schema at `drizzle/schema.ts`,
+SQL output in `drizzle/migrations/`:
+
+```bash
+npm run db:generate     # author a migration from the schema diff
+npm run db:migrate      # apply pending migrations
+npm run db:seed         # re-seed the 30 read-only instruments (scripts/seed-instruments.ts)
+```
+
+**Revert: there is no down-migration.** drizzle-kit generates none here and none were written by
+hand. The only ways back are (a) a forward migration that undoes the change, or (b) a Neon
+point-in-time restore, below. Acceptable today at one migration with no destructive column drops —
+**revisit before the first migration that drops or renames a populated column**, because at that
+point a code rollback stops being recoverable on its own.
 
 ### Backups & Point-in-Time Restore
 
@@ -142,15 +255,49 @@ be ticked.
 
 ## Rotate a Secret
 
-1. [Where secrets live]
-2. [Rotation steps]
-3. [Redeploy/restart needed?]
+**Where secrets live:** Vercel project → Settings → Environment Variables, **Production** target.
+Nothing sensitive is in the repo. Every variable the source reads is documented (names only) in
+`.env.example`, and `scripts/predeploy-check.sh` check 6 enforces that by comparing
+`import.meta.env.*` / `process.env.*` references in source against the template.
+
+> **Preview is not configured.** Env vars are set on Production only, so preview deploys have no
+> working auth or analytics. Known and deferred — do not treat a broken preview as an incident.
+
+```bash
+vercel env ls production                 # names + timestamps only
+vercel env rm  <NAME> production
+vercel env add <NAME> production         # prompts for the value; do not pass it as an argument
+vercel redeploy <production-url>         # REQUIRED — see below
+```
+
+**Step 3 is not optional, and this is the part that burns you.** A Vercel environment variable is
+read at build/boot time. Changing it in the dashboard changes nothing about the running deployment,
+and **an unset variable is indistinguishable from a set one until you probe the behaviour.** Two
+recorded instances on this project:
+
+- `VITE_POSTHOG_KEY` was never set, so `initPostHog()` returned early on every load and the app
+  produced **zero** analytics for weeks. The only symptom was a console warning nobody was watching.
+- `CLERK_WEBHOOK_SECRET` "looked" set in the dashboard. An unsigned `POST /api/clerk-webhook`
+  returned **500** (`webhook_not_configured`) and kept returning 500 until the redeploy, after which
+  it returned **401**. The 500 → 401 transition is what proved it, not the dashboard.
+
+**So: verify by probe, not by dashboard.** After any rotation, exercise the thing the secret gates
+and assert the response changed. Per-secret probes:
+
+| Secret | Provider console | Probe that proves it took effect |
+|---|---|---|
+| `DATABASE_URL` | Neon (via Vercel Storage tab) | `curl -s .../api/health` → `db:"ok"` |
+| `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk → API Keys | sign in on the live app; an authed `GET /api/dashboard` returns 200, not 401 |
+| `CLERK_WEBHOOK_SECRET` | Clerk → Webhooks → signing secret | unsigned `POST /api/clerk-webhook` → **401** (500 means unset) |
+| `VITE_POSTHOG_KEY` | PostHog → project 486719 | load the app, then confirm a `page_viewed` event arrives **scoped to `project = 'financial-planning'`** |
+| `VITE_SENTRY_DSN` / `SENTRY_DSN` | Sentry → project settings → Client Keys | trigger a client error, confirm it lands in Sentry |
 
 ## Common Failure Playbook
 
 | Symptom | Likely cause | First action |
 |---|---|---|
-| /health down | | |
-| Error spike in Sentry | | |
-| Events missing in PostHog | | |
-| [Project-specific] | | |
+| `/health` down | **Probably the wrong path.** Health is at `/api/health`. The SPA rewrite in `vercel.json` returns `index.html` with a **200** for unknown paths, so `/health` looks reachable but malformed — a wrong-path bug wearing a broken-response costume. | `curl -s .../api/health`. If that 200s with `db:"ok"`, there is no incident. If `db` is not `"ok"`, the function booted but Neon is unreachable → check Neon status and `DATABASE_URL`. If it 404s or 500s, check `vercel ls` for a failed build, then roll back. |
+| Error spike in Sentry | Client-side regression in the last deploy (Sentry sees the client only). | Compare the spike's start time against `vercel ls` deploy times. If they line up, roll back first and diagnose after. Read Vercel function logs in parallel — a server-side cause will be invisible in Sentry. |
+| Events missing in PostHog | Ranked by observed likelihood: (1) querying without `project = 'financial-planning'` in the shared Web Fleet project — the events are there, you're not looking at them; (2) `VITE_POSTHOG_KEY` unset or lost in a redeploy, which fails silently; (3) an ad-blocker on the client. | Re-run the query **with the `project` filter** before believing anything is wrong. Then check `vercel env ls production` for the key, and the browser console for the `initPostHog` early-return warning. |
+| API route 404s that "should" exist | **Vercel's zero-config routing only serves single-path-segment `/api/*`.** A second path segment (`/api/holdings/123`) 404s at the platform before Hono ever sees it — so the route exists in code, has passing tests, and is unreachable in production. | Use query params (`/api/holdings?id=123`), which is the standing workaround. Confirm with `vercel build` and read `.vercel/output/config.json` for the generated routes. |
+| A nudge/card/value renders nowhere despite green tests | A route→response seam that no test asserts. This shipped once as **B-001**: `server/routes/dashboard.ts` dropped `result.nudge` from its response and 294 tests stayed green. | Curl the API directly and diff its JSON against what the component expects. Do not debug from the UI down. |
