@@ -13,6 +13,9 @@ import { listFamilyMembers, removeFamilyMember, type FamilyMember } from '@/lib/
 import { listProtection, type Protection } from '@/lib/protection-api'
 import { fetchHousehold, updateHousehold, type Household } from '@/lib/household-api'
 import { fetchHouseholdKeys, type HouseholdKeys } from '@/lib/household-keys-api'
+import { listHoldings } from '@/lib/holdings-api'
+import { buildHouseholdExport, serializeExport, exportFilename } from '@/lib/export'
+import { triggerTextDownload } from '@/lib/download'
 import { clearDashboardCache } from '@/lib/pwa-cache'
 
 type State = 'loading' | 'loaded' | 'error'
@@ -74,6 +77,10 @@ export function Profile() {
   const [householdKeys, setHouseholdKeys] = useState<HouseholdKeys | null>(null)
   const [passphraseSheetOpen, setPassphraseSheetOpen] = useState(false)
   const [recoverySheetOpen, setRecoverySheetOpen] = useState(false)
+
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exportNotice, setExportNotice] = useState<string | null>(null)
 
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
@@ -190,6 +197,48 @@ export function Profile() {
       track('error_shown', { error_type: 'remove_member_failed', surface: 'profile', message: 'remove_member_failed' })
     } finally {
       setRemovingMemberBusy(false)
+    }
+  }
+
+  async function handleExport() {
+    if (exporting) return
+    setExporting(true)
+    setExportError(null)
+    setExportNotice(null)
+    try {
+      const token = await getToken()
+      // Fetched fresh rather than reusing page state: Profile does not hold
+      // holdings at all, and a stale members list would silently produce an
+      // incomplete backup — the one failure this feature cannot have.
+      const [householdResult, membersResult, holdingsResult, protectionResult] = await Promise.all([
+        fetchHousehold(token),
+        listFamilyMembers(token),
+        listHoldings(token),
+        listProtection(token),
+      ])
+
+      const data = buildHouseholdExport({
+        household: householdResult,
+        members: membersResult,
+        holdings: holdingsResult,
+        protection: protectionResult,
+        exportedAt: new Date(),
+      })
+
+      triggerTextDownload(exportFilename(new Date()), serializeExport(data))
+      track('feature_used', { feature_name: 'data_export' })
+
+      // Say it on screen as well as in the file. Someone who downloads a backup
+      // and never opens it would otherwise never learn it was partial.
+      setExportNotice(
+        data.complete
+          ? 'Downloaded. Keep it somewhere safe — it is readable by anyone who opens it.'
+          : `Downloaded, but ${data.missing.total} record${data.missing.total === 1 ? '' : 's'} could not be read and ${data.missing.total === 1 ? 'is' : 'are'} not in the file.`,
+      )
+    } catch {
+      setExportError('Could not build the download. Check your connection and try again.')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -404,6 +453,42 @@ export function Profile() {
             </div>
           </section>
         )}
+
+        {/* Your data — D-014 step 10. Not a convenience feature: the server
+            holds no key, so it cannot ever produce this file for you, and a
+            forgotten passphrase is unrecoverable by design. This download is
+            the only copy that survives losing the key. */}
+        <section className="rounded-lg border p-4 space-y-4">
+          <p className="text-caption font-semibold uppercase tracking-wide text-muted-foreground">Your data</p>
+          <p className="text-body text-muted-foreground">
+            Everything you have recorded, decrypted here in your browser and saved as a file. We cannot make this for
+            you — the server has no key. If you forget your passphrase and your recovery code, this file is what is
+            left.
+          </p>
+          <p className="text-body text-muted-foreground">
+            It is plain, readable text. Anyone who opens it can read your numbers, so keep it somewhere you trust.
+          </p>
+
+          <Button
+            variant="outline"
+            className="w-full min-h-11 justify-start"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            {exporting ? 'Preparing your download…' : 'Download my data'}
+          </Button>
+
+          {exportNotice && (
+            <p className="text-body" role="status">
+              {exportNotice}
+            </p>
+          )}
+          {exportError && (
+            <p className="text-body text-destructive" role="alert">
+              {exportError}
+            </p>
+          )}
+        </section>
 
         {/* Account card — Slice 9: sign-out and delete-account */}
         <section className="rounded-lg border p-4 space-y-4">

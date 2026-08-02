@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { expectNoAxeViolations } from '@/test/axe'
 import { Profile } from './Profile'
@@ -60,6 +60,35 @@ vi.mock('@/lib/protection-api', async (importOriginal) => {
     updateProtection: (...args: unknown[]) => updateProtection(...args),
   }
 })
+
+const listHoldings = vi.fn()
+vi.mock('@/lib/holdings-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/holdings-api')>()
+  return {
+    ...actual,
+    listHoldings: (...args: unknown[]) => listHoldings(...args),
+  }
+})
+
+const holding = {
+  id: 'ho1',
+  householdId: 'h1',
+  memberId: 'm1',
+  instrumentId: 'ppf',
+  assetClass: 'debt' as const,
+  investedAmount: '250000',
+  currentValue: '260000',
+  units: null,
+  monthlySip: null,
+  startDate: null,
+  maturityDate: null,
+  nominee: null,
+  isEmergencyFund: false,
+  notes: null,
+  version: 1,
+  createdAt: '',
+  updatedAt: '',
+}
 
 const household = {
   id: 'h1',
@@ -130,6 +159,109 @@ describe('Profile', () => {
     listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
     fetchHouseholdKeys.mockReset()
     fetchHouseholdKeys.mockResolvedValue(householdKeys)
+    listHoldings.mockReset()
+    listHoldings.mockResolvedValue({ holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 })
+  })
+
+  /**
+   * The export's contents are proved in export.test.ts and the download
+   * mechanics in download.test.ts. What neither covers is the seam between
+   * them — the button. B-001 was exactly this shape: a route that dropped a
+   * field, with 294 green tests either side of it.
+   */
+  describe('download my data', () => {
+    /**
+     * Restores only what it stubbed. `vi.restoreAllMocks()` here would also
+     * clear the module mocks' implementations set in beforeEach, breaking
+     * unrelated tests in this file — which it did, the first time.
+     */
+    let releaseDownloadCapture: (() => void) | null = null
+
+    function captureDownload() {
+      const captured: { name: string; text: string }[] = []
+      let lastBlobText = ''
+      vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:x', revokeObjectURL: () => {} })
+      const RealBlob = globalThis.Blob
+      vi.stubGlobal(
+        'Blob',
+        class extends RealBlob {
+          constructor(parts: BlobPart[], options?: BlobPropertyBag) {
+            super(parts, options)
+            lastBlobText = String(parts[0])
+          }
+        },
+      )
+      const realCreate = document.createElement.bind(document)
+      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        const el = realCreate(tag)
+        if (tag === 'a') {
+          const anchor = el as HTMLAnchorElement
+          anchor.click = () => captured.push({ name: anchor.download, text: lastBlobText })
+        }
+        return el
+      })
+      releaseDownloadCapture = () => {
+        createElementSpy.mockRestore()
+        vi.unstubAllGlobals()
+      }
+      return captured
+    }
+
+    afterEach(() => {
+      releaseDownloadCapture?.()
+      releaseDownloadCapture = null
+    })
+
+    it('writes a file containing the decrypted values from every table', async () => {
+      listProtection.mockResolvedValue({
+        protection: [protectionRecord],
+        unreadableCount: 0,
+        notYetEncryptedCount: 0,
+      })
+      const captured = captureDownload()
+
+      render(<Profile />)
+      fireEvent.click(await screen.findByRole('button', { name: /download my data/i }))
+
+      await waitFor(() => expect(captured).toHaveLength(1))
+      expect(captured[0].name).toMatch(/^household-financial-plan-\d{4}-\d{2}-\d{2}\.json$/)
+
+      const parsed = JSON.parse(captured[0].text) as Record<string, unknown>
+      expect(parsed.household).toMatchObject({ name: 'Verma Family' })
+      expect(parsed.familyMembers).toHaveLength(1)
+      expect(parsed.holdings).toHaveLength(1)
+      expect(parsed.protection).toHaveLength(1)
+      expect(JSON.stringify(parsed)).toContain('250000')
+      expect(parsed.complete).toBe(true)
+
+    })
+
+    it('tells the user on screen when rows could not be read, not only inside the file', async () => {
+      listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+      listHoldings.mockResolvedValue({ holdings: [], unreadableCount: 4, notYetEncryptedCount: 0 })
+      captureDownload()
+
+      render(<Profile />)
+      fireEvent.click(await screen.findByRole('button', { name: /download my data/i }))
+
+      // Someone who downloads a backup and never opens it must still learn it
+      // is partial — otherwise they find out only when the original is gone.
+      expect(await screen.findByRole('status')).toHaveTextContent(/4 records could not be read/i)
+
+    })
+
+    it('reports a failure instead of saving an empty or partial file', async () => {
+      listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+      listHoldings.mockRejectedValue(new Error('network down'))
+      const captured = captureDownload()
+
+      render(<Profile />)
+      fireEvent.click(await screen.findByRole('button', { name: /download my data/i }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/could not build the download/i)
+      expect(captured).toHaveLength(0)
+
+    })
   })
 
   it('shows the empty state and a CTA when there is no protection cover', async () => {
