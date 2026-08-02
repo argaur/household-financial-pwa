@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import type { ReactElement, ReactNode } from 'react'
+import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { IDBFactory } from 'fake-indexeddb'
 import 'fake-indexeddb/auto'
 import { deriveKeyFromRecoveryCode, fromBase64Url, unwrapDataKey } from '@/lib/crypto'
@@ -8,6 +10,17 @@ import { getPendingKeyMaterial, clearPendingKeyMaterial } from '@/lib/crypto/pen
 import { expectStructuralA11y } from '@/test/a11y'
 import { expectNoAxeViolations } from '@/test/axe'
 import { KeySetup } from './KeySetup'
+
+/**
+ * KeySetup always renders inside the router in the real app (HouseholdGate
+ * mounts it), and it links to the privacy note. Wrapping here rather than at
+ * each of the sixteen call sites keeps those cases reading as they did.
+ */
+function render(ui: ReactElement) {
+  return rtlRender(ui, {
+    wrapper: ({ children }: { children: ReactNode }) => <MemoryRouter>{children}</MemoryRouter>,
+  })
+}
 
 const track = vi.fn()
 vi.mock('@/lib/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))

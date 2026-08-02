@@ -11,6 +11,7 @@ import { Portfolio } from '@/pages/Portfolio'
 import { Profile } from '@/pages/Profile'
 import { Dashboard } from '@/pages/Dashboard'
 import { Why } from '@/pages/Why'
+import { Privacy } from '@/pages/Privacy'
 
 export default function App() {
   return (
@@ -28,6 +29,9 @@ export default function App() {
         <Route path="/docs" element={<DocsStub />} />
         <Route path="/explore" element={<Explore />} />
         <Route path="/why" element={<Why />} />
+        {/* Public on purpose: someone deciding whether to type their net worth
+            into this app has to be able to read it before signing up. */}
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="/explore/:sectionSlug" element={<LibrarySection />} />
         <Route path="/explore/:sectionSlug/:instrumentSlug" element={<InstrumentDetail />} />
         <Route

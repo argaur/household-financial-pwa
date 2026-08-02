@@ -61,10 +61,20 @@ export function Why() {
             View the source on GitHub
             <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
           </a>
-          <div>
-            <Link to="/" className="text-caption text-muted-foreground underline-offset-4 hover:underline focus-visible:underline">
-              ← Back to the app
-            </Link>
+          <div className="space-y-2">
+            <div>
+              <Link
+                to="/privacy"
+                className="text-caption text-muted-foreground underline-offset-4 hover:underline focus-visible:underline"
+              >
+                What we can and cannot see
+              </Link>
+            </div>
+            <div>
+              <Link to="/" className="text-caption text-muted-foreground underline-offset-4 hover:underline focus-visible:underline">
+                ← Back to the app
+              </Link>
+            </div>
           </div>
         </footer>
       </div>

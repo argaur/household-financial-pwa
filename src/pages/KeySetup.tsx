@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -214,6 +215,15 @@ export function KeySetup({ onReady }: KeySetupProps) {
             from a passphrase you choose now, and that passphrase never reaches our servers — which is exactly why what
             you hold is yours alone.
           </p>
+          {/* The claim is made on this screen, so the limits belong on this
+              screen too — one tap away, before anyone commits, not buried in a
+              footer they reach afterwards. */}
+          <Link
+            to="/privacy"
+            className="inline-flex min-h-11 items-center text-caption text-muted-foreground underline underline-offset-4"
+          >
+            What we can and cannot see, including the limits of that promise
+          </Link>
         </header>
 
         <Separator />

@@ -53,6 +53,38 @@ session on every request and scopes each query to it, rather than relying on Pos
 PostHog only, through the single `track()` wrapper in `src/lib/analytics.ts`. D-005 planned a second internal
 sink as well; it was never built, and D-012 records that decision rather than pretending otherwise.
 
+## Privacy: what the server can and cannot read
+
+Household data is encrypted **in the browser** before it is sent. The server stores an opaque envelope per row
+and two wrapped copies of a data key it has no way to open — one wrapped by the user's passphrase, one by a
+one-time recovery code. Neither the passphrase, the recovery code nor the data key ever reaches the server, so
+a server-side export or a password reset is impossible by construction rather than by policy. Full reasoning in
+`Documentation/solution/DECISIONS_LOG.md` D-014; the user-facing version is at `/privacy`.
+
+**The claim is "we cannot read your data", not "this is unbreakable."** We serve the JavaScript that does the
+encrypting, so a bad build could take the key. Proton and the Bitwarden web vault share this limit.
+
+**What the server still learns, in full:**
+
+- How many holdings, family members and protection records a household has
+- When each row was created and changed
+- Which household is active, and how often
+- The account email and sign-in method, via Clerk
+
+Row *size* does not leak: payloads are padded to a 256-byte multiple before encryption, because AES-GCM output
+is input size plus 16 bytes and the raw length would otherwise reveal the rough magnitude of an amount and the
+length of a name.
+
+**What XSS still defeats.** The data key is non-extractable, so a script cannot copy it out of the browser. It
+does **not** stop a script on our own origin calling decrypt with it while the vault is unlocked. A strict CSP
+(`vercel.json`) and a 15-minute idle auto-lock (`src/lib/idle-lock.ts`) narrow that window; they do not close
+it, and no browser-side scheme does. This is accepted deliberately and stated rather than hidden.
+
+**Consequence.** A forgotten passphrase *and* a lost recovery code means the data is unrecoverable, including
+from a perfect database backup — the ciphertext survives, the key does not. That is why Profile carries a
+"Download my data" export (`src/lib/export.ts`), which reports per-table counts of anything it could not
+decrypt instead of silently producing a short file.
+
 ## Documentation
 
 | Document | What's in it |
