@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { SignedIn, SignedOut } from '@clerk/clerk-react'
 import { Toaster } from '@/components/ui/toaster'
+import { IdleLockGuard } from '@/components/idle-lock-guard'
 import { RootGate } from '@/pages/RootGate'
 import { DocsStub } from '@/pages/DocsStub'
 import { Explore } from '@/pages/Explore'
@@ -14,6 +15,14 @@ import { Why } from '@/pages/Why'
 export default function App() {
   return (
     <>
+      {/*
+        Outside <Routes> on purpose: mounted per route, the idle countdown would
+        restart on every navigation and effectively never fire. Inside <SignedIn>
+        so it costs nothing on the public library and /why pages, which hold no key.
+      */}
+      <SignedIn>
+        <IdleLockGuard />
+      </SignedIn>
       <Routes>
         <Route path="/" element={<RootGate />} />
         <Route path="/docs" element={<DocsStub />} />

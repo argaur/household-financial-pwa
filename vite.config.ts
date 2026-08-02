@@ -32,32 +32,21 @@ export default defineConfig({
         // a reload of "/" — which is not how anyone actually opens a PWA.
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        // Exactly one runtime rule, and it caches public content only.
+        //
+        // The former /api/dashboard NetworkFirst rule was removed with the
+        // route itself (D-014, step 7 — the dashboard is computed in the
+        // browser now). Beyond being dead config, a cached copy of that
+        // response is the one thing the encryption change cannot allow: it
+        // held a household's decrypted numbers, and the service worker cache
+        // is not cleared by signing out.
+        //
+        // Every encrypted route (/api/holdings, /api/family-members,
+        // /api/protection, /api/household, /api/household-keys) must stay
+        // absent from this list. src/lib/sw-cache-policy.test.ts enforces that
+        // — omission is easy to undo by accident, so it is asserted rather
+        // than left to this comment.
         runtimeCaching: [
-          {
-            // Dashboard data is per-user and changes as holdings are edited,
-            // so unlike the library it must prefer the network and fall back
-            // to cache only when offline. The client can't tell a cache hit
-            // from a live response here (SPEC.md §7 rules out a custom
-            // service worker for this slice), so freshness is tracked
-            // separately in src/lib/pwa-cache.ts.
-            //
-            // Flat path only, deliberately: this project's Vercel zero-config
-            // routing 404s any second /api/ path segment before Hono runs, so
-            // /api/dashboard never has one to match.
-            //
-            // networkTimeoutSeconds matters as much as the handler — on a
-            // flaky/captive connection the request can hang rather than fail,
-            // and without a timeout NetworkFirst would wait it out instead of
-            // serving the cache the user is entitled to.
-            urlPattern: /\/api\/dashboard$/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'dashboard-last',
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [200] },
-            },
-          },
           {
             // Instrument library content is read-only and public — safe to
             // serve from cache first so browsing works fully offline once
