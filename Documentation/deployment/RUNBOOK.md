@@ -165,7 +165,31 @@ SQL output in `drizzle/migrations/`:
 npm run db:generate     # author a migration from the schema diff
 npm run db:migrate      # apply pending migrations
 npm run db:seed         # re-seed the 30 read-only instruments (scripts/seed-instruments.ts)
+npm run db:probe        # read-only: what state is the database ACTUALLY in?
 ```
+
+> **`db:migrate` had never once worked, and nothing said so. Fixed 2026-08-04.**
+> `drizzle.config.ts` read `process.env.DATABASE_URL` but never loaded `.env.local` —
+> drizzle-kit runs the config in its own process and does not read it for you. Every invocation of
+> the command documented directly above this box failed with `url: undefined`.
+>
+> The damage was not the broken command, it was what the repository looked like afterwards.
+> Migrations `0001` and `0002` were generated on 2026-08-02 and written into
+> `drizzle/migrations/meta/_journal.json`, which is the file everyone reads to answer "did that
+> migration land?" **It answers a different question.** `_journal.json` records what was
+> *generated*; `drizzle.__drizzle_migrations` records what was *applied*. Production sat at `0000`
+> for three days while the tree said otherwise.
+>
+> **So verify against the database, never against the tree:** `npm run db:probe` prints the tables,
+> the 16 encryption columns, the 11 relaxed constraints, the applied-migration count and row counts,
+> and ends in a verdict. It is read-only (SELECTs on `information_schema` plus `COUNT(*)`), loads
+> `.env.local` itself so no shell command has to name a secret file, prints the Neon hostname so you
+> can tell *which* database you probed, and never prints a connection string or a household value.
+>
+> **Confirmed applied to production 2026-08-04:** ledger 1 row → 3, `household_keys` present, all 16
+> crypto columns present, all 11 constraints relaxed, and row counts unchanged at 2 households /
+> 3 members / 1 holding / 0 protection. The unchanged counts are the proof the migrations were
+> non-destructive. `/api/health` read `db: "ok"` afterwards on the unchanged `719d022`.
 
 **Revert: there is no down-migration.** drizzle-kit generates none here and none were written by
 hand. The only ways back are (a) a forward migration that undoes the change, or (b) a Neon
