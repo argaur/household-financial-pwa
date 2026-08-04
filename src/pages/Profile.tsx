@@ -16,7 +16,9 @@ import { fetchHouseholdKeys, type HouseholdKeys } from '@/lib/household-keys-api
 import { listHoldings } from '@/lib/holdings-api'
 import { buildHouseholdExport, serializeExport, exportFilename } from '@/lib/export'
 import { triggerTextDownload } from '@/lib/download'
+import * as Sentry from '@sentry/react'
 import { clearDashboardCache } from '@/lib/pwa-cache'
+import { clearVault } from '@/lib/crypto/key-store'
 
 type State = 'loading' | 'loaded' | 'error'
 
@@ -250,6 +252,25 @@ export function Profile() {
     // device. Multi-tenancy here is app-layer only, so the client has to
     // clean up after itself.
     await clearDashboardCache()
+    // D-014 — the cache above is the copy of the data; this is the thing that
+    // opens it. `<SignedIn>` unmounting blanks the screen but leaves the data
+    // key in IndexedDB, where it survives the tab, the browser restart and
+    // every route change — the idle lock was its only other eviction path. On
+    // the shared device the comment above is about, that means signing out and
+    // back in reopens the household with no passphrase asked.
+    //
+    // Not fatal to the sign-out, deliberately. IndexedDB is unavailable in some
+    // private-browsing modes and can reject on a corrupted store, and refusing
+    // to sign out in that case removes no key while trapping someone in a
+    // session they asked to leave. Reported rather than swallowed, because a
+    // key that outlived its sign-out is exactly the kind of failure that must
+    // not be silent.
+    try {
+      await clearVault()
+    } catch (err) {
+      Sentry.captureException(err, { tags: { area: 'signout_clear_vault' } })
+      console.error('Sign-out could not clear the local key store; the vault may still be unlocked.', err)
+    }
     await signOut()
   }
 

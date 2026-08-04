@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { expectNoAxeViolations } from '@/test/axe'
+import { unlockTestVault } from '@/test/encrypted-fixtures'
+import { getVault } from '@/lib/crypto/key-store'
 import { Profile } from './Profile'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
@@ -400,6 +402,76 @@ describe('Profile', () => {
     fireEvent.click(screen.getByText('Sign out'))
 
     await waitFor(() => expect(signOut).toHaveBeenCalled())
+  })
+
+  /**
+   * Signing out has to take the key with it, not just the screen.
+   *
+   * `<SignedIn>` unmounts the moment Clerk's session ends, so the dashboard
+   * goes blank and sign-out *looks* complete. But the data key lives in
+   * IndexedDB, which survives the unmount, the tab close and the browser
+   * restart — its only other eviction path is the 15-minute idle lock. Without
+   * this, signing out and back in on the same device reopens every decrypted
+   * number with no passphrase asked, which is not what the Unlock screen
+   * promises ("This browser needs your passphrase").
+   *
+   * Asserted against the real key store rather than a spy on `clearVault`: a
+   * spy proves the function was called, and the claim here is that the key is
+   * gone. `handleSignOut` already reasons about shared devices when it clears
+   * the dashboard cache — this is the same argument applied to the thing that
+   * actually decrypts.
+   */
+  it('clears the vault on sign out, not just the rendered screen', async () => {
+    const vault = await unlockTestVault('household-1')
+    expect(await getVault()).not.toBeNull()
+
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    render(<Profile />)
+
+    await screen.findByText('Ananya Verma')
+    fireEvent.click(screen.getByText('Sign out'))
+
+    await waitFor(() => expect(signOut).toHaveBeenCalled())
+    await waitFor(async () => expect(await getVault()).toBeNull())
+    expect(vault.householdId).toBe('household-1')
+  })
+
+  /**
+   * The first version of the fix above awaited `clearVault()` unguarded, which
+   * made sign-out impossible wherever IndexedDB rejects — Safari private mode,
+   * storage disabled, a corrupted store. That is strictly worse than the bug it
+   * fixed: refusing to sign out removes no key and traps someone in a session
+   * they asked to leave. Caught by the pre-existing sign-out test, which had no
+   * IndexedDB at all, so this pins the behaviour rather than leaving it to
+   * whichever test happens to run without a vault.
+   */
+  it('still signs out when the key store cannot be cleared', async () => {
+    const storeError = new Error('IndexedDB is unavailable')
+    // Not a spy on clearVault: the failure being modelled is the storage layer
+    // rejecting underneath it, which is what actually happens in private mode.
+    const brokenIndexedDb = {
+      open: () => {
+        throw storeError
+      },
+    }
+    const realIndexedDb = globalThis.indexedDB
+    globalThis.indexedDB = brokenIndexedDb as unknown as IDBFactory
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+      render(<Profile />)
+
+      await screen.findByText('Ananya Verma')
+      fireEvent.click(screen.getByText('Sign out'))
+
+      await waitFor(() => expect(signOut).toHaveBeenCalled())
+      // Surfaced, not swallowed.
+      expect(consoleError).toHaveBeenCalled()
+    } finally {
+      consoleError.mockRestore()
+      globalThis.indexedDB = realIndexedDb
+    }
   })
 
   it('deletes the account after confirming the destructive dialog', async () => {
