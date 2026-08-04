@@ -9,11 +9,27 @@
   "headers": [
     {
       "source": "/(.*)",
+      "missing": [{ "type": "host", "value": ".*\\.vercel\\.app" }],
       "headers": [
         {
           "key": "Content-Security-Policy",
           "value": "default-src 'self'; script-src 'self' https://clerk.finance.gauravg.dev; connect-src 'self' https://clerk.finance.gauravg.dev https://us.i.posthog.com https://us.posthog.com https://o4511631534587904.ingest.us.sentry.io; img-src 'self' data: blob: https://img.clerk.com https://lh3.googleusercontent.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; worker-src 'self' blob:; frame-src 'self' https://clerk.finance.gauravg.dev https://accounts.google.com; form-action 'self' https://accounts.google.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
-        },
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": ".*\\.vercel\\.app" }],
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' https://*.clerk.accounts.dev; connect-src 'self' https://*.clerk.accounts.dev https://us.i.posthog.com https://us.posthog.com https://o4511631534587904.ingest.us.sentry.io; img-src 'self' data: blob: https://img.clerk.com https://lh3.googleusercontent.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; worker-src 'self' blob:; frame-src 'self' https://*.clerk.accounts.dev https://accounts.google.com; form-action 'self' https://accounts.google.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "X-Frame-Options", "value": "DENY" }
