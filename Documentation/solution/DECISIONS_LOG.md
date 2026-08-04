@@ -153,3 +153,76 @@ Every entry records the decision AND the rejected alternative. A decision withou
 - **Hard prerequisite:** Neon backups, upgraded from follow-up to blocker. After the destructive step a lost `household_keys` row means data nobody can ever read again, **even from a perfect database backup**.
 - **Accepted cost:** users now carry a second secret on top of their login, on a product targeting 60% onboarding completion. A PostHog event on the key-setup screen measures the drop-off rather than guessing at it. Analytics also loses `asset_class`, `allocation_summary` and tier-change properties, which weakens the North Star funnel (insight `bMF690Mf`) — reworking it is tracked separately.
 - **Revisit if:** the XSS limit becomes unacceptable for a claim being made publicly (the answer is a different delivery model, not a different cipher), or a feature genuinely requires server-side computation over plaintext — in which case the trade-off is the product promise itself and this decision, not the implementation.
+
+---
+
+## D-015 — Preview gets its own CSP, and sign-out ends the key's life (2026-08-04)
+
+Two decisions taken while building step 11's rehearsal environment. Both amend D-014 rather than
+replacing anything in it.
+
+### The preview CSP is a second, mutually exclusive header rule
+
+**Decision.** `vercel.json` now carries three `headers` entries: the production CSP guarded by
+`missing: [{ type: 'host', value: '.*\\.vercel\\.app' }]`, a preview CSP guarded by `has:` on the same
+pattern, and the three non-CSP security headers shared by both. The preview policy is the production
+policy with `https://clerk.finance.gauravg.dev` replaced by `https://*.clerk.accounts.dev` and
+nothing else changed.
+
+**Why a preview needs its own policy at all.** A Clerk *production* instance is pinned to
+`clerk.finance.gauravg.dev` by DNS, and `*.vercel.app` cannot take custom DNS — the same wall that
+kept Finding 2 open for weeks. So a preview must use the Clerk *development* instance, which serves
+from `*.clerk.accounts.dev`, a host the production `script-src` blocks. Without this, a preview
+cannot sign in, and step 11's whole purpose is to exercise the signed-in surface.
+
+**Why mutually exclusive, and why `missing` on the production rule.** Vercel applies *every* matching
+`headers` entry, and two `Content-Security-Policy` response headers are enforced as their
+**intersection** — so a widened policy sitting beside a strict one buys nothing and fails
+confusingly. Guarding production with `missing` rather than a second `has` also keeps it
+**fail-closed**: a host matching neither rule still receives the strict policy instead of no policy
+at all.
+
+**Rejected — a `VERCEL_ENV`-conditional build step.** Vercel parses `vercel.json` from the source
+tree to configure the deployment; mutating it inside `buildCommand` has no effect on the headers the
+edge network serves. The only build-time escape is a `<meta http-equiv>` tag, which cannot express
+`frame-ancestors` and *intersects* with the header policy rather than replacing it — so it can only
+make preview stricter, which is the opposite of what is needed. Recorded so it is not re-proposed.
+
+**Rejected — one shared, widened policy.** Puts `*.clerk.accounts.dev` into production permanently to
+solve a preview-only problem.
+
+**Guarded by tests, not by intent.** `csp-policy.test.ts` previously took the first CSP header it
+found; with two in the file that would have silently begun asserting the preview policy while
+reporting green. It now selects the production rule by its guard, with its four original assertions
+untouched. Three new tests: preview must equal production with only the Clerk host swapped, exactly
+one rule may widen and both must be host-guarded, and preview keeps every hardening directive.
+Mutation-tested — injecting `'unsafe-inline'` into the preview `script-src` fails two of the three.
+
+**Deliberately absent: `challenges.cloudflare.com`.** Clerk's sign-up screen is Turnstile-gated and
+this policy almost certainly blocks it — but the CSP has never been served in production
+(`719d022` predates it), so the rehearsal is the first chance to *observe* that rather than guess.
+If step 11 shows the refusal it goes into both policies with the console transcript as evidence.
+
+### Sign-out clears the vault; the idle lock is no longer its only eviction path
+
+**Decision.** `Profile.handleSignOut` now calls `clearVault()` alongside the existing
+`clearDashboardCache()`. Guarded — a failure is reported to Sentry and `console.error` and the
+sign-out proceeds.
+
+**Why.** `clearVault()` had exactly one production call site, `idle-lock-guard.tsx:33`. Sign-out
+ended the Clerk session and blanked the screen — `<SignedIn>` unmounts — while the data key stayed
+in IndexedDB, surviving the tab, the browser restart and every route change. Signing out and back in
+on the same device reopened every decrypted number with no passphrase, which is not what the Unlock
+screen promises. The function already made the shared-device argument in the comment above
+`clearDashboardCache()`, and then applied it only to the copy of the data rather than to the thing
+that decrypts it.
+
+**Why guarded rather than awaited plainly.** The unguarded version was shipped-and-caught in the same
+session and was *worse than the bug*: IndexedDB rejects in some private-browsing modes and on a
+corrupted store, so sign-out became impossible exactly where it was most likely to fail — removing
+no key while trapping someone in a session they asked to leave. Fail-closed is right for a gate and
+wrong for teardown. Reported loudly rather than swallowed, because a key that outlived its sign-out
+must not fail silently either.
+
+**Scope.** D-014's server-side claim is unaffected — this was always local key lifetime on a shared
+device, never anything the server could see. The `/privacy` leak list needs no change.
