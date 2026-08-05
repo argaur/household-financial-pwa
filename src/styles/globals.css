@@ -72,9 +72,13 @@
     --accent:            180 30% 18%;
     --accent-foreground: 180 50% 70%;
 
-    /* ── Destructive ─────────────────────────────────────────── */
-    --destructive:            0 62% 50%;
-    --destructive-foreground: 40 20% 97%;
+    /* ── Destructive ─────────────────────────────────────────────
+       Lightened 2026-08-05: the original 0 62% 50% measured 3.67:1 as
+       text on the dark background — below AA. 0 72% 63% measures 5.39:1
+       on --background and 4.90:1 on --card. The foreground flips to
+       near-black because warm white on this lighter red would fail. */
+    --destructive:            0 72% 63%;
+    --destructive-foreground: 30 15% 8%;
 
     /* ── Borders / Inputs / Ring ─────────────────────────────── */
     --border: 30 10% 18%;   /* #2C2A26 */

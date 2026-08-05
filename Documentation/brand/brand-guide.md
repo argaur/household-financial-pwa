@@ -31,15 +31,15 @@ Full CSS variables in `Documentation/design/tokens/globals.css`. Quick reference
 | `--destructive` | `#991B1B` | `#991B1B` | Error / danger | Errors, delete only |
 | `--accent` | `#E8F3F2` | dark teal tint | Teal tint bg | Active state backgrounds |
 
-**Tier status colors** (used only for the Health tier badge):
+**Tier status colors** (used only for the Health tier badge; the dark trio is the same identity inverted — light text on a deep tint — applied via `dark:` variants, always as a full set):
 
-| Tier | Text | Background | Border |
-|---|---|---|---|
-| Getting Started | `#92400E` | `#FEF3C7` | `#FDE68A` |
-| On Track | `#1B6B6B` | `#E8F3F2` | `#B2DFDB` |
-| Strong | `#166534` | `#DCFCE7` | `#86EFAC` |
+| Tier | Text | Background | Border | Dark text | Dark bg | Dark border |
+|---|---|---|---|---|---|---|
+| Getting Started | `#92400E` | `#FEF3C7` | `#FDE68A` | `#FDE68A` | `#451A03` | `#92400E` |
+| On Track | `#1B6B6B` | `#E8F3F2` | `#B2DFDB` | `#8FD6D6` | `#0E2B2B` | `#1B6B6B` |
+| Strong | `#166534` | `#DCFCE7` | `#86EFAC` | `#86EFAC` | `#052E16` | `#166534` |
 
-**Asset class palette** (used only in the allocation donut and its legend):
+**Asset class palette** (the class identity system — allocation donut + legend, and since 2026-08-05 the instrument library: Explore card accent edges and section/detail header dots. Still never generic UI chrome. Single source: `src/lib/asset-classes.ts`):
 
 | Class | Color | Hex |
 |---|---|---|
@@ -49,6 +49,8 @@ Full CSS variables in `Documentation/design/tokens/globals.css`. Quick reference
 | Hybrid & Guaranteed | Muted purple | `#6D28D9` |
 | Real Estate | Forest green | `#15803D` |
 | Alternative | Terracotta | `#9F3939` |
+
+The same hex serves both themes: every use is a decorative identity mark beside a text label (accent edge, legend dot, chart fill), never the only carrier of information.
 
 ### Typography Scale
 
@@ -156,6 +158,7 @@ Full copy in `Documentation/design/COPY_DECK.md`. Quick reference:
 | HoldingRow | Custom | — |
 | SectionCard | Custom | — |
 | BottomTabBar | Custom | Never hide on scroll |
+| SiteHeader | Custom (2026-08-05) | One per app, mounted above routes — never per page |
 
 ### shadcn install command
 

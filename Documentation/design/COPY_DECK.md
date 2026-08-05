@@ -10,6 +10,12 @@
 
 ---
 
+## Site header (added 2026-08-05)
+
+One masthead on every route. Signed-out nav: Explore · How it's built · Privacy · Sign in. Signed-in nav: Your plan · Holdings · Explore · Profile. Wordmark: "Household Financial Planning" (links to `/`). Theme toggle labels: "Switch to dark theme" / "Switch to light theme".
+
+---
+
 ## Onboarding
 
 ### Step 1 — Create household (of 3)
@@ -214,6 +220,16 @@
 | Hybrid / Guaranteed | Hybrid & Guaranteed | Structured returns with defined rules |
 | Real Estate | Real Estate | Property and land |
 | Alternative | Alternative | Beyond the mainstream |
+
+### Instrument list cards (updated 2026-08-05)
+
+The list card shows **name, the full summary, and the risk level only**. It previously showed the full returns and risk paragraphs clamped to one CSS line each, which clipped them mid-sentence; a card never shows a truncated string. The risk level is the leading clause of the seeded risk copy (the text before its first em-dash, semicolon or period), extracted in `src/lib/instrument-preview.ts`. The full returns/tax/liquidity/risk paragraphs remain detail-page content.
+
+| Element | Copy |
+|---|---|
+| Card title | [Instrument name] |
+| Card body | [Instrument summary, unabridged] |
+| Card risk row | Risk: [risk level] |
 
 ### Instrument detail page
 
