@@ -34,9 +34,9 @@ export function Landing() {
 
   return (
     <main className="min-h-screen bg-background text-foreground font-sans">
-      <div className="container max-w-lg md:max-w-2xl py-12 md:py-16 space-y-12">
+      <div className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-12 md:py-16 space-y-12 lg:space-y-16">
         {/* Hero — who this is for, in the first heading */}
-        <header className="space-y-4">
+        <header className="space-y-4 lg:max-w-3xl">
           <p className="section-label">{LANDING_HERO.label}</p>
           <h1 className="font-display text-display">{LANDING_HERO.headline}</h1>
           <p className="text-body-lg text-muted-foreground">{LANDING_HERO.body}</p>
@@ -70,7 +70,7 @@ export function Landing() {
           </p>
           <div className="space-y-3 md:grid md:grid-cols-3 md:gap-3 md:space-y-0">
             {HOW_IT_WORKS.map((step) => (
-              <article key={step.heading} className="rounded-lg border border-border bg-card p-4 shadow-card space-y-2">
+              <article key={step.heading} className="rounded-lg border border-border bg-card p-4 md:p-6 shadow-card space-y-2">
                 <p className="text-caption text-muted-foreground tabular">{step.step}</p>
                 <h2 className="text-title font-semibold">{step.heading}</h2>
                 <p className="text-body text-muted-foreground">{step.body}</p>
@@ -83,7 +83,7 @@ export function Landing() {
 
         {/* The sharpest differentiator — the same claim /privacy makes, with
             its limits one click away. Never a stronger version than D-014. */}
-        <section className="space-y-4" aria-labelledby="landing-privacy">
+        <section className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-10 lg:space-y-0" aria-labelledby="landing-privacy">
           <div className="space-y-2">
             <p className="section-label" id="landing-privacy">
               {LANDING_PRIVACY.label}
@@ -91,7 +91,7 @@ export function Landing() {
             <h2 className="font-display text-heading">{LANDING_PRIVACY.headline}</h2>
             <p className="text-body text-muted-foreground">{LANDING_PRIVACY.body}</p>
           </div>
-          <div className="rounded-lg border border-dashed p-4 space-y-2">
+          <div className="rounded-lg border border-dashed p-4 md:p-6 space-y-2">
             <p className="text-body text-muted-foreground">{LANDING_PRIVACY.cost}</p>
             <p className="text-body text-muted-foreground">{LANDING_PRIVACY.limitLead}</p>
             <Link
@@ -116,7 +116,7 @@ export function Landing() {
             <h2 className="font-display text-heading">{SEE_IT_FIRST.heading}</h2>
             <p className="text-caption text-muted-foreground">{SEE_IT_FIRST.body}</p>
           </div>
-          <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
             {SEE_IT_FIRST.links.map((link) => (
               <Link
                 key={link.to}

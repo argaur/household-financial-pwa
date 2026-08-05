@@ -17,7 +17,7 @@ export function Why() {
 
   return (
     <main className="min-h-screen bg-background text-foreground font-sans">
-      <div className="container max-w-lg py-12 space-y-10">
+      <div className="container max-w-lg md:max-w-2xl lg:max-w-3xl py-12 md:py-16 space-y-10">
         <header className="space-y-2">
           <p className="section-label">Why these choices?</p>
           <h1 className="font-display text-display">A household-finance app, and the reasoning behind it</h1>
@@ -84,7 +84,7 @@ export function Why() {
 
 function DecisionCard({ decision }: { decision: WhyDecision }) {
   return (
-    <article className="rounded-lg border border-border bg-card p-4 shadow-card space-y-3">
+    <article className="rounded-lg border border-border bg-card p-4 md:p-6 shadow-card space-y-3">
       <h3 className="text-title font-medium">{decision.heading}</h3>
       <dl className="space-y-2">
         <div>

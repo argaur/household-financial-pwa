@@ -33,7 +33,7 @@ export function AllocationDonut({ state, allocation, totalValue }: AllocationDon
   }, [state, allocation])
 
   return (
-    <section className="rounded-lg border p-4 space-y-4">
+    <section className="rounded-lg border p-4 md:p-6 space-y-4">
       <h2 className="section-label">Where your money lives</h2>
 
       {state === 'loading' && (

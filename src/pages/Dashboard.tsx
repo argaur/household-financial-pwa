@@ -177,7 +177,7 @@ export function Dashboard() {
   if (state === 'loading') {
     return (
       <main className="min-h-screen bg-background text-foreground font-sans">
-        <div className="container max-w-lg py-12 space-y-6 pb-28">
+        <div className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-12 md:py-16 space-y-6 pb-28">
           <div className="space-y-2">
             <Skeleton className="h-4 w-32" />
             <Skeleton className="h-8 w-40" />
@@ -194,7 +194,7 @@ export function Dashboard() {
   if (state === 'error') {
     return (
       <main className="min-h-screen bg-background text-foreground font-sans">
-        <div className="container max-w-lg py-12 space-y-4 text-center">
+        <div className="container max-w-lg md:py-16 py-12 space-y-4 text-center">
           <p className="text-body text-muted-foreground">
             Couldn't load your data. Check your connection and try again.
           </p>
@@ -211,7 +211,7 @@ export function Dashboard() {
 
   return (
     <main className="min-h-screen bg-background text-foreground font-sans">
-      <div className="container max-w-lg py-12 space-y-6 pb-28">
+      <div className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-12 md:py-16 space-y-6 pb-28">
         <header className="space-y-1">
           <p className="section-label">{dashboardData.householdName}</p>
           <h1 className="font-display text-display">Your plan</h1>
@@ -244,31 +244,41 @@ export function Dashboard() {
           </div>
         )}
 
-        <HealthTierCard completeness={dashboardData.completeness} />
+        {/* Desktop (2026-08-05 rework): the one-pager unfolds — health verdict
+            as a full-width banner, then allocation and next-step side by side.
+            Mobile keeps the original single column; DOM order is identical in
+            both, so reading order and screen-reader order never diverge. */}
+        <div className="space-y-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
+          <div className="lg:col-span-2">
+            <HealthTierCard completeness={dashboardData.completeness} />
+          </div>
 
-        <AllocationDonut
-          state={dashboardData.allocation.length === 0 ? 'empty' : 'populated'}
-          allocation={dashboardData.allocation}
-          totalValue={dashboardData.totalValue}
-        />
+          <AllocationDonut
+            state={dashboardData.allocation.length === 0 ? 'empty' : 'populated'}
+            allocation={dashboardData.allocation}
+            totalValue={dashboardData.totalValue}
+          />
 
-        <NudgeCard nudge={dashboardData.nudge} />
+          <div className="space-y-6">
+            <NudgeCard nudge={dashboardData.nudge} />
 
-        {/* Post-activation install prompt — renders nothing unless the
-            browser actually offered an install (Slice 8). */}
-        <InstallPrompt surface="dashboard" />
+            {/* Post-activation install prompt — renders nothing unless the
+                browser actually offered an install (Slice 8). */}
+            <InstallPrompt surface="dashboard" />
 
-        <nav className="flex flex-col gap-2 pt-2">
-          <Link to="/portfolio" className="text-body underline">
-            View your holdings →
-          </Link>
-          <Link to="/explore" className="text-body underline">
-            Explore what you can invest in →
-          </Link>
-          <Link to="/profile" className="text-body underline">
-            Manage your protection cover →
-          </Link>
-        </nav>
+            <nav className="flex flex-col gap-1 pt-2">
+              <Link to="/portfolio" className="inline-flex min-h-11 items-center text-body underline">
+                View your holdings →
+              </Link>
+              <Link to="/explore" className="inline-flex min-h-11 items-center text-body underline">
+                Explore what you can invest in →
+              </Link>
+              <Link to="/profile" className="inline-flex min-h-11 items-center text-body underline">
+                Manage your protection cover →
+              </Link>
+            </nav>
+          </div>
+        </div>
       </div>
     </main>
   )
