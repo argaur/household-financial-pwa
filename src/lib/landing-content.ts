@@ -19,7 +19,10 @@
 import { PRIVACY_CLAIM } from './privacy-note'
 
 export const LANDING_HERO = {
-  label: 'Household Financial Planning',
+  // Not the product name: the masthead added in the 2026-08-05 rework already
+  // carries that, and repeating it here put the same words twice within about
+  // 100px. A section label should add something, so this one says who it is for.
+  label: 'For Indian households',
   headline: "Your family's money, on one page.",
   body:
     'Learn what you can invest in. Record what each member of your household holds. See the gaps in your plan, laid out the way a financial planner would.',
