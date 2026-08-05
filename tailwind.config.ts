@@ -95,22 +95,33 @@ const config: Config = {
         /* ── Tier status colors ───────────────────────────────
            Used for: tier badge bg, tier badge text, tier border.
            Never used as generic status colors elsewhere.
-           Always use as a pair: text on bg.                      */
+           Always use as a pair: text on bg. The dark-* trio is the
+           same identity inverted for the dark theme (light text on a
+           deep tint) — apply via dark: variants, always as a full set. */
         tier: {
           'getting-started': {
             DEFAULT: '#92400E',   /* amber-800  — text */
             bg:      '#FEF3C7',   /* amber-100  — background */
             border:  '#FDE68A',   /* amber-200  — border */
+            dark:          '#FDE68A',   /* amber-200 — text on dark */
+            'dark-bg':     '#451A03',   /* amber-950 — background */
+            'dark-border': '#92400E',   /* amber-800 — border */
           },
           'on-track': {
             DEFAULT: '#1B6B6B',   /* teal       — text */
             bg:      '#E8F3F2',   /* teal tint  — background */
             border:  '#B2DFDB',   /* teal-200   — border */
+            dark:          '#8FD6D6',   /* light teal — text on dark */
+            'dark-bg':     '#0E2B2B',   /* deep teal  — background */
+            'dark-border': '#1B6B6B',   /* teal       — border */
           },
           strong: {
             DEFAULT: '#166534',   /* green-800  — text */
             bg:      '#DCFCE7',   /* green-100  — background */
             border:  '#86EFAC',   /* green-300  — border */
+            dark:          '#86EFAC',   /* green-300 — text on dark */
+            'dark-bg':     '#052E16',   /* green-950 — background */
+            'dark-border': '#166534',   /* green-800 — border */
           },
         },
       },

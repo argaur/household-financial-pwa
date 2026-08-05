@@ -3,29 +3,11 @@ import { PieChart, Pie, Cell } from 'recharts'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { AllocationSlice, AssetClass } from '@/lib/allocation'
-
+import type { AllocationSlice } from '@/lib/allocation'
 // Copy: Documentation/design/COPY_DECK.md — "Allocation donut section".
-const ASSET_LABELS: Record<AssetClass, string> = {
-  equity: 'Equity',
-  debt: 'Debt',
-  gold: 'Gold',
-  hybrid: 'Hybrid',
-  'real-estate': 'Real Estate',
-  alternative: 'Alternative',
-}
-
-// Raw hex, not Tailwind classes — Recharts' `fill`/inline `style` props need
-// actual color strings. Values mirror tailwind.config.ts's `asset` palette
-// 1:1; keep both in sync if the palette changes.
-const ASSET_COLORS: Record<AssetClass, string> = {
-  equity: '#2D6A6A',
-  debt: '#475569',
-  gold: '#B45309',
-  hybrid: '#6D28D9',
-  'real-estate': '#15803D',
-  alternative: '#9F3939',
-}
+// Labels and hex live in the shared asset-class identity module so the donut,
+// the Explore grid and the section pages stay one system.
+import { ASSET_LABELS, ASSET_HEX as ASSET_COLORS } from '@/lib/asset-classes'
 
 const currency = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
 function formatInr(value: number): string {

@@ -17,9 +17,12 @@ const TIER_CONTEXT: Record<CompletenessTier, string> = {
 // string interpolation. Mirrors tailwind.config.ts's `tier` token group
 // (same pattern already used by HomeShell.tsx's health badge).
 const TIER_CLASSES: Record<CompletenessTier, string> = {
-  getting_started: 'bg-tier-getting-started-bg text-tier-getting-started border-tier-getting-started-border',
-  on_track: 'bg-tier-on-track-bg text-tier-on-track border-tier-on-track-border',
-  strong: 'bg-tier-strong-bg text-tier-strong border-tier-strong-border',
+  getting_started:
+    'bg-tier-getting-started-bg text-tier-getting-started border-tier-getting-started-border dark:bg-tier-getting-started-dark-bg dark:text-tier-getting-started-dark dark:border-tier-getting-started-dark-border',
+  on_track:
+    'bg-tier-on-track-bg text-tier-on-track border-tier-on-track-border dark:bg-tier-on-track-dark-bg dark:text-tier-on-track-dark dark:border-tier-on-track-dark-border',
+  strong:
+    'bg-tier-strong-bg text-tier-strong border-tier-strong-border dark:bg-tier-strong-dark-bg dark:text-tier-strong-dark dark:border-tier-strong-dark-border',
 }
 
 interface HealthTierCardProps {

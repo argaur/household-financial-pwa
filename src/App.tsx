@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { SignedIn, SignedOut } from '@clerk/clerk-react'
 import { Toaster } from '@/components/ui/toaster'
 import { IdleLockGuard } from '@/components/idle-lock-guard'
+import { SiteHeader } from '@/components/site-header'
 import { RootGate } from '@/pages/RootGate'
 import { SignInPage } from '@/pages/SignInPage'
 import { DocsStub } from '@/pages/DocsStub'
@@ -25,6 +26,9 @@ export default function App() {
       <SignedIn>
         <IdleLockGuard />
       </SignedIn>
+      {/* One masthead for every route, mounted outside <Routes> so it never
+          remounts on navigation (2026-08-05 design rework). */}
+      <SiteHeader />
       <Routes>
         <Route path="/" element={<RootGate />} />
         <Route path="/sign-in" element={<SignInPage />} />

@@ -52,7 +52,7 @@ export function HomeShell() {
           <div className="flex items-center justify-between rounded-lg border border-border bg-card p-4 shadow-card">
             <span className="text-body">API + Database</span>
             {health ? (
-              <Badge className="bg-tier-strong-bg text-tier-strong border-tier-strong-border">
+              <Badge className="bg-tier-strong-bg text-tier-strong border-tier-strong-border dark:bg-tier-strong-dark-bg dark:text-tier-strong-dark dark:border-tier-strong-dark-border">
                 {health.db === 'ok' ? 'connected' : 'db error'}
               </Badge>
             ) : healthError ? (

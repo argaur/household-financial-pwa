@@ -5,12 +5,18 @@ import { ClerkProvider } from '@clerk/clerk-react'
 import { initSentry } from './lib/sentry'
 import { initPostHog } from './lib/posthog'
 import { initInstallPrompt } from './lib/pwa-install'
+import { initTheme } from './lib/theme'
 import { track } from './lib/analytics'
 import App from './App'
 import './styles/globals.css'
 
 initSentry()
 initPostHog()
+
+// Apply light/dark before render — system setting by default, stored override
+// if the user toggled. Nothing paints before this runs (client-rendered SPA),
+// so no flash-of-wrong-theme handling is needed.
+initTheme()
 
 // Slice 8 — capture the browser's install offer at boot so the custom prompt
 // can replay it later, post-activation (see components/install-prompt.tsx).
