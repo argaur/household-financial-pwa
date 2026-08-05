@@ -146,7 +146,7 @@ export function Landing() {
 
         <footer className="space-y-1">
           <p className="text-caption text-muted-foreground">
-            The full source — including the decision log this product is built from — is public.
+            The full source is public. That includes the decision log this product is built from.
           </p>
           <a
             href={WHY_REPO_URL}

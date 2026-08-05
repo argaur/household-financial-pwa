@@ -22,10 +22,10 @@ export const LANDING_HERO = {
   label: 'Household Financial Planning',
   headline: "Your family's money, on one page.",
   body:
-    'Learn what you can invest in, record what each member of your household actually holds, and see the gaps in your plan — laid out the way a financial planner would.',
+    'Learn what you can invest in. Record what each member of your household holds. See the gaps in your plan, laid out the way a financial planner would.',
   primaryCta: 'Create your plan',
   secondaryCta: 'Sign in',
-  browseFirst: 'Or browse the instrument library first — no account needed.',
+  browseFirst: 'Or browse the instrument library first. No account needed.',
 } as const
 
 export interface LandingStep {
@@ -39,19 +39,19 @@ export const HOW_IT_WORKS: readonly LandingStep[] = [
     step: 'Step 1',
     heading: 'Learn what exists',
     body:
-      '30 instruments across 6 asset classes, explained plainly — from PPF and Sukanya Samriddhi to index funds and sovereign gold bonds. Every term defined where it first appears.',
+      '30 instruments across 6 asset classes, explained plainly. From PPF and Sukanya Samriddhi to index funds and sovereign gold bonds. Every term is defined where it first appears.',
   },
   {
     step: 'Step 2',
     heading: 'Record what you hold',
     body:
-      'Every family member, every holding — mutual funds, fixed deposits, gold, insurance. Your best estimate is fine; you can update it anytime.',
+      'Every family member, every holding. Mutual funds, fixed deposits, gold, insurance. Your best estimate is fine. You can update it any time.',
   },
   {
     step: 'Step 3',
     heading: 'See the household picture',
     body:
-      'Where the money lives across asset classes, a five-check health score, and one next step at a time — not thirty.',
+      'Where the money lives across asset classes. A five-check health score. One next step at a time, not thirty.',
   },
 ] as const
 
@@ -59,7 +59,7 @@ export const LANDING_PRIVACY = {
   label: 'Privacy',
   headline: PRIVACY_CLAIM.headline,
   body:
-    'Everything your family records — names, amounts, dates of birth — is encrypted in your browser before it is sent. Our server stores unreadable ciphertext and a key locked with your passphrase, which never leaves your device. There is no admin view of your holdings, because there is nothing readable to view.',
+    'Everything your family records is encrypted in your browser before it is sent. That includes names, amounts and dates of birth. Our server stores unreadable text and a key that is locked with your passphrase. The passphrase never leaves your device. There is no admin view of your holdings, because there is nothing readable to view.',
   cost:
     'That claim has a cost: if you lose both your passphrase and your recovery code, your data is gone. We cannot reset what we cannot read.',
   limitLead: 'It also has limits, and we publish them rather than hoping you assume otherwise.',
