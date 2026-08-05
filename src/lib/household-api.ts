@@ -81,10 +81,17 @@ async function readBack(dataKey: CryptoKey, wire: HouseholdWire | null): Promise
  * that has to be answerable while locked. Only the id crosses back: the name
  * stays ciphertext and is never touched here.
  */
-export async function probeHousehold(token: string | null): Promise<{ exists: boolean; id: string | null }> {
+export async function probeHousehold(
+  token: string | null,
+): Promise<{ exists: boolean; id: string | null; encrypted: boolean }> {
   const res = await encryptedFetch('/api/household', token, fail)
   const body = (await res.json()) as HouseholdResponse
-  return body.household ? { exists: true, id: body.household.id } : { exists: false, id: null }
+  if (!body.household) return { exists: false, id: null, encrypted: false }
+  // `ciphertext` is the only thing that distinguishes a row this app sealed
+  // from one written before encryption existed. Both look identical to a
+  // caller that only asks whether a household is there, and the two need
+  // opposite answers: sealed-with-no-key is unopenable, plaintext is not.
+  return { exists: true, id: body.household.id, encrypted: body.household.ciphertext != null }
 }
 
 export async function fetchHousehold(token: string | null): Promise<HouseholdRead> {

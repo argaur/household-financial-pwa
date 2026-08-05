@@ -236,6 +236,26 @@ describe('HouseholdGate — accessibility of the new panels', () => {
     listHoldings.mockReset().mockResolvedValue({ holdings: [] })
   })
 
+  it('never tells a pre-encryption household that its data cannot be recovered', async () => {
+    // The whole point of the state: these rows are plaintext and intact. The
+    // unrecoverable copy would be a false statement about live data.
+    resolveVaultState.mockResolvedValue({ state: 'predates-encryption', householdId: 'h1' })
+    render(<HouseholdGate />)
+
+    expect(await screen.findByText(/before your data was encrypted/i)).toBeInTheDocument()
+    expect(screen.queryByText(/cannot be recovered/i)).not.toBeInTheDocument()
+  })
+
+  it('does not try to open the vault for a pre-encryption household', async () => {
+    // fetchHousehold opens the vault; there is no key, so reaching it would
+    // throw and land the user on the generic error screen instead.
+    resolveVaultState.mockResolvedValue({ state: 'predates-encryption', householdId: 'h1' })
+    render(<HouseholdGate />)
+
+    await screen.findByText(/before your data was encrypted/i)
+    expect(fetchHousehold).not.toHaveBeenCalled()
+  })
+
   it('passes the structural checks on the unrecoverable panel', async () => {
     resolveVaultState.mockResolvedValue({ state: 'unrecoverable', householdId: 'h1' })
     const { container } = render(<HouseholdGate />)

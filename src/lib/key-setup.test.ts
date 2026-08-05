@@ -316,14 +316,41 @@ describe('resolveVaultState — the interrupted-setup paths', () => {
   })
 
   it('names the unrecoverable state when the household exists but nothing in the browser can open it', async () => {
-    serverResponses({ keys: null, household: { id: HOUSEHOLD_ID } })
+    // Encrypted row, no key material anywhere: the sealed bytes are real and
+    // nothing can ever open them. `ciphertext` is what makes this case true.
+    serverResponses({ keys: null, household: { id: HOUSEHOLD_ID, ciphertext: 'c2VhbGVk' } })
     const resolved = await resolveVaultState(TOKEN)
     expect(resolved.state).toBe('unrecoverable')
     expect(resolved.state === 'unrecoverable' && resolved.householdId).toBe(HOUSEHOLD_ID)
   })
 
   it('does not delete anything when it reports unrecoverable', async () => {
-    serverResponses({ keys: null, household: { id: HOUSEHOLD_ID } })
+    serverResponses({ keys: null, household: { id: HOUSEHOLD_ID, ciphertext: 'c2VhbGVk' } })
+    await resolveVaultState(TOKEN)
+    const methods = calls().map((c) => c[1]?.method ?? 'GET')
+    expect(methods.every((m) => m === 'GET')).toBe(true)
+  })
+
+  it('does NOT call a pre-encryption household unrecoverable', async () => {
+    // A row written before encryption existed: plaintext columns, no
+    // ciphertext, no key material. Nothing is sealed, so nothing is lost —
+    // telling this user their data "cannot be recovered, by us or by you" is
+    // false. Found live on the 2026-08-05 step-11 rehearsal, where every
+    // household predating the encryption cycle hit the unrecoverable screen.
+    serverResponses({ keys: null, household: { id: HOUSEHOLD_ID, ciphertext: null } })
+    const resolved = await resolveVaultState(TOKEN)
+    expect(resolved.state).not.toBe('unrecoverable')
+  })
+
+  it('names the pre-encryption household as its own state, carrying the id', async () => {
+    serverResponses({ keys: null, household: { id: HOUSEHOLD_ID, ciphertext: null } })
+    const resolved = await resolveVaultState(TOKEN)
+    expect(resolved.state).toBe('predates-encryption')
+    expect(resolved.state === 'predates-encryption' && resolved.householdId).toBe(HOUSEHOLD_ID)
+  })
+
+  it('does not delete anything when it reports a pre-encryption household', async () => {
+    serverResponses({ keys: null, household: { id: HOUSEHOLD_ID, ciphertext: null } })
     await resolveVaultState(TOKEN)
     const methods = calls().map((c) => c[1]?.method ?? 'GET')
     expect(methods.every((m) => m === 'GET')).toBe(true)

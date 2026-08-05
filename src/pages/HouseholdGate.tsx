@@ -20,6 +20,7 @@ type State =
   | 'key-setup'
   | 'unlock'
   | 'unrecoverable'
+  | 'predates-encryption'
   | 'household-unreadable'
   | 'household-not-yet-encrypted'
   | 'no-household'
@@ -75,6 +76,13 @@ export function HouseholdGate() {
         }
         if (vaultState.state === 'unrecoverable') {
           setState('unrecoverable')
+          return
+        }
+        // Must return here rather than fall through: `fetchHousehold` below
+        // opens the vault, and this user has no key at all — reaching it would
+        // throw and show a generic error over data that is perfectly intact.
+        if (vaultState.state === 'predates-encryption') {
+          setState('predates-encryption')
           return
         }
         if (vaultState.state === 'completing-setup') {
@@ -215,6 +223,23 @@ export function HouseholdGate() {
           >
             Go to your profile to delete this account
           </a>
+        </div>
+      </main>
+    )
+  }
+
+  if (state === 'predates-encryption') {
+    return (
+      <main className="min-h-screen bg-background text-foreground font-sans">
+        <div className="container max-w-lg py-12 space-y-4">
+          <h1 className="font-display text-display">This household came before encryption.</h1>
+          <p className="text-body text-muted-foreground">
+            It was created before your data was encrypted, so there is nothing sealed here to open. Your information is
+            stored exactly as it was — nothing has been changed, and nothing has been lost.
+          </p>
+          <p className="text-body text-muted-foreground">
+            This version of the app cannot show it yet, and it will not delete or overwrite anything while it waits.
+          </p>
         </div>
       </main>
     )

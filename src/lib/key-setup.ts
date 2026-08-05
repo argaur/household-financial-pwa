@@ -182,6 +182,14 @@ export type VaultState =
    * explicitly going through account deletion.
    */
   | { state: 'unrecoverable'; householdId: string }
+  /**
+   * A household written before this app encrypted anything: plaintext columns,
+   * no ciphertext, no key material. Nothing is sealed, so nothing is lost —
+   * which is precisely why it must not be folded into `unrecoverable`, whose
+   * words are "it cannot be recovered, by us or by you". There is no migration
+   * path yet, so this state is reported rather than repaired.
+   */
+  | { state: 'predates-encryption'; householdId: string }
   /** Vault open for the right household — carry on into the normal flow. */
   | { state: 'ready'; vault: Vault }
 
@@ -211,6 +219,11 @@ export async function resolveVaultState(token: string | null): Promise<VaultStat
   if (vault?.householdId === householdId && pending?.householdId === householdId) {
     return { state: 'completing-setup', householdId }
   }
+
+  // Asked before `unrecoverable` because the two are indistinguishable by
+  // existence alone, and only one of them is a loss. A row with no ciphertext
+  // was never sealed, so no missing key explains it.
+  if (!household.encrypted) return { state: 'predates-encryption', householdId }
 
   // Includes the case where the vault is open but the wrapped copies are gone:
   // the data key in the vault is non-extractable and can never be re-wrapped,
