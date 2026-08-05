@@ -12,12 +12,19 @@ import { resolve } from 'node:path'
  * reading its actual network requests, plus the Sentry ingest host extracted
  * from the deployed bundle. It is not recalled and it is not from documentation.
  *
- * KNOWN GAP, stated rather than hidden: only the *signed-out* surface could be
- * observed — signing in needs a password this session does not hold. The
- * signed-in shell (Clerk user button, Google profile images, any Clerk flow that
- * opens an iframe) may require hosts not listed here. This policy must be
- * exercised on a preview deploy while signed in before it reaches production.
- * That check belongs to step 11's rehearsal.
+ * GAP CLOSED 2026-08-05 by the step-11 preview rehearsal. The signed-in shell
+ * was walked end to end on a preview deploy — key setup, an encrypted write,
+ * dashboard render, sign-out, sign-in, recovery-code unlock — and produced zero
+ * CSP violations, so no additional host is needed for the authenticated surface.
+ *
+ * One host WAS missing, and only a live probe found it: Turnstile's
+ * `challenges.cloudflare.com`, which Clerk's sign-up screen requires. It was
+ * deliberately omitted so the rehearsal could observe the failure rather than
+ * guess, and the failure duly arrived —
+ *   blockedURI https://challenges.cloudflare.com/turnstile/v0/api.js
+ *   directive  script-src-elem
+ * Existing users would have signed in normally while every new sign-up broke.
+ * Both policies now carry it; see the test below.
  */
 
 type HeaderRule = {
@@ -90,6 +97,20 @@ describe('Content-Security-Policy', () => {
     // index.html preconnects and loads the webfont stylesheet.
     expect(d.get('style-src')).toContain('https://fonts.googleapis.com')
     expect(d.get('font-src')).toContain('https://fonts.gstatic.com')
+  })
+
+  it('allows the Turnstile bot-check that gates the sign-up screen', () => {
+    const d = cspDirectives()
+
+    // Observed on the 2026-08-05 preview rehearsal, on the live policy:
+    //   blockedURI https://challenges.cloudflare.com/turnstile/v0/api.js
+    //   directive  script-src-elem
+    // Clerk's sign-up screen is Turnstile-gated on this project, so without
+    // these two hosts every EXISTING user signs in fine and every NEW user is
+    // locked out of sign-up — a failure that reads as a Clerk outage, not a
+    // CSP bug. script-src loads the widget; frame-src renders its challenge.
+    expect(d.get('script-src')).toContain('https://challenges.cloudflare.com')
+    expect(d.get('frame-src')).toContain('https://challenges.cloudflare.com')
   })
 
   it('permits no script execution route that would defeat the policy', () => {
