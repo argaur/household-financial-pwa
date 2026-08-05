@@ -437,6 +437,32 @@ describe('Profile', () => {
   })
 
   /**
+   * Observed on the 2026-08-05 preview rehearsal: after a real sign-out the
+   * vault and the dashboard cache were both gone, but localStorage still held
+   *   dashboard:last-tier:<householdId>   = "on_track"
+   *   dashboard:fetched-at:<householdId>
+   * so a shared browser kept the household's id and a coarse financial signal
+   * about it. Small, but it is the same shared-device argument `handleSignOut`
+   * already makes two comments above — the copy of the data goes, the key goes,
+   * and then the label naming the household stays.
+   */
+  it('clears the dashboard markers that name the household on sign out', async () => {
+    await unlockTestVault('household-1')
+    window.localStorage.setItem('dashboard:last-tier:household-1', 'on_track')
+    window.localStorage.setItem('dashboard:fetched-at:household-1', '1785933855618')
+
+    listProtection.mockResolvedValue({ protection: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    render(<Profile />)
+
+    await screen.findByText('Ananya Verma')
+    fireEvent.click(screen.getByText('Sign out'))
+
+    await waitFor(() => expect(signOut).toHaveBeenCalled())
+    expect(window.localStorage.getItem('dashboard:last-tier:household-1')).toBeNull()
+    expect(window.localStorage.getItem('dashboard:fetched-at:household-1')).toBeNull()
+  })
+
+  /**
    * The first version of the fix above awaited `clearVault()` unguarded, which
    * made sign-out impossible wherever IndexedDB rejects — Safari private mode,
    * storage disabled, a corrupted store. That is strictly worse than the bug it

@@ -271,6 +271,14 @@ export function Profile() {
       Sentry.captureException(err, { tags: { area: 'signout_clear_vault' } })
       console.error('Sign-out could not clear the local key store; the vault may still be unlocked.', err)
     }
+    // The cache above is the data and the vault is the key; these are the
+    // labels that name the household. Left behind they keep a household id and
+    // its health tier readable on a shared browser after sign-out. Swept by
+    // prefix rather than by id, so a device that has held more than one
+    // household does not keep the older one's marker forever.
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('dashboard:')) localStorage.removeItem(key)
+    }
     await signOut()
   }
 
