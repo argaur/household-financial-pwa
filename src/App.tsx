@@ -3,6 +3,7 @@ import { SignedIn, SignedOut } from '@clerk/clerk-react'
 import { Toaster } from '@/components/ui/toaster'
 import { IdleLockGuard } from '@/components/idle-lock-guard'
 import { RootGate } from '@/pages/RootGate'
+import { SignInPage } from '@/pages/SignInPage'
 import { DocsStub } from '@/pages/DocsStub'
 import { Explore } from '@/pages/Explore'
 import { LibrarySection } from '@/pages/LibrarySection'
@@ -26,6 +27,7 @@ export default function App() {
       </SignedIn>
       <Routes>
         <Route path="/" element={<RootGate />} />
+        <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/docs" element={<DocsStub />} />
         <Route path="/explore" element={<Explore />} />
         <Route path="/why" element={<Why />} />

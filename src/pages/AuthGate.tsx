@@ -43,9 +43,16 @@ export function AuthGate() {
 
       <Link
         to="/why"
-        className="text-caption text-muted-foreground underline-offset-4 hover:underline focus-visible:underline"
+        className="inline-flex min-h-11 items-center text-caption text-muted-foreground underline-offset-4 hover:underline focus-visible:underline"
       >
         Why these choices? — the thinking behind this app
+      </Link>
+
+      <Link
+        to="/"
+        className="inline-flex min-h-11 items-center text-caption text-muted-foreground underline-offset-4 hover:underline focus-visible:underline"
+      >
+        ← Back to the front page
       </Link>
     </main>
   )

@@ -3,7 +3,7 @@ import { ClerkLoaded, ClerkLoading, SignedIn, SignedOut } from '@clerk/clerk-rea
 import { useSearchParams } from 'react-router-dom'
 import { Skeleton } from '@/components/ui/skeleton'
 import { track } from '@/lib/analytics'
-import { AuthGate } from './AuthGate'
+import { Landing } from './Landing'
 import { HouseholdGate } from './HouseholdGate'
 import { HomeShell } from './HomeShell'
 
@@ -47,7 +47,9 @@ export function RootGate() {
       </ClerkLoading>
       <ClerkLoaded>
         <SignedOut>
-          <AuthGate />
+          {/* The landing page, not the sign-in box: a stranger gets told what
+              this is before being asked for credentials (see Landing.tsx). */}
+          <Landing />
         </SignedOut>
         <SignedIn>
           <HouseholdGate />
