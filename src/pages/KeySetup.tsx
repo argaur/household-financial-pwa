@@ -111,7 +111,7 @@ export function KeySetup({ onReady }: KeySetupProps) {
           'Household recovery code\n\n',
           `${prepared.recoveryCode}\n\n`,
           'This code, or your passphrase, is the only way to open your household data.\n',
-          'Nobody — including us — can recover either one for you.\n',
+          'Nobody can recover either one for you, including us.\n',
         ],
         { type: 'text/plain' },
       )
@@ -138,12 +138,12 @@ export function KeySetup({ onReady }: KeySetupProps) {
       <main className="min-h-screen bg-background text-foreground font-sans">
         <div className="container max-w-lg py-12 space-y-6">
           <Progress value={100} className="h-1" aria-label="Setup progress: step 2 of 2" />
-          <p className="text-caption text-muted-foreground">Setting up your key — step 2 of 2</p>
+          <p className="text-caption text-muted-foreground">Setting up your key, step 2 of 2</p>
 
           <header className="space-y-2">
             <h1 className="font-display text-display">Your way back in.</h1>
             <p className="text-body text-muted-foreground">
-              Write this down before you go on. It is shown once, here, and never again — not in your account, not to
+              Write this down before you go on. It is shown once, here, and never again. Not in your account, not to
               us. If you forget your passphrase, this code is the only thing that opens your household. Lose both and
               your data cannot be recovered by anyone, including us.
             </p>
@@ -190,7 +190,7 @@ export function KeySetup({ onReady }: KeySetupProps) {
             />
             <span>
               I have saved my recovery code somewhere safe. I understand that if I lose it and forget my passphrase, no
-              one can recover my data — not support, not a password reset, not you.
+              one can recover my data. Not support, not a password reset, not you.
             </span>
           </label>
 
@@ -206,13 +206,13 @@ export function KeySetup({ onReady }: KeySetupProps) {
     <main className="min-h-screen bg-background text-foreground font-sans">
       <div className="container max-w-lg py-12 space-y-6">
         <Progress value={50} className="h-1" aria-label="Setup progress: step 1 of 2" />
-        <p className="text-caption text-muted-foreground">Setting up your key — step 1 of 2</p>
+        <p className="text-caption text-muted-foreground">Setting up your key, step 1 of 2</p>
 
         <header className="space-y-2">
           <h1 className="font-display text-display">Only you can open this.</h1>
           <p className="text-body text-muted-foreground">
             Every number you record here is encrypted on this device before it leaves it. The key that opens it is made
-            from a passphrase you choose now, and that passphrase never reaches our servers — which is exactly why what
+            from a passphrase you choose now, and that passphrase never reaches our servers. That is exactly why what
             you hold is yours alone.
           </p>
           {/* The claim is made on this screen, so the limits belong on this
@@ -249,12 +249,12 @@ export function KeySetup({ onReady }: KeySetupProps) {
             />
             <p id="passphrase-strength" role="status" className="text-caption text-muted-foreground">
               Strength: {strength.label}
-              {passphrase.length > 0 && strength.problems.length > 0 ? ` — ${strength.problems.join(' ')}` : ''}
+              {passphrase.length > 0 && strength.problems.length > 0 ? `. ${strength.problems.join(' ')}` : ''}
             </p>
 
             <p id="passphrase-help" className="text-caption text-muted-foreground">
               At least {MIN_PASSPHRASE_LENGTH} characters; four unrelated words are easier to remember than a short
-              scramble and harder to guess. This strength check runs here in your browser — the server never sees your
+              scramble and harder to guess. This strength check runs here in your browser. The server never sees your
               passphrase, so it cannot check it, cannot reset it, and if you forget it, we cannot recover it for you.
             </p>
           </div>

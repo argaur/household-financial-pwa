@@ -209,13 +209,13 @@ export function HouseholdGate() {
         <div className="container max-w-lg py-12 space-y-4">
           <h1 className="font-display text-display">This household can't be opened.</h1>
           <p className="text-body text-muted-foreground">
-            Your household was created, but the encrypted key that opens it was never saved — the setup was interrupted
+            Your household was created, but the encrypted key that opens it was never saved. The setup was interrupted
             before that last step, and the only copy lived in a browser that no longer has it. We are not able to read
             this data and neither is anyone else: it cannot be recovered, by us or by you.
           </p>
           <p className="text-body text-muted-foreground">
             Nothing has been changed or removed. If you want to start again, you can delete the account and everything
-            in it from your profile — that is a deliberate, confirmed step, and we will not take it for you.
+            in it from your profile. That is a deliberate, confirmed step, and we will not take it for you.
           </p>
           <a
             href="/profile"
@@ -235,7 +235,7 @@ export function HouseholdGate() {
           <h1 className="font-display text-display">This household came before encryption.</h1>
           <p className="text-body text-muted-foreground">
             It was created before your data was encrypted, so there is nothing sealed here to open. Your information is
-            stored exactly as it was — nothing has been changed, and nothing has been lost.
+            stored exactly as it was. Nothing has been changed, and nothing has been lost.
           </p>
           <p className="text-body text-muted-foreground">
             This version of the app cannot show it yet, and it will not delete or overwrite anything while it waits.
@@ -252,7 +252,7 @@ export function HouseholdGate() {
           <h1 className="font-display text-display">We couldn't read your household.</h1>
           <p className="text-body text-muted-foreground">
             The key in this browser doesn't match the data stored for this household. Nothing has been changed. Unlock
-            again with your passphrase or your recovery code — if the right one opens it, your data is intact.
+            again with your passphrase or your recovery code. If the right one opens it, your data is intact.
           </p>
           <Button onClick={reload}>Try unlocking again</Button>
         </div>

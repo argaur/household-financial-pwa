@@ -37,7 +37,7 @@ export function OnboardingStep1({ onHouseholdCreated }: OnboardingStep1Props) {
       const message =
         err instanceof HouseholdApiError && err.status === 400
           ? 'Household name is required.'
-          : "Something went wrong — please try again."
+          : "Something went wrong. Please try again."
       setError(message)
       track('error_shown', { error_type: 'onboarding_household_create_failed', surface: 'onboarding_step_1', message })
     } finally {
@@ -71,7 +71,7 @@ export function OnboardingStep1({ onHouseholdCreated }: OnboardingStep1Props) {
             autoFocus
           />
           <p className="text-caption text-muted-foreground">
-            This appears as a label throughout your plan — it's just for you.
+            This appears as a label throughout your plan. It's just for you.
           </p>
 
           {error && <p className="text-caption text-destructive">{error}</p>}

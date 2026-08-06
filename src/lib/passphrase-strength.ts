@@ -303,7 +303,7 @@ export function scorePassphrase(passphrase: string): PassphraseStrength {
 
   const distinct = new Set(trimmed.toLowerCase()).size
   if (trimmed.length > 0 && distinct < MIN_DISTINCT_CHARACTERS) {
-    problems.push('Use a wider mix of characters — this repeats too few of them.')
+    problems.push('Use a wider mix of characters. This repeats too few of them.')
   }
 
   const candidates = blocklistCandidates(trimmed)
@@ -324,7 +324,7 @@ export function scorePassphrase(passphrase: string): PassphraseStrength {
   if (trimmed.length > 0) {
     const unit = smallestRepeatingUnit(alphanumericOnly(trimmed.toLowerCase()))
     if (unit.length > 0 && unit.length <= alphanumericOnly(trimmed.toLowerCase()).length / 2) {
-      problems.push('This is one short piece repeated — it is only as strong as that piece.')
+      problems.push('This is one short piece repeated. It is only as strong as that piece.')
     }
   }
 

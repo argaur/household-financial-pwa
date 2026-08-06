@@ -91,7 +91,7 @@ export function ProtectionForm({
       const message =
         err instanceof ProtectionApiError && err.status === 400
           ? 'Check the member, type, and cover amount and try again.'
-          : 'Something went wrong — please try again.'
+          : 'Something went wrong. Please try again.'
       setError(message)
       track('error_shown', { error_type: 'protection_save_failed', surface: analyticsSurface, message })
     } finally {

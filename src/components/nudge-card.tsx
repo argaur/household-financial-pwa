@@ -40,11 +40,11 @@ function bodyFor(nudge: Nudge): string {
         ? `${nudge.memberName} has no holdings recorded yet. Every member in your plan should have at least one investment or asset mapped.`
         : 'Every member in your plan should have at least one investment or asset mapped.'
     case 'emergency_fund':
-      return 'Your household has no emergency fund on record. This is the first safety net any plan needs — before any other investment.'
+      return 'Your household has no emergency fund on record. This is the first safety net any plan needs, before any other investment.'
     case 'both_parents_protected':
       return nudge.memberName
-        ? `${nudge.memberName} has no protection cover on record. Term life cover is the foundation of a household financial plan — everything else builds on it.`
-        : 'Term life cover is the foundation of a household financial plan — everything else builds on it. Record cover for each parent in your household.'
+        ? `${nudge.memberName} has no protection cover on record. Term life cover is the foundation of a household financial plan. Everything else builds on it.`
+        : 'Term life cover is the foundation of a household financial plan. Everything else builds on it. Record cover for each parent in your household.'
     case 'asset_diversity': {
       const n = nudge.assetClassCount ?? 0
       return `Your household's investments are concentrated in ${n} asset ${n === 1 ? 'class' : 'classes'}. A well-rounded plan typically spans at least three different types.`

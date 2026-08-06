@@ -22,7 +22,7 @@ import { useEffect, useState } from 'react'
  * whole risk here is a user assuming it will sync later.
  */
 export const OFFLINE_WRITE_MESSAGE =
-  "You're offline. Changes can't be saved until you reconnect — nothing is queued in the background."
+  "You're offline. Changes can't be saved until you reconnect. Nothing is queued in the background."
 
 export function useOnline(): boolean {
   const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine)

@@ -40,7 +40,7 @@ describe('NudgeCard — copy (Documentation/design/COPY_DECK.md)', () => {
     renderCard({ checkId: 'emergency_fund', learnCardSlug: 'debt-fixed-deposit' })
     expect(
       screen.getByText(
-        "Your household has no emergency fund on record. This is the first safety net any plan needs — before any other investment.",
+        "Your household has no emergency fund on record. This is the first safety net any plan needs, before any other investment.",
       ),
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Learn about emergency funds/ })).toBeInTheDocument()

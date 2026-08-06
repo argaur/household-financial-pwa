@@ -74,7 +74,7 @@ export function ChangePassphraseForm({ keys, onChanged }: ChangePassphraseFormPr
     // `disabled` prop — and `changePassphrase` checks the strength floor a
     // third time before it derives anything.
     if (!hasCurrent) {
-      setError('Enter your current passphrase — it is what unlocks the key so it can be re-wrapped.')
+      setError('Enter your current passphrase. It is what unlocks the key so it can be re-wrapped.')
       return
     }
     if (!matches) {
@@ -120,7 +120,7 @@ export function ChangePassphraseForm({ keys, onChanged }: ChangePassphraseFormPr
   return (
     <form onSubmit={handleSubmit} data-testid="change-passphrase-form" className="space-y-4" noValidate>
       <p className="text-body text-muted-foreground">
-        Your data is not re-encrypted and nothing you have recorded changes — only the lock around your key is replaced.
+        Your data is not re-encrypted and nothing you have recorded changes. Only the lock around your key is replaced.
         It happens here in your browser, so neither passphrase ever reaches our servers.
       </p>
 
@@ -136,7 +136,7 @@ export function ChangePassphraseForm({ keys, onChanged }: ChangePassphraseFormPr
           aria-describedby="current-passphrase-help"
         />
         <p id="current-passphrase-help" className="text-caption text-muted-foreground">
-          Required. Being signed in is not enough — without it there is no way to open your key and re-wrap it.
+          Required. Being signed in is not enough. Without it there is no way to open your key and re-wrap it.
         </p>
       </div>
 
@@ -161,10 +161,10 @@ export function ChangePassphraseForm({ keys, onChanged }: ChangePassphraseFormPr
         />
         <p id="new-passphrase-strength" role="status" className="text-caption text-muted-foreground">
           Strength: {strength.label}
-          {next.length > 0 && strength.problems.length > 0 ? ` — ${strength.problems.join(' ')}` : ''}
+          {next.length > 0 && strength.problems.length > 0 ? `. ${strength.problems.join(' ')}` : ''}
         </p>
         <p id="new-passphrase-help" className="text-caption text-muted-foreground">
-          At least {MIN_PASSPHRASE_LENGTH} characters. This check runs in your browser — the server never sees your
+          At least {MIN_PASSPHRASE_LENGTH} characters. This check runs in your browser. The server never sees your
           passphrase, so it cannot reset it, and if you forget it we cannot recover it for you.
         </p>
       </div>
@@ -218,7 +218,7 @@ export function ResetRecoveryCodeForm({ keys, onReset }: ResetRecoveryCodeFormPr
     setError(null)
 
     if (current.length === 0) {
-      setError('Enter your current passphrase — it is what proves this is you before a new code is issued.')
+      setError('Enter your current passphrase. It is what proves this is you before a new code is issued.')
       return
     }
     if (!online) {
@@ -264,7 +264,7 @@ export function ResetRecoveryCodeForm({ keys, onReset }: ResetRecoveryCodeFormPr
           `${issued.recoveryCode}\n\n`,
           'This code, or your passphrase, is the only way to open your household data.\n',
           'It replaces any earlier code, which no longer works.\n',
-          'Nobody — including us — can recover either one for you.\n',
+          'Nobody can recover either one for you, including us.\n',
         ],
         { type: 'text/plain' },
       )
@@ -297,7 +297,7 @@ export function ResetRecoveryCodeForm({ keys, onReset }: ResetRecoveryCodeFormPr
     return (
       <div className="space-y-4">
         <p className="text-body text-muted-foreground">
-          Write this down before you close this. It is shown once, here, and never again — not in your account, not to
+          Write this down before you close this. It is shown once, here, and never again. Not in your account, not to
           us. Your previous recovery code stopped working the moment this one was issued. If you forget your passphrase,
           this code is the only thing that opens your household, and we cannot recover it for you.
         </p>
@@ -343,7 +343,7 @@ export function ResetRecoveryCodeForm({ keys, onReset }: ResetRecoveryCodeFormPr
           />
           <span>
             I have saved my new recovery code somewhere safe. I understand that if I lose it and forget my passphrase,
-            no one can recover my data — not support, not a password reset, not you.
+            no one can recover my data. Not support, not a password reset, not you.
           </span>
         </label>
 
@@ -373,7 +373,7 @@ export function ResetRecoveryCodeForm({ keys, onReset }: ResetRecoveryCodeFormPr
           aria-describedby="recovery-reset-help"
         />
         <p id="recovery-reset-help" className="text-caption text-muted-foreground">
-          Required. It never reaches our servers — it is used here to open your key so the new code can be wrapped
+          Required. It never reaches our servers. It is used here to open your key so the new code can be wrapped
           around it.
         </p>
       </div>

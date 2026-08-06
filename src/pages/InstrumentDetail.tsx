@@ -110,7 +110,7 @@ export function InstrumentDetail() {
                   <dt className="text-caption font-medium text-muted-foreground">Current rate</dt>
                   <dd className="text-body">{instrument.rateValue}%</dd>
                   <p className="text-caption text-muted-foreground mt-1">
-                    Rate as of {instrument.rateAsOf}. Verify before investing — government rates change quarterly.
+                    Rate as of {instrument.rateAsOf}. Verify before investing. Government rates change quarterly.
                   </p>
                 </div>
               )}

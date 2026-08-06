@@ -40,7 +40,7 @@ export function HomeShell() {
           <p className="section-label">Household Financial Planning</p>
           <h1 className="font-display text-display">Walking Skeleton</h1>
           <p className="text-body text-muted-foreground">
-            Slice 0 — proves the deploy pipeline. No feature code yet.
+            Slice 0. Proves the deploy pipeline. No feature code yet.
           </p>
         </header>
 

@@ -86,7 +86,7 @@ export function Unlock({ keys, onUnlocked }: UnlockProps) {
           <h1 className="font-display text-display">Unlock your household.</h1>
           <p className="text-body text-muted-foreground">
             Your data is encrypted with a key that only your passphrase or your recovery code opens. This browser
-            doesn't have that key yet — a new device, or storage that has been cleared. Nothing has been lost; it just
+            doesn't have that key yet. That happens on a new device, or when storage has been cleared. Nothing has been lost; it just
             has to be opened here.
           </p>
         </header>
@@ -108,7 +108,7 @@ export function Unlock({ keys, onUnlocked }: UnlockProps) {
                 autoFocus
               />
               <p id="unlock-help" className="text-caption text-muted-foreground">
-                It is checked here in your browser, against the encrypted key itself — we never receive it, and we
+                It is checked here in your browser, against the encrypted key itself. We never receive it, and we
                 cannot reset it for you.
               </p>
             </div>
@@ -130,7 +130,7 @@ export function Unlock({ keys, onUnlocked }: UnlockProps) {
                 autoFocus
               />
               <p id="unlock-recovery-help" className="text-caption text-muted-foreground">
-                The code you saved when you set this up. Upper or lower case, with or without the hyphens — it all
+                The code you saved when you set this up. Upper or lower case, with or without the hyphens. It all
                 works.
               </p>
             </div>

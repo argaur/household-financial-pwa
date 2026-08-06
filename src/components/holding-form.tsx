@@ -108,7 +108,7 @@ export function HoldingForm({
       const message =
         err instanceof HoldingsApiError && err.status === 400
           ? 'Check the member, instrument, and amounts and try again.'
-          : 'Something went wrong — please try again.'
+          : 'Something went wrong. Please try again.'
       setError(message)
       track('error_shown', { error_type: 'holding_save_failed', surface: analyticsSurface, message })
     } finally {

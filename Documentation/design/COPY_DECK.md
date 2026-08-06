@@ -1,4 +1,4 @@
-# Copy Deck — Household Financial Planning PWA
+# Copy Deck: Household Financial Planning PWA
 
 **Voice principle:** A CFP speaking plainly to a new client. Direct. Assumes intelligence. Personal without being familiar. Educational without being condescending. Never sounds like a chatbot.
 
@@ -18,7 +18,7 @@ One masthead on every route. Signed-out nav: Explore · How it's built · Privac
 
 ## Onboarding
 
-### Step 1 — Create household (of 3)
+### Step 1: Create household (of 3)
 
 | Element | Copy |
 |---|---|
@@ -27,12 +27,12 @@ One masthead on every route. Signed-out nav: Explore · How it's built · Privac
 | Sub-headline | "Before we can plan, we need to know who we're planning for." |
 | Field label | Your household name |
 | Field placeholder | e.g. Gupta Family |
-| Field helper | This appears as a label throughout your plan — it's just for you. |
+| Field helper | This appears as a label throughout your plan. It's just for you. |
 | Primary CTA | Continue |
 
 ---
 
-### Step 2 — Add family members (of 3)
+### Step 2: Add family members (of 3)
 
 | Element | Copy |
 |---|---|
@@ -46,16 +46,16 @@ One masthead on every route. Signed-out nav: Explore · How it's built · Privac
 | Name field label | Full name |
 | Relationship field label | Their relationship to you |
 | DOB field label | Date of birth |
-| DOB helper | Used to surface age-based milestones — SSY eligibility, retirement horizon, etc. |
+| DOB helper | Used to surface age-based milestones like SSY eligibility and retirement horizon. |
 | Risk profile field label | Risk appetite |
-| Risk profile helper | Optional — you can set this later. |
+| Risk profile helper | Optional. You can set this later. |
 | Risk profile options | Conservative · Moderate · Aggressive |
 | Save member CTA | Add to plan |
 | Primary CTA (to proceed) | Continue |
 
 ---
 
-### Step 3 — Add first holding (of 3)
+### Step 3: Add first holding (of 3)
 
 | Element | Copy |
 |---|---|
@@ -67,7 +67,7 @@ One masthead on every route. Signed-out nav: Explore · How it's built · Privac
 | Member assignment label | Assign to |
 | Invested amount label | Amount invested (₹) |
 | Current value label | Current value (₹) |
-| Current value helper | Your best estimate is fine — you can update this anytime. |
+| Current value helper | Your best estimate is fine. You can update this anytime. |
 | Emergency fund checkbox label | Mark as emergency fund |
 | Emergency fund checkbox helper | Check this if this holding serves as your household's emergency reserve. |
 | Primary CTA | See my plan |
@@ -80,7 +80,7 @@ One masthead on every route. Signed-out nav: Explore · How it's built · Privac
 |---|---|
 | Headline | "Before we begin" |
 | Body | "This tool helps you track and understand your household's financial picture. It does not constitute financial advice. For advice tailored to your situation, consult a SEBI-registered financial advisor." |
-| Primary CTA | I understand — continue |
+| Primary CTA | I understand, continue |
 
 ---
 
@@ -122,29 +122,29 @@ One masthead on every route. Signed-out nav: Explore · How it's built · Privac
 
 ---
 
-### Nudge (single — first unmet check in order)
+### Nudge (single, first unmet check in order)
 
 | Element | Copy |
 |---|---|
 | Section header | Next step |
 
-**Check 1 — Member without holdings:**
+**Check 1: Member without holdings:**
 | Nudge body | "[Member name] has no holdings recorded yet. Every member in your plan should have at least one investment or asset mapped." |
 | Nudge CTA | Add a holding for [member name] → |
 
-**Check 2 — No emergency fund:**
-| Nudge body | "Your household has no emergency fund on record. This is the first safety net any plan needs — before any other investment." |
+**Check 2: No emergency fund:**
+| Nudge body | "Your household has no emergency fund on record. This is the first safety net any plan needs, before any other investment." |
 | Nudge CTA | Learn about emergency funds → |
 
-**Check 3 — Parent without protection:**
-| Nudge body | "[Member name] has no protection cover on record. Term life cover is the foundation of a household financial plan — everything else builds on it." |
+**Check 3: Parent without protection:**
+| Nudge body | "[Member name] has no protection cover on record. Term life cover is the foundation of a household financial plan. Everything else builds on it." |
 | Nudge CTA | Learn about term insurance → |
 
-**Check 4 — Fewer than 3 asset classes:**
+**Check 4: Fewer than 3 asset classes:**
 | Nudge body | "Your household's investments are concentrated in [N] asset class[es]. A well-rounded plan typically spans at least three different types." |
 | Nudge CTA | Explore asset classes → |
 
-**Check 5 — Stale/missing current values:**
+**Check 5: Stale/missing current values:**
 | Nudge body | "Some of your holdings don't have an up-to-date current value. Keeping these current is what makes your allocation accurate." |
 | Nudge CTA | Update holdings → |
 
@@ -243,7 +243,7 @@ The list card shows **name, the full summary, and the risk level only**. It prev
 | Field: eligibility | Who can invest |
 | Field: min investment | Minimum investment |
 | Field: rate | Current rate |
-| Rate staleness note | "Rate as of [date]. Verify before investing — government rates change quarterly." |
+| Rate staleness note | "Rate as of [date]. Verify before investing. Government rates change quarterly." |
 | Add to portfolio CTA | Record this in my plan |
 
 ---
@@ -288,7 +288,7 @@ The list card shows **name, the full summary, and the risk level only**. It prev
 
 ---
 
-## Empty States — Global Pattern
+## Empty States: Global Pattern
 
 Every empty state follows: **[What's missing]. [Why it matters in one sentence]. [Single CTA to fix it.]**
 
@@ -296,7 +296,7 @@ No "No data found." No "Nothing here yet!" No exclamation marks on empty states.
 
 ---
 
-## Error States — Global Pattern
+## Error States: Global Pattern
 
 | Scenario | Copy |
 |---|---|

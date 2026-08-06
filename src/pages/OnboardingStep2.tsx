@@ -181,7 +181,7 @@ function AddMemberSheet({ open, onOpenChange, onMemberAdded }: AddMemberSheetPro
       const message =
         err instanceof FamilyMembersApiError && err.status === 400
           ? 'Check the name, relationship, and date of birth and try again.'
-          : "Something went wrong — please try again."
+          : "Something went wrong. Please try again."
       setError(message)
       track('error_shown', { error_type: 'add_family_member_failed', surface: 'onboarding_step_2', message })
     } finally {
@@ -245,7 +245,7 @@ function AddMemberSheet({ open, onOpenChange, onMemberAdded }: AddMemberSheetPro
               max={new Date().toISOString().slice(0, 10)}
             />
             <p className="text-caption text-muted-foreground">
-              Used to surface age-based milestones — SSY eligibility, retirement horizon, etc.
+              Used to surface age-based milestones like SSY eligibility and retirement horizon.
             </p>
           </div>
 
@@ -267,7 +267,7 @@ function AddMemberSheet({ open, onOpenChange, onMemberAdded }: AddMemberSheetPro
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-caption text-muted-foreground">Optional — you can set this later.</p>
+            <p className="text-caption text-muted-foreground">Optional. You can set this later.</p>
           </div>
 
           {error && <p className="text-caption text-destructive">{error}</p>}

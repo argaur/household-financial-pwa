@@ -42,20 +42,20 @@ export const WHY_SECTIONS: WhySection[] = [
       },
       {
         heading: 'No live price feeds in v1',
-        decision: 'Every holding’s current value is entered by hand — mutual funds, gold, crypto, all of it.',
+        decision: 'Every holding’s current value is entered by hand: mutual funds, gold, crypto, all of it.',
         insteadOf: 'Wiring up three market-data APIs so values refresh themselves.',
-        why: 'The dashboard’s value — allocation and plan-completeness — does not need live prices. Three integrations, their rate limits and failure handling, for no v1-critical gain, is scope I chose not to carry.',
+        why: 'The dashboard’s value is allocation and plan-completeness. Neither needs live prices. Three integrations, their rate limits and failure handling, for no v1-critical gain, is scope I chose not to carry.',
       },
       {
         heading: 'It never tells you to buy',
-        decision: 'Every nudge and learn-card is observational and links to an explanation — never to a buy or invest action.',
+        decision: 'Every nudge and learn-card is observational and links to an explanation, never to a buy or invest action.',
         insteadOf: 'Personalised "you should invest in X" recommendations.',
-        why: 'Personalised investment advice is a regulated activity. Staying strictly educational is a hard product line, not a stylistic one — it shapes every line of copy in the app.',
+        why: 'Personalised investment advice is a regulated activity. Staying strictly educational is a hard product line, not a stylistic one. It shapes every line of copy in the app.',
       },
       {
         heading: 'One honest health score, not a black box',
         decision:
-          'Household Health is five equal-weight checks — member coverage, an emergency fund, both parents protected, three-plus asset classes, no stale values — and the nudge is always the first unmet one, in a fixed order.',
+          'Household Health is five equal-weight checks: member coverage, an emergency fund, both parents protected, three-plus asset classes, no stale values. The nudge is always the first unmet one, in a fixed order.',
         insteadOf: 'A weighted or ML-tuned score, or deferring the checklist entirely.',
         why: 'With zero usage data, a deterministic checklist you can read top-to-bottom beats a weighting nobody can justify yet. It mirrors the gating logic from a real household plan.',
       },
@@ -70,7 +70,7 @@ export const WHY_SECTIONS: WhySection[] = [
       {
         heading: 'You cannot ask for another household’s data',
         decision:
-          'Every API request resolves your household from your session on the server. The client never sends a household or member ID — the server derives them.',
+          'Every API request resolves your household from your session on the server. The client never sends a household or member ID. The server derives them.',
         insteadOf: 'Trusting IDs supplied by the client, or leaning on Postgres row-level security.',
         why: 'No client-supplied ID means the entire "guess someone else’s ID" class of bug cannot happen. Each resource carries its own two-user isolation test.',
       },
@@ -78,7 +78,7 @@ export const WHY_SECTIONS: WhySection[] = [
         heading: 'Verifying sessions the hard way, on purpose',
         decision: 'Sessions are verified by checking the JWT against Clerk’s public keys with jose, not the official Clerk backend SDK.',
         insteadOf: 'The batteries-included @clerk/backend / @hono/clerk-auth.',
-        why: 'The Clerk SDK hit an unresolved Vercel Edge bundler bug across several versions. jose is pure Web Crypto and sidesteps it — the pragmatic call when a dependency fights the platform.',
+        why: 'The Clerk SDK hit an unresolved Vercel Edge bundler bug across several versions. jose is pure Web Crypto and sidesteps it. That is the pragmatic call when a dependency fights the platform.',
       },
       {
         heading: 'Query params where REST wanted path segments',

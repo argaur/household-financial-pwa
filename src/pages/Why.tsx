@@ -22,7 +22,7 @@ export function Why() {
           <p className="section-label">Why these choices?</p>
           <h1 className="font-display text-display">A household-finance app, and the reasoning behind it</h1>
           <p className="text-body text-muted-foreground">
-            This is a portfolio piece. Below are the product and engineering calls worth explaining — each one against
+            This is a portfolio piece. Below are the product and engineering calls worth explaining, each one against
             the alternative it beat.
           </p>
         </header>
@@ -50,7 +50,7 @@ export function Why() {
         <footer className="space-y-3">
           <p className="text-body text-muted-foreground">
             Built with Vite, React and TypeScript; Hono on Vercel Functions; Drizzle and Neon Postgres; Clerk, PostHog
-            and Sentry. The full source — including the decision log this page draws from — is public.
+            and Sentry. The full source is public, including the decision log this page draws from.
           </p>
           <a
             href={WHY_REPO_URL}

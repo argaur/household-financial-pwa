@@ -154,7 +154,7 @@ export function Profile() {
       setEditingHouseholdName(false)
       track('feature_used', { feature_name: 'edit_household', action: 'rename_household' })
     } catch {
-      setHouseholdNameError('Something went wrong — please try again.')
+      setHouseholdNameError('Something went wrong. Please try again.')
       track('error_shown', { error_type: 'household_rename_failed', surface: 'profile', message: 'household_rename_failed' })
     } finally {
       setSavingHouseholdName(false)
@@ -234,7 +234,7 @@ export function Profile() {
       // and never opens it would otherwise never learn it was partial.
       setExportNotice(
         data.complete
-          ? 'Downloaded. Keep it somewhere safe — it is readable by anyone who opens it.'
+          ? 'Downloaded. Keep it somewhere safe. It is readable by anyone who opens it.'
           : `Downloaded, but ${data.missing.total} record${data.missing.total === 1 ? '' : 's'} could not be read and ${data.missing.total === 1 ? 'is' : 'are'} not in the file.`,
       )
     } catch {
@@ -296,7 +296,7 @@ export function Profile() {
       await user.delete()
     } catch {
       setDeleteAccountError(
-        "We couldn't delete your account. If this keeps happening, contact support — your data has not been changed.",
+        "We couldn't delete your account. If this keeps happening, contact support. Your data has not been changed.",
       )
       setDeletingAccount(false)
     }
@@ -419,7 +419,7 @@ export function Profile() {
             <div className="rounded-lg border border-dashed p-6 text-center space-y-3">
               <p className="text-body font-medium">No protection cover on record.</p>
               <p className="text-body text-muted-foreground">
-                Term life cover is the foundation of a household financial plan — everything else builds on it.
+                Term life cover is the foundation of a household financial plan. Everything else builds on it.
               </p>
               <Button variant="ghost" onClick={openAddProtectionSheet}>
                 Add protection cover
@@ -491,7 +491,7 @@ export function Profile() {
           <p className="text-caption font-semibold uppercase tracking-wide text-muted-foreground">Your data</p>
           <p className="text-body text-muted-foreground">
             Everything you have recorded, decrypted here in your browser and saved as a file. We cannot make this for
-            you — the server has no key. If you forget your passphrase and your recovery code, this file is what is
+            you. The server has no key. If you forget your passphrase and your recovery code, this file is what is
             left.
           </p>
           <p className="text-body text-muted-foreground">

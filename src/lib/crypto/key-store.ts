@@ -42,7 +42,7 @@ export interface Vault {
  * or a broken IndexedDB — all of which mean something different to a user.
  */
 export class VaultLockedError extends Error {
-  constructor(message = 'The household vault is locked — unlock it with your passphrase to continue.') {
+  constructor(message = 'The household vault is locked. Unlock it with your passphrase to continue.') {
     super(message)
     this.name = 'VaultLockedError'
   }
