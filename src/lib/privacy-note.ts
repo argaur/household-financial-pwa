@@ -15,7 +15,7 @@
 export const PRIVACY_CLAIM = {
   headline: 'We cannot read your data',
   body:
-    'Your household details, amounts, names and dates of birth are encrypted in your browser before they are sent. What reaches our database is a block of unreadable text and a key that has been locked with your passphrase — one we have no way to open.',
+    'Your household details, amounts, names and dates of birth are encrypted in your browser before they are sent. What reaches our database is a block of unreadable text and a key that has been locked with your passphrase. We have no way to open it.',
   limit:
     'That is not the same as saying this is impossible to break. We serve you the code that does the encrypting, so a bad version of this app could take your key as you type it. The Proton and Bitwarden web apps share exactly this limit. It is the honest boundary of the claim, and we would rather write it down than let you assume otherwise.',
 } as const
@@ -50,5 +50,5 @@ export const XSS_LIMIT = {
 export const LOST_PASSPHRASE = {
   heading: 'If you lose your passphrase',
   body:
-    'Your recovery code is the second way in, and it is shown once at setup. If both are gone, your data is gone — we hold no copy of either, so there is nothing for us to reset. This is the cost of the claim at the top of this page, and it is the reason the Profile screen offers a download of everything in readable form. Take one.',
+    'Your recovery code is the second way in, and it is shown once at setup. If both are gone, your data is gone. We hold no copy of either, so there is nothing for us to reset. This is the cost of the claim at the top of this page, and it is the reason the Profile screen offers a download of everything in readable form. Take one.',
 } as const

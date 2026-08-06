@@ -45,7 +45,7 @@ export function AuthGate() {
         to="/why"
         className="inline-flex min-h-11 items-center text-caption text-muted-foreground underline-offset-4 hover:underline focus-visible:underline"
       >
-        Why these choices? — the thinking behind this app
+        Why these choices? The thinking behind this app
       </Link>
 
       <Link
