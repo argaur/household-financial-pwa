@@ -7,6 +7,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Created by vite-plugin-pwa at build time; this config does not load the
+      // plugin, so the specifier would fail to resolve under test.
+      'virtual:pwa-register': path.resolve(__dirname, './src/test/pwa-register-stub.ts'),
     },
   },
   test: {

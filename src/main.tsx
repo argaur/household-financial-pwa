@@ -5,6 +5,7 @@ import { ClerkProvider } from '@clerk/clerk-react'
 import { initSentry } from './lib/sentry'
 import { initPostHog } from './lib/posthog'
 import { initInstallPrompt } from './lib/pwa-install'
+import { initPwaUpdate } from './lib/pwa-update'
 import { initTheme } from './lib/theme'
 import { track } from './lib/analytics'
 import App from './App'
@@ -22,11 +23,16 @@ initTheme()
 // can replay it later, post-activation (see components/install-prompt.tsx).
 initInstallPrompt()
 
-// vite-plugin-pwa's `registerType: 'autoUpdate'` injects the service worker
-// registration itself; this listener only reports whether *this* load was
-// served by an already-active worker. `controller` is null on the very first
-// visit (the worker installs but doesn't control the page until the next
-// load), which is exactly the hit/miss distinction pwa_shell_loaded wants.
+// Registers the service worker and, critically, reloads the page when a new
+// one activates. See lib/pwa-update.ts — this comment used to claim the plugin
+// handled registration on its own, which was true of the registration and
+// false of the update, and is why a stale first load survived to production.
+initPwaUpdate()
+
+// Reports whether *this* load was served by an already-active worker.
+// `controller` is null on the very first visit (the worker installs but doesn't
+// control the page until the next load), which is exactly the hit/miss
+// distinction pwa_shell_loaded wants.
 if ('serviceWorker' in navigator) {
   track('pwa_shell_loaded', { cache_status: navigator.serviceWorker.controller ? 'hit' : 'miss' })
 }
