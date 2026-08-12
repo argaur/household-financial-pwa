@@ -58,7 +58,15 @@ describe('SiteHeader', () => {
 
   it('wordmark links home', () => {
     renderHeader('/explore')
-    expect(screen.getByRole('link', { name: 'Household Financial Planning' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: 'Vittam' })).toHaveAttribute('href', '/')
+  })
+
+  it('wordmark shows the document mark, hidden from the accessibility tree', () => {
+    const { container } = renderHeader()
+    const mark = container.querySelector('[data-testid="brand-mark"]')
+    expect(mark).toBeInTheDocument()
+    expect(mark).toHaveAttribute('aria-hidden', 'true')
+    expect(mark?.tagName.toLowerCase()).toBe('svg')
   })
 
   it('theme toggle flips the dark class, persists, and reports as feature usage', () => {

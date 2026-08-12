@@ -1,13 +1,13 @@
 # Brand Guide — Household Financial Planning PWA
 
-**Last updated:** 2026-07-02
-**Status:** Approved at Phase 2 Stage 4 gate. Living document — update here first, never in components.
+**Last updated:** 2026-08-12
+**Status:** Approved at Phase 2 Stage 4 gate. Living document — update here first, never in components. Product name locked 2026-08-12.
 
 ---
 
 ## 1. Identity
 
-- **Product name:** (TBD — no name locked yet. Placeholder: "FamilyPlan" for internal reference only)
+- **Product name:** Vittam (Sanskrit for wealth). Locked, not a placeholder.
 - **Positioning sentence:** Personal financial planning is not an expert-level job — this is what it looks like when someone builds that clearly.
 - **Visual philosophy:** A CFP's vertical one-pager, made interactive on a mobile screen.
 - **The one design question that replaces all style debates:** *Would a CFP include this section in a printed client plan?*
@@ -25,10 +25,10 @@ Full CSS variables in `Documentation/design/tokens/globals.css`. Quick reference
 | `--background` | `#F7F5F1` | `#141210` | Page background | Never for cards |
 | `--card` | `#FDFCFA` | `#1E1C19` | Card surfaces | All card backgrounds |
 | `--foreground` | `#1A1814` | `#F7F5F1` | Primary text | Headlines, body, labels |
-| `--muted-foreground` | `#6B6660` | `#A09A94` | Secondary text | Helper text, metadata |
+| `--muted-foreground` | `#6B655E` | `#A09A94` | Secondary text | Helper text, metadata |
 | `--primary` | `#1B6B6B` | `#3D9B9B` | Deep teal | Primary actions, links, active nav, focus |
 | `--border` | `#E8E5E0` | `#2C2A26` | Warm border | Cards, dividers, inputs |
-| `--destructive` | `#991B1B` | `#991B1B` | Error / danger | Errors, delete only |
+| `--destructive` | `#991B1B` | `#E55D5D` (lightened 2026-08-05 for WCAG AA on the dark background) | Error / danger | Errors, delete only |
 | `--accent` | `#E8F3F2` | dark teal tint | Teal tint bg | Active state backgrounds |
 
 **Tier status colors** (used only for the Health tier badge; the dark trio is the same identity inverted — light text on a deep tint — applied via `dark:` variants, always as a full set):
@@ -54,10 +54,12 @@ The same hex serves both themes: every use is a decorative identity mark beside 
 
 ### Typography Scale
 
-**Fonts:** `DM Serif Display` (400 only) + `Inter` (400, 500, 600). Load via Google Fonts.
+**Fonts:** `DM Serif Display` (400 only) + `Inter` (400, 500, 600) + `Yatra One` (400 only, wordmark only). Load via Google Fonts.
 
 | Role | Size | Font | Weight | Class name |
 |---|---|---|---|---|
+| Wordmark | 20 to 24px | Yatra One | 400 | `font-wordmark` |
+| Hero | clamp 36px to 56px | DM Serif Display | 400 | `font-display text-hero` |
 | Display | 32px | DM Serif Display | 400 | `font-display text-display` |
 | Heading | 24px | DM Serif Display | 400 | `font-display text-heading` |
 | Title | 18px | Inter | 600 | `font-sans text-title font-semibold` |
@@ -67,6 +69,8 @@ The same hex serves both themes: every use is a decorative identity mark beside 
 | Section Label | 12px | Inter | 600 | `section-label` (utility class in globals.css) |
 
 **Rules:**
+- `text-hero` — restricted to the public landing page and `/why`. Never on app screens.
+- `font-wordmark` (Yatra One) — the "Vittam" name only: SiteHeader's wordmark and the landing hero's name line. Never for headings, nav, or body text.
 - `DM Serif Display` — only at ≥ 20px. Never in forms, labels, or UI chrome.
 - `Section Label` — ALL CAPS, wide tracking — only for card section headers ("HOUSEHOLD HEALTH"). Never for nav, body, or CTAs.
 - Monetary values — always with `.tabular` class (`font-variant-numeric: tabular-nums`).
@@ -223,6 +227,7 @@ What this product refuses to be:
 | Primary action | `bg-primary text-primary-foreground` |
 | Teal link / text | `text-primary` |
 | Section label | `section-label` (utility class) |
+| Hero heading (landing/`/why` only) | `font-display text-hero` |
 | Display heading | `font-display text-display` |
 | Monetary value | `tabular` (utility class) + appropriate `text-*` size |
 | Tier badge: Getting Started | `bg-tier-getting-started-bg text-tier-getting-started border border-tier-getting-started-border` |

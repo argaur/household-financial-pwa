@@ -38,6 +38,13 @@ const config: Config = {
       fontFamily: {
         display: ['"DM Serif Display"', 'Georgia', 'serif'],
         sans:    ['Inter', 'system-ui', 'sans-serif'],
+        /* wordmark → Yatra One, a Devanagari/Latin companion typeface with
+           brush-terminal letterforms that nod to the product's Sanskrit name
+           without setting the name in Devanagari script itself. Logo use
+           only: the "Vittam" wordmark in SiteHeader and the landing hero's
+           name line. Never for headings, body, or anything else — one
+           display weight, easy to overuse into a gimmick. */
+        wordmark: ['"Yatra One"', 'cursive'],
       },
 
       /* ── Colors ──────────────────────────────────────────────
@@ -141,6 +148,9 @@ const config: Config = {
          Named for their role, not their pixel size.
          Use these via Tailwind text-* classes.                   */
       fontSize: {
+        /* hero — DM Serif Display only. Public landing page and /why only,
+           never app screens (see brand-guide.md §2 Typography Scale Rules). */
+        'hero':      ['clamp(2.25rem, 6vw, 3.5rem)', { lineHeight: '1.05', letterSpacing: '-0.02em' }],  /* 36px–56px */
         'display':   ['2rem',  { lineHeight: '1.2', letterSpacing: '-0.01em' }],  /* 32px — tier name, hero number */
         'heading':   ['1.5rem',{ lineHeight: '1.3', letterSpacing: '-0.01em' }],  /* 24px — page titles */
         'title':     ['1.125rem',{ lineHeight: '1.4' }],                          /* 18px — card titles, section heads */

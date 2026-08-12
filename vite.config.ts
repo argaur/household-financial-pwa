@@ -8,10 +8,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Household Financial Planning',
-        short_name: 'FamilyPlan',
+        name: 'Vittam',
+        short_name: 'Vittam',
         description: 'See what your household holds, and how complete your plan is.',
         theme_color: '#1B6B6B',
         background_color: '#F7F5F1',
