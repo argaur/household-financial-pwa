@@ -4,7 +4,17 @@ import { MemoryRouter } from 'react-router-dom'
 import { expectStructuralA11y } from '@/test/a11y'
 import { expectNoAxeViolations } from '@/test/axe'
 import { PRIVACY_CLAIM } from '@/lib/privacy-note'
-import { LANDING_HERO, LANDING_PRIVACY, HOW_IT_WORKS } from '@/lib/landing-content'
+import * as landingContent from '@/lib/landing-content'
+import {
+  LANDING_HERO,
+  LANDING_PRIVACY,
+  HOW_IT_WORKS,
+  LANDING_TRUST,
+  LANDING_PROBLEM,
+  LANDING_FIGURES,
+  LANDING_BUILT,
+  LANDING_CREDIT,
+} from '@/lib/landing-content'
 import { Landing } from './Landing'
 
 const track = vi.fn()
@@ -91,6 +101,59 @@ describe('Landing', () => {
       surface: 'landing',
       destination: '/sign-in?authView=sign-up',
     })
+  })
+
+  it('shows the trust strip: free, built in India, and the encryption claim', () => {
+    renderLanding()
+    for (const item of LANDING_TRUST.items) {
+      expect(screen.getAllByText(item).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('names the actual pain in the problem section before the figures back it up', () => {
+    renderLanding()
+    for (const beat of LANDING_PROBLEM) {
+      expect(screen.getByRole('heading', { name: beat.heading })).toBeInTheDocument()
+      expect(screen.getByText(beat.body)).toBeInTheDocument()
+    }
+  })
+
+  it('shows all four figures with their labels', () => {
+    renderLanding()
+    for (const figure of LANDING_FIGURES) {
+      expect(screen.getByText(figure.value)).toBeInTheDocument()
+      expect(screen.getByText(figure.label)).toBeInTheDocument()
+    }
+  })
+
+  it('names the alternative each build decision beat', () => {
+    renderLanding()
+    for (const decision of LANDING_BUILT) {
+      expect(screen.getByRole('heading', { name: decision.heading })).toBeInTheDocument()
+      expect(screen.getByText(new RegExp(`Instead of ${decision.instead}`, 'i'))).toBeInTheDocument()
+    }
+  })
+
+  it('credits the sole builder in the footer', () => {
+    renderLanding()
+    expect(screen.getByText(LANDING_CREDIT)).toBeInTheDocument()
+  })
+
+  it('pins the style rule: no em-dash or en-dash anywhere in the landing copy', () => {
+    const seen = new Set<unknown>()
+    const walk = (value: unknown): void => {
+      if (typeof value === 'string') {
+        expect(value).not.toMatch(/[–—]/)
+        return
+      }
+      if (value === null || typeof value !== 'object') return
+      if (seen.has(value)) return
+      seen.add(value)
+      for (const entry of Object.values(value as Record<string, unknown>)) {
+        walk(entry)
+      }
+    }
+    walk(landingContent)
   })
 
   it('has zero axe violations', async () => {
