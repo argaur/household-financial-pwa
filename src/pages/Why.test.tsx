@@ -34,12 +34,19 @@ describe('Why', () => {
     }
   })
 
-  it('shows the Decision / Instead of / Why structure on each card', () => {
+  it('renders each card as a decision line plus one flowing "Instead of" line, no labeled dl', () => {
     renderWhy()
-    // One label per card, so 8 of each.
-    expect(screen.getAllByText('Decision')).toHaveLength(8)
-    expect(screen.getAllByText('Instead of')).toHaveLength(8)
-    expect(screen.getAllByText('Why')).toHaveLength(8)
+    // The old 3-label definition list (Decision / Instead of / Why as their
+    // own all-caps mini-headers) is gone — those exact standalone labels
+    // must not appear as separate text nodes anymore.
+    expect(screen.queryByText('Decision')).not.toBeInTheDocument()
+    expect(screen.queryByText('Why')).not.toBeInTheDocument()
+    for (const section of WHY_SECTIONS) {
+      for (const d of section.decisions) {
+        expect(screen.getByText(d.decision)).toBeInTheDocument()
+        expect(screen.getByText(`Instead of ${d.insteadOf}`)).toBeInTheDocument()
+      }
+    }
   })
 
   it('links to the public repo', () => {
