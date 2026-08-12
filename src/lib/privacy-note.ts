@@ -6,7 +6,7 @@
  * This file is held to a different standard than the rest of the copy deck.
  * "We cannot read your data" is the product's main claim, and a claim like that
  * is only worth making if its limits are published next to it. Every limit
- * below is deliberate and was accepted with the design — none of it is a
+ * below is deliberate and was accepted with the design, none of it is a
  * disclaimer bolted on afterwards. Softening any of it means the claim stops
  * being true, so src/pages/Privacy.test.tsx asserts these points are present.
  */
@@ -32,7 +32,7 @@ export const WHAT_THE_SERVER_STILL_LEARNS: readonly string[] = [
 ]
 
 /**
- * What is deliberately NOT leaked, and why — otherwise a reader assumes the
+ * What is deliberately NOT leaked, and why, otherwise a reader assumes the
  * list above is the whole story and stops there.
  */
 export const WHAT_IS_NOT_LEAKED: readonly string[] = [
