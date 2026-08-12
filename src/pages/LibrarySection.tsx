@@ -7,7 +7,7 @@ import { track } from '@/lib/analytics'
 import { getSectionByUrlSlug } from '@/lib/library-sections'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
 import { ASSET_DOT_CLASS } from '@/lib/asset-classes'
-import { riskLevel } from '@/lib/instrument-preview'
+import { riskLevel, riskGloss } from '@/lib/instrument-preview'
 import { cn } from '@/lib/utils'
 
 type State = 'loading' | 'loaded' | 'error'
@@ -93,25 +93,30 @@ export function LibrarySection() {
 
         {state === 'loaded' && (
           <div className="grid gap-3 md:grid-cols-2 md:gap-4">
-            {instruments.map((instrument) => (
-              <Link
-                key={instrument.slug}
-                to={`/explore/${section.urlSlug}/${instrument.slug}`}
-                className="group flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-4 shadow-card transition-colors hover:bg-accent/50 md:p-6"
-              >
-                <div className="min-w-0 space-y-1.5">
-                  <p className="text-body font-medium md:text-title">{instrument.name}</p>
-                  <p className="text-body text-muted-foreground">{instrument.summary}</p>
-                  <p className="text-caption text-muted-foreground">
-                    <span className="font-medium">Risk:</span> {riskLevel(instrument.risk)}
-                  </p>
-                </div>
-                <ChevronRight
-                  className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-                  aria-hidden="true"
-                />
-              </Link>
-            ))}
+            {instruments.map((instrument) => {
+              const level = riskLevel(instrument.risk)
+              const gloss = riskGloss(level)
+              return (
+                <Link
+                  key={instrument.slug}
+                  to={`/explore/${section.urlSlug}/${instrument.slug}`}
+                  className="group flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-4 shadow-card transition-colors hover:bg-accent/50 md:p-6"
+                >
+                  <div className="min-w-0 space-y-1.5">
+                    <p className="text-body font-medium md:text-title">{instrument.name}</p>
+                    <p className="text-body text-muted-foreground">{instrument.summary}</p>
+                    <p className="text-caption text-muted-foreground">
+                      <span className="font-medium">Risk:</span> {level}
+                      {gloss ? `. ${gloss.charAt(0).toUpperCase()}${gloss.slice(1)}.` : ''}
+                    </p>
+                  </div>
+                  <ChevronRight
+                    className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  />
+                </Link>
+              )
+            })}
           </div>
         )}
       </div>

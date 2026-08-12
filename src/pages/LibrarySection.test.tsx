@@ -48,6 +48,8 @@ describe('LibrarySection', () => {
     expect(screen.queryByText(/no diversification unless built manually/)).not.toBeInTheDocument()
     // The full returns paragraph belongs to the detail page, not the card.
     expect(screen.queryByText(/over short periods/)).not.toBeInTheDocument()
+    // High has a plain-word gloss in the static lookup, added inline.
+    expect(screen.getByText(/value can drop a lot in the short term/i)).toBeInTheDocument()
   })
 
   it('links each instrument to its detail page', async () => {

@@ -26,7 +26,10 @@ export function Explore() {
         <header className="space-y-1">
           <p className="section-label">Explore</p>
           <h1 className="font-display text-display">What can you invest in?</h1>
-          <p className="text-body text-muted-foreground">30 instruments across 6 asset classes, explained plainly.</p>
+          <p className="text-body text-muted-foreground">
+            Every rupee an Indian household holds falls into one of these six groups. 30 instruments in all,
+            explained plainly, with no jargon left unexplained.
+          </p>
         </header>
 
         <Separator />

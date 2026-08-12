@@ -61,6 +61,15 @@ describe('InstrumentDetail', () => {
     expect(screen.getByText(/rate as of 2026-07-01/i)).toBeInTheDocument()
   })
 
+  it('groups fields into a headline tier and a fine-print tier', async () => {
+    getInstrument.mockResolvedValue(fullInstrument)
+    renderAt('/explore/debt/debt-ppf')
+
+    await screen.findByText('Public Provident Fund (PPF)')
+    expect(screen.getByText('Should you care?')).toBeInTheDocument()
+    expect(screen.getByText('The fine print')).toBeInTheDocument()
+  })
+
   it('omits the rate section for an instrument with no rate', async () => {
     getInstrument.mockResolvedValue({ ...fullInstrument, rateValue: null, rateAsOf: null })
     renderAt('/explore/debt/debt-ppf')

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { riskLevel } from './instrument-preview'
+import { riskLevel, riskGloss } from './instrument-preview'
 
 describe('riskLevel', () => {
   it('takes the clause before an em-dash', () => {
@@ -28,5 +28,16 @@ describe('riskLevel', () => {
 
   it('never returns empty for degenerate input', () => {
     expect(riskLevel(' — odd leading dash')).not.toBe('')
+  })
+})
+
+describe('riskGloss', () => {
+  it('returns a plain-word gloss for a known short level', () => {
+    expect(riskGloss('High')).toMatch(/drop a lot/)
+    expect(riskGloss('Low')).toMatch(/unlikely to lose money/)
+  })
+
+  it('returns null for a level not in the static lookup, rather than guessing', () => {
+    expect(riskGloss('Low to moderate to high depending on the chosen equity allocation')).toBeNull()
   })
 })

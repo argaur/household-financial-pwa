@@ -10,13 +10,24 @@ import { cn } from '@/lib/utils'
 
 type State = 'loading' | 'loaded' | 'error'
 
-const FIELD_LABELS: Array<{ key: keyof Instrument; label: string }> = [
+type FieldRow = { key: keyof Instrument; label: string }
+
+// Split from one flat 6-field grid into two tiers (2026-08-12 rework): the
+// three questions a first-time investor actually asks up front, the
+// remaining detail below a divider as the fine print. Mirrors the
+// "headline numbers, then footnotes" shape of a printed CFP one-pager, and
+// the two-tier pattern already established on /why (Product judgment /
+// Engineering).
+const HEADLINE_FIELDS: FieldRow[] = [
   { key: 'returns', label: 'Typical returns' },
-  { key: 'tax', label: 'Tax treatment' },
-  { key: 'liquidity', label: 'Liquidity' },
   { key: 'risk', label: 'Risk level' },
-  { key: 'eligibility', label: 'Who can invest' },
   { key: 'minInvestment', label: 'Minimum investment' },
+]
+
+const FINE_PRINT_FIELDS: FieldRow[] = [
+  { key: 'tax', label: 'Tax treatment' },
+  { key: 'liquidity', label: 'Liquidity (how fast you can get your money back)' },
+  { key: 'eligibility', label: 'Who can invest' },
 ]
 
 // Copy: Documentation/design/COPY_DECK.md — "Instrument detail page".
@@ -95,26 +106,47 @@ export function InstrumentDetail() {
 
             <Separator />
 
-            {/* Two facing columns at ≥768px — the CFP one-pager's fact table,
-                not a long single scroll. Single column on mobile as before. */}
-            <dl className="grid gap-y-4 md:grid-cols-2 md:gap-x-10 md:gap-y-5">
-              {FIELD_LABELS.map(({ key, label }) => (
-                <div key={key}>
-                  <dt className="text-caption font-medium text-muted-foreground">{label}</dt>
-                  <dd className="text-body">{instrument[key] as string}</dd>
-                </div>
-              ))}
+            {/* Tier 1: the three questions a first-time investor actually
+                asks up front, plus the current rate when there is one — the
+                headline numbers. Two facing columns at ≥768px, the CFP
+                one-pager's fact table, not a long single scroll. */}
+            <div className="space-y-4">
+              <p className="section-label">Should you care?</p>
+              <dl className="grid gap-y-4 md:grid-cols-2 md:gap-x-10 md:gap-y-5">
+                {HEADLINE_FIELDS.map(({ key, label }) => (
+                  <div key={key}>
+                    <dt className="text-caption font-medium text-muted-foreground">{label}</dt>
+                    <dd className="text-body">{instrument[key] as string}</dd>
+                  </div>
+                ))}
 
-              {instrument.rateValue !== null && instrument.rateAsOf !== null && (
-                <div className="md:col-span-2">
-                  <dt className="text-caption font-medium text-muted-foreground">Current rate</dt>
-                  <dd className="text-body">{instrument.rateValue}%</dd>
-                  <p className="text-caption text-muted-foreground mt-1">
-                    Rate as of {instrument.rateAsOf}. Verify before investing. Government rates change quarterly.
-                  </p>
-                </div>
-              )}
-            </dl>
+                {instrument.rateValue !== null && instrument.rateAsOf !== null && (
+                  <div className="md:col-span-2">
+                    <dt className="text-caption font-medium text-muted-foreground">Current rate</dt>
+                    <dd className="text-body">{instrument.rateValue}%</dd>
+                    <p className="text-caption text-muted-foreground mt-1">
+                      Rate as of {instrument.rateAsOf}. Verify before investing. Government rates change quarterly.
+                    </p>
+                  </div>
+                )}
+              </dl>
+            </div>
+
+            <Separator />
+
+            {/* Tier 2: the fine print, still worth reading, just not what a
+                beginner asks first. */}
+            <div className="space-y-4">
+              <p className="section-label">The fine print</p>
+              <dl className="grid gap-y-4 md:grid-cols-2 md:gap-x-10 md:gap-y-5">
+                {FINE_PRINT_FIELDS.map(({ key, label }) => (
+                  <div key={key}>
+                    <dt className="text-caption font-medium text-muted-foreground">{label}</dt>
+                    <dd className="text-body">{instrument[key] as string}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           </>
         )}
       </div>
