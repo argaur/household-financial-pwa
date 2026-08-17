@@ -157,3 +157,64 @@ This project demonstrates **craft and architecture**, not primarily the meta-nar
 | Data retention/deletion policy on account deletion | Not load-bearing for MVP feature set; needs a decision but doesn't block design | Phase 2, before auth/account-deletion flow is built |
 | Concurrent-session behavior (same user, multiple devices) | No product decision made; defaults to last-write-wins by omission | Phase 2 — confirm explicitly rather than leaving implicit |
 | Mobile-first breakpoint target | Assumed 390px (global CLAUDE.md default), not explicitly confirmed for this project | Phase 2 — `SPEC.md` |
+
+---
+
+## Phase 0 Intake — D-016 Feature Bundle (2026-08-17)
+
+This is a second Phase 0 pass, scoped to the feature bundle Gaurav approved on 2026-08-17 (see `DECISIONS_LOG.md` D-016), not a re-intake of the whole product. The v1 PRD read-back above still stands. This section reads back the four new items against the same bar: falsifiable, no vague success criteria, every ambiguity named.
+
+### PRD Read-Back (this bundle)
+
+- **Problem:** The shipped v1 tracks one static household plan and cannot answer "what if." A user cannot compare a SIP scale-up against their current path, gets no suggestions when their allocation drifts (gold overweight, emergency fund oversized), must enter every holding one at a time, and the app's own screens still look, in Gaurav's words, "unfinished and basic."
+- **Target user:** The same household as v1 (Gaurav's own family shape, generalized), now specifically the subset who has already completed onboarding and wants to plan forward rather than just record the present.
+- **Success criteria (draft, made falsifiable below):** Households create and compare alternate strategy ledgers; households with a drifted allocation see and act on an AI suggestion; households with several holdings use bulk import instead of one-by-one entry; the redesign does not cost the product any of its existing onboarding completion.
+- **Hard constraints:** The ₹0/month ceiling still holds everywhere except the AI layer, which is capped at 2 plans per household x 2 edits per plan on Gaurav's own Anthropic key (D-016). Client-side encryption (D-014) is not renegotiated by this decision — the server still cannot decrypt household data at rest, which creates a real architectural question below, not just an ambiguity.
+- **Explicit non-goals (this bundle):** No third strategy ledger or higher cap without a new decision. No AI layer beyond suggestions and goal-drafting (no chat, no autonomous execution — every AI action is Apply/Dismiss, never auto-committed, matching the design-concept mockup). No multi-editor household support added as a side effect of ledgers. No new instrument-price auto-fetching (D-002 still stands).
+
+### Falsifiable success criteria
+
+| # | Draft criterion | Falsifiable rewrite | Status |
+|---|---|---|---|
+| 1 | "Ledgers help users plan" | 30% of households with 2+ holdings will create at least one alternate strategy ledger within 60 days of launch | Falsifiable, numeric target set as a conservative first read (no prior usage data, same reasoning as D-006) |
+| 2 | "AI counsel is useful" | 20% of households at Completeness tier 2+ will view at least one AI counsel suggestion within 30 days of launch | Falsifiable |
+| 3 | "AI counsel stays within cap" | Fewer than 5% of households will exhaust both the 2-plan and 2-edit-per-plan caps within the first 90 days | Falsifiable, but this is a capacity/cost check, not a value metric — track it, do not treat hitting it as failure |
+| 4 | "Bulk import is used" | 15% of households with 5+ manually-entered holdings will use bulk import for a subsequent addition within 60 days | Falsifiable |
+| 5 | "The redesign looks more finished" | Not falsifiable as written — "looks finished" has no measurable action. Rewritten as a non-regression gate: onboarding completion rate does not drop more than 5 percentage points against the pre-redesign baseline, measured 30 days post-launch | Flagged as a **design QA gate**, not a growth metric — visual quality itself is judged by Gaurav's own review, not a funnel number |
+
+### Ambiguities and unstated assumptions
+
+1. **The architectural conflict, not just an ambiguity.** D-014 encrypts household data client-side specifically so the server can never read it. An AI suggestion needs to read holdings to reason about them. If the Anthropic call is made from the server (`server/` Hono routes, the pattern every other feature in this app uses), the server would need plaintext it structurally cannot have. The call must instead originate from the client, after decryption, sending plaintext holdings data directly to Anthropic's API (or through a thin server proxy that only forwards, never persists). This is a new item for the `/privacy` leak list and needs its own decision before Phase 1, not an assumption carried in silently.
+2. Does "2 edits per plan" count only AI-assisted edits, or every edit (including a user manually changing an amount) to a plan the AI touched? The mockup's "Tune" button on the goal-planner plan is ambiguous on this point.
+3. Is the cap per household or per user? Matters only if multi-editor households ever ship (currently a non-goal), but the schema decision should be made once, not revisited.
+4. What happens when a household hits the cap: hard block with a message, a manual-only fallback (keep editing without AI), or something else? Not specified in D-016.
+5. Are "plans" (the cap's unit) and "ledgers" (the dashboard's strategy tabs) the same object, or does the goal planner's draft become a ledger only on explicit adoption (as the mockup's "Adopt as a draft ledger" button implies)? If they are different objects, the cap needs to say which one it counts.
+6. Where do alternate ledgers persist: server-side (encrypted per-row, extending D-014's model) or client-side only, echoing the superseded 2026-06-13 localStorage-scenario decision? Server-side is assumed as the default (consistent with everything else in the schema) but is not yet decided.
+7. If an AI suggestion references an instrument that is later removed or changed in the 30-instrument library, what happens to ledgers that already adopted it?
+8. Does "full-platform redesign" (D-016 item 4) include the landing page and `/why`, which were already redone 2026-08-12 in a different visual language? D-016's text names onboarding, Profile, and instrument detail specifically — it does not say whether the already-redesigned public pages get a second pass or stay as-is.
+9. Build order and parallelism across the four items is not set. They have real dependencies: the redesign's dashboard mockup already assumes ledgers exist, so ledgers plausibly need to land before or alongside the dashboard's visual rebuild rather than after it.
+10. The bulk-import template's household-member-name prefill (D-016 item 3) is a downloaded file with plaintext household PII, sitting outside the encrypted boundary the moment it is saved to a device. This is closely related to ambiguity 1 but is its own decision — a downloaded spreadsheet is a different exposure than an API call, since it can be re-shared or synced to cloud storage by the user.
+
+### Prior Art & Steal List
+
+1. **Boldin (formerly NewRetirement) — named, branchable plans compared side by side against a baseline.** This is the closest existing product to the strategy-ledger idea: a protected baseline plan, unlimited named variants, and a comparison view showing the delta on net worth and retirement age. Steal: the delta-against-baseline framing, which the mockup's `compare-strip` already gestures at — worth building out as a real side-by-side view, not just a one-line strip.
+2. **Empower (formerly Personal Capital) Retirement Planner — instant recompute on scenario sliders.** Changing an assumption (spend rate, retirement age) recomputes the plan live with no save step, so exploring a what-if costs nothing. Steal: treat ledger switching and goal-planner rate edits as free to try, cheap to abandon — never gate a preview behind a save action.
+3. **Airtable / Notion CSV import — column-mapping preview before commit.** Both show a preview screen mapping uploaded columns to real fields, flag mismatches, and let the user fix or skip a row before anything is written. Steal: this is exactly the "11 clean, 1 needs review" pattern already in the mockup's import zone — the row-level accept/reject, not just a pass/fail on the whole file, is the part worth keeping.
+4. **A locked-header, dropdown-validated spreadsheet template (the pattern behind most bank/HR bulk-upload tools).** The header row and instrument-name column use Excel data validation (a dropdown of the real instrument list), so a filled-in cell can only be a name the app already knows, cutting fuzzy-matching failures at the source. Steal: generate the dropdown list from the same instrument table Explore already reads, so the template can never drift from the live library.
+5. **Cleo / Copilot Money's suggestion cards — one-tap apply or dismiss, never auto-executes.** Both keep every AI suggestion as a proposal a user must explicitly accept, with the reasoning shown inline, never a silent background change. Steal: this is already the mockup's Counsel-card pattern (Apply to a draft ledger / Dismiss); worth stating explicitly as the standing rule for every future AI feature in this app, not just these two, given the "education not advice" hard constraint already in place for nudges.
+
+### Gate: Read-Back approved 2026-08-17 — resolutions
+
+Gaurav approved this Read-Back with answers to every ambiguity and the architectural conflict above. Full text in **D-017**, `DECISIONS_LOG.md`. Short form:
+
+- The encryption conflict (ambiguity 1) is resolved by a thin server proxy: browser decrypts, sends plaintext to a new server route over TLS, that route forwards to Anthropic and relays the reply without writing to Neon or logs. The database still stores ciphertext only. This is a narrow, disclosed exception to "the server cannot read your data," not a break of D-014.
+- The usage cap counts AI-driven actions only, never manual edits — this rule applies to every future AI usage restriction in this app.
+- Cap is per household, not per user, for now.
+- Hitting the cap disables only the AI action with a soft "limitations, paid tier coming soon" message. Manual editing is never blocked.
+- Plans and ledgers are the same object, and every ledger gets the same donut/Reserve/summary view as Current.
+- An instrument that changes or disappears from the library never silently alters or deletes a ledger's historical data — it triggers a bold, red-toned warning naming what changed.
+- The full-platform redesign explicitly includes the landing page, reopening the 2026-08-12 redesign — Gaurav's own assessment is that it still reads as "too basic and too boring," and he has been the app's only user to date.
+- Build order: strategy ledgers land first, since the AI layer, the goal planner, and the redesigned dashboard all assume ledgers exist.
+- The bulk-import template's member-name prefill is an accepted, disclosed PII exposure (a downloaded file, plaintext by construction), documented alongside the AI-call exception rather than blocked.
+
+**Phase 1 (Solution Stage interview) is queued, not started.** Gaurav asked to run it in a new session for better reasoning quality, given this session's smart-zone state.
