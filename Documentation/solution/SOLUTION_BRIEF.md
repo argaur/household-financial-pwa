@@ -95,6 +95,8 @@ A new user completes a 3-step, fact-only onboarding (household → members → f
 | 9 | Payments / billing | Not a monetized product |
 | 10 | Dedicated goal-planning UI | `goals` table exists (v1.5) but no UI in v1 |
 
+**Superseded 2026-08-17:** rows 3 and 10 above are no longer generic "someday v2" — Gaurav named both as top-priority public-showcase gaps (see `memory/project.md`'s "Public-showcase priority backlog," items 2/6 for the AI layer and goal planner, plus items 1/3/4/5 for the emergency-fund chart gap, visual design pass, Excel bulk-import, and one-click add-from-library). None are scoped yet — items 2 and 6 of that list need the ₹0/month budget ceiling (Cost & Kill budget, above) resolved first, since an LLM-backed layer has no free tier at real usage. Route each through Phase 0 intake before building, not straight to code.
+
 ---
 
 ## Technical Shape
