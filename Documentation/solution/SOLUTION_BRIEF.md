@@ -11,7 +11,7 @@
 2. **Target user:** Indian retail investors/households who are literate enough to want to track real holdings but lack a consolidated, education-first view of their household's complete financial picture (modeled initially on Gaurav's own family: self, spouse, child).
 3. **Success criteria:** Onboarding completion, return-visit retention, Household Portfolio Completeness Score growth, and demo-household engagement — see falsifiable rewrite below; none currently has a numeric target set.
 4. **Hard constraints:** Education-not-advice wording only (regulatory line, not style); real auth required (stores household PII); mobile-first PWA; public product (must handle real households, not just Gaurav's data shape); single editor per household in v1.
-5. **Explicit non-goals (from PRD):** AI chat, statement import, net-worth-over-time, shared/multi-editor access, push notifications, admin CMS, payments/billing, dedicated goal-planning UI.
+5. **Explicit non-goals (from PRD):** ~~AI chat~~, statement import, net-worth-over-time, shared/multi-editor access, push notifications, admin CMS, payments/billing, ~~dedicated goal-planning UI~~. **AMENDED 2026-08-17 (D-016):** AI chat and a dedicated goal-planning UI are no longer non-goals — both are now in scope, capped (2 plans per household, 2 edits per plan), backed by Gaurav's own Anthropic API key. See D-016 in `DECISIONS_LOG.md`.
 
 **Falsifiable success criteria** (every criterion rewritten as `X% of [user] will [action] within [timeframe]`; anything that can't be made falsifiable is flagged as a non-goal or research question — never left vague):
 
@@ -86,14 +86,14 @@ A new user completes a 3-step, fact-only onboarding (household → members → f
 |---|---|---|
 | 1 | Auto-price fetching (mfapi.in / CoinGecko / gold API) | Core loop doesn't need live prices; manual entry is sufficient for v1 (Q2) |
 | 2 | Demo-household button / demo mode | Conflicts with the chosen holdings-first journey; real onboarding is fast enough to serve the same purpose (Q3) |
-| 3 | AI chat / conversational interface | v2 — not needed for the literacy→tracking core loop |
+| 3 | ~~AI chat / conversational interface~~ **PROMOTED IN-SCOPE 2026-08-17 (D-016)** | Was v2 — not needed for the literacy→tracking core loop. Now: AI "Counsel" suggestions + goal planner, capped 2 plans/household × 2 edits/plan, Anthropic API key required before Phase 1 |
 | 4 | Bank/broker statement import | v2 — adds parsing/reconciliation complexity unneeded for manual-entry v1 |
 | 5 | Net-worth-over-time charting | v2 — needs historical snapshots not captured in v1's schema |
 | 6 | Shared/multi-editor household access | v2 — schema supports it, but v1 is single-editor only |
 | 7 | Push notifications | v1 uses in-app SIP calendar instead |
 | 8 | Admin CMS for instrument content | v1 content is curated JSON/MDX in-repo, edited via commits only |
 | 9 | Payments / billing | Not a monetized product |
-| 10 | Dedicated goal-planning UI | `goals` table exists (v1.5) but no UI in v1 |
+| 10 | ~~Dedicated goal-planning UI~~ **PROMOTED IN-SCOPE 2026-08-17 (D-016)** | Was: `goals` table exists (v1.5) but no UI in v1. Now: AI-assisted goal planner, same cap as row 3, folds into the strategy-ledger model |
 
 **Superseded 2026-08-17:** rows 3 and 10 above are no longer generic "someday v2" — Gaurav named both as top-priority public-showcase gaps (see `memory/project.md`'s "Public-showcase priority backlog," items 2/6 for the AI layer and goal planner, plus items 1/3/4/5 for the emergency-fund chart gap, visual design pass, Excel bulk-import, and one-click add-from-library). None are scoped yet — items 2 and 6 of that list need the ₹0/month budget ceiling (Cost & Kill budget, above) resolved first, since an LLM-backed layer has no free tier at real usage. Route each through Phase 0 intake before building, not straight to code.
 
@@ -138,8 +138,8 @@ A new user completes a 3-step, fact-only onboarding (household → members → f
 
 | Budget | Value | Notes |
 |---|---|---|
-| Max monthly infra cost | ₹0/month target | Free tiers only across Neon, Vercel, Clerk, PostHog, Sentry. First service to hit its ceiling if usage grows: **Clerk** (10k MAU free tier) |
-| Kill criterion | If Slice 0 (onboarding → dashboard, deployed end-to-end) isn't deployed within **30 days** → descope to Builder OS | Checked at every slice boundary |
+| Max monthly infra cost | ₹0/month target, **plus a hard-capped Anthropic API exception (2026-08-17, D-016)** | Free tiers only across Neon, Vercel, Clerk, PostHog, Sentry. First service to hit its ceiling if usage grows: **Clerk** (10k MAU free tier). The AI counsel/goal-planner layer uses Gaurav's own Anthropic API key, capped at 2 plans per household × 2 edits per plan — a per-household ceiling on calls, not a free tier, and the only paid dependency in the stack |
+| Kill criterion | If Slice 0 (onboarding → dashboard, deployed end-to-end) isn't deployed within **30 days** → descope to Builder OS | Checked at every slice boundary. Met 2026-07-10; unaffected by this amendment |
 
 ---
 

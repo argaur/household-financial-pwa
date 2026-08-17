@@ -226,3 +226,19 @@ must not fail silently either.
 
 **Scope.** D-014's server-side claim is unaffected — this was always local key lifetime on a shared
 device, never anything the server could see. The `/privacy` leak list needs no change.
+
+---
+
+## D-016 — Strategy ledgers, capped AI counsel, instrument-aware bulk import, and a full-platform redesign (2026-08-17)
+
+- **Date:** 2026-08-17
+- **Phase:** Post-ship feature cycle, pre-Phase-0 for this feature set
+- **Decision:** Four amendments to v1 scope, approved by Gaurav against a design-concept artifact (mint/treasury visual language, not yet implemented):
+  1. **Strategy ledgers.** "Current" stays the untouched baseline household plan. A user may create additional ledgers layered on top of Current, each able to add, modify, or remove instruments independently, compared against Current rather than replacing it. This is the structural answer to the "one static plan" limitation flagged 2026-08-17.
+  2. **AI counsel and goal planner, capped.** Both non-goals reversed (see `SOLUTION_BRIEF.md` amendment, same date). Backed by Gaurav's own Anthropic API key — **location not yet confirmed in this repo or its documented env vars; must be located or provisioned before Phase 1, not guessed.** Hard usage cap: **maximum 2 plans per household, maximum 2 edits per plan.** The cap is the entire cost-control mechanism; there is no other rate limit specified.
+  3. **Bulk import template is instrument-aware.** The downloadable Excel template ships prefilled with every applicable instrument name and its relevant fields (not a blank grid), so a filled-in sheet's columns match the schema on return.
+  4. **Full-platform redesign.** The mint/treasury visual language (see design-concept artifact) is not scoped to Dashboard/Explore/Portfolio/Goal-planner alone — it extends to onboarding, Profile, and instrument detail once approved, so the product does not end up with two visual languages.
+- **Rejected alternative(s):** A dark-forward "Wealth Studio" visual direction (single vivid accent on a navy base) — rejected by Gaurav in favor of a treasury/mint theme with light and dark treated as two independently-designed materials, neither inverted from the other. An uncapped or usage-metered AI layer — rejected in favor of a fixed per-household ceiling, since it needs no metering infrastructure and bounds the cost exactly. A migration path binding new ledgers into the Current household row — not discussed; Current stays the protected baseline and everything else is additive, per Gaurav's explicit instruction.
+- **Why:** Resolves the budget conflict flagged 2026-08-17 (root `memory/decisions.md`, same date) between the ₹0/month ceiling and an AI-backed layer — a fixed per-household cap keeps the paid dependency bounded and auditable rather than open-ended. The strategy-ledger model is the direct structural expression of Gaurav's stated core reframe: the product's job is modeling multiple what-if strategies against current and future holdings, not maintaining one static record.
+- **Open items, explicitly not resolved by this decision:** exact Anthropic API key source/provisioning; real cost estimate for the capped usage; whether the bulk-import template's prefilled member names interact with the client-side-encryption stance (D-014) — a downloaded file containing household member names is plaintext outside the encrypted boundary by construction, and this decision does not yet say whether that is acceptable, only that the template will carry the names.
+- **Revisit if:** the Anthropic API key cannot be located/provisioned before Phase 1 begins (blocks the AI counsel and goal-planner items specifically, not the ledger/import/redesign items) — or if the 2-plans/2-edits cap proves too restrictive against real usage once live.
