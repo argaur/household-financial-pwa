@@ -33,6 +33,8 @@ interface HoldingRow {
   id: string
   householdId: string
   memberId: string
+  /** Absent on the one legacy row this file deliberately pushes with no ledger. */
+  ledgerId?: string
   ciphertext: string | null
   iv: string | null
   alg: string | null
@@ -74,7 +76,13 @@ function matcher(cond: { __eq?: Filter; __and?: Filter[] }, fieldMap: Record<str
   }
 }
 
-const HOLDING_FIELDS = { id: 'id', household_id: 'householdId', version: 'version' }
+const HOLDING_FIELDS = {
+  id: 'id',
+  household_id: 'householdId',
+  member_id: 'memberId',
+  ledger_id: 'ledgerId',
+  version: 'version',
+}
 const LEDGER_FIELDS = { household_id: 'householdId', is_baseline: 'isBaseline', id: 'id' }
 
 vi.mock('./lib/db.js', () => ({
@@ -129,6 +137,7 @@ vi.mock('./lib/db.js', () => ({
               id: String(row.id),
               householdId: String(row.householdId),
               memberId: String(row.memberId),
+              ledgerId: String(row.ledgerId),
               ciphertext: (row.ciphertext as string) ?? null,
               iv: (row.iv as string) ?? null,
               alg: (row.alg as string) ?? null,
@@ -170,6 +179,16 @@ vi.mock('./lib/db.js', () => ({
         }),
       }),
     }),
+    delete: (table: unknown) => ({
+      where: (cond: { __eq?: Filter; __and?: Filter[] }) => {
+        if (table === holdingsTableRef) {
+          const match = matcher(cond, HOLDING_FIELDS)
+          holdingsRows = holdingsRows.filter((row) => !match(row))
+          return Promise.resolve([])
+        }
+        throw new Error('fake db: unhandled table in delete()')
+      },
+    }),
   },
 }))
 
@@ -201,6 +220,7 @@ const MEMBER_A = 'aaaaaaaa-1111-4111-8111-111111111111'
 const MEMBER_B = 'bbbbbbbb-2222-4222-8222-222222222222'
 const HOLDING_1 = 'cccccccc-3333-4333-8333-333333333333'
 const HOLDING_2 = 'dddddddd-4444-4444-8444-444444444444'
+const LEDGER_A1 = 'ffffffff-6666-4666-8666-666666666666'
 
 const envelope = { ciphertext: 'Y2lwaGVydGV4dC1vbmU', iv: 'aXYtYnl0ZXMtMTIx', alg: 'AES-256-GCM' }
 const newEnvelope = { ciphertext: 'Y2lwaGVydGV4dC10d28', iv: 'aXYtYnl0ZXMtMTIy', alg: 'AES-256-GCM' }
@@ -214,11 +234,16 @@ interface HoldingResponse {
     version: number
     investedAmount?: unknown
     assetClass?: unknown
+    ledgerId?: unknown
   }
   error?: string
 }
 interface HoldingsListResponse {
   holdings: Array<{ id: string; ciphertext: string | null; investedAmount?: unknown }>
+}
+interface LedgerResponse {
+  ledger?: { id: string; householdId: string; isBaseline: boolean }
+  error?: string
 }
 
 function authed(token: string, method: string, body?: unknown, query = '') {
@@ -243,6 +268,16 @@ async function createMember(token: string, id: string) {
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify({ id, ...envelope }),
   })
+}
+
+/** Creates a second, non-baseline ledger via the real /api/ledgers route. */
+async function createLedger(token: string, id: string, name: string) {
+  const res = await app.request('/api/ledgers', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ id, name, source: 'blank', holdings: [] }),
+  })
+  return (await res.json()) as LedgerResponse
 }
 
 describe('holdings routes', () => {
@@ -431,5 +466,207 @@ describe('holdings routes', () => {
     expect(body.holdings[0].ciphertext).toBeNull()
     expect(body.holdings[0]).not.toHaveProperty('investedAmount')
     expect(JSON.stringify(body)).not.toContain('250000')
+  })
+})
+
+// D-016 Chunk 3 — GET/POST scoped by an optional ?ledgerId=, PATCH/DELETE
+// unchanged (they already operate purely on `?id=` within the household).
+describe('holdings routes — ?ledgerId= scoping', () => {
+  beforeEach(() => {
+    households = []
+    members = []
+    holdingsRows = []
+    ledgerRows = []
+    ledgerCounter = 0
+  })
+
+  it('GET /api/holdings with no ledgerId still returns exactly what it did before this change', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createMember('user_a', MEMBER_A)
+    await authed('user_a', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope })
+
+    const res = await app.request('/api/holdings', { headers: { authorization: 'Bearer user_a' } })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as HoldingsListResponse
+    expect(body.holdings).toHaveLength(1)
+    expect(body.holdings[0].id).toBe(HOLDING_1)
+    expect(body.holdings[0].ciphertext).toBe(envelope.ciphertext)
+  })
+
+  it('GET with no ledgerId returns ONLY Current, never other ledgers\' rows pooled in', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createMember('user_a', MEMBER_A)
+    await authed('user_a', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope }) // Current
+
+    const ledger = await createLedger('user_a', LEDGER_A1, 'Aggressive')
+    await authed(
+      'user_a',
+      'POST',
+      { id: HOLDING_2, memberId: MEMBER_A, ...envelope },
+      `?ledgerId=${ledger.ledger!.id}`,
+    )
+
+    // Before D-016 "scoped to the household" and "Current" were the same set,
+    // so the unscoped list could filter by household alone. With a second
+    // ledger they diverge, and the Portfolio screen — which calls this — would
+    // otherwise show the same holding once per ledger, presenting strategy rows
+    // as things the household actually owns.
+    const res = await app.request('/api/holdings', { headers: { authorization: 'Bearer user_a' } })
+    const body = (await res.json()) as HoldingsListResponse
+    expect(body.holdings.map((h) => h.id)).toEqual([HOLDING_1])
+  })
+
+  it('GET ?ledgerId=<uuid> on a real ledger lists only that ledger\'s holdings', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createMember('user_a', MEMBER_A)
+    await authed('user_a', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope }) // lands in Current
+
+    const ledger = await createLedger('user_a', LEDGER_A1, 'Aggressive')
+    const ledgerId = ledger.ledger!.id
+    await authed('user_a', 'POST', { id: HOLDING_2, memberId: MEMBER_A, ...envelope }, `?ledgerId=${ledgerId}`)
+
+    const res = await app.request(`/api/holdings?ledgerId=${ledgerId}`, {
+      headers: { authorization: 'Bearer user_a' },
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as HoldingsListResponse
+    expect(body.holdings.map((h) => h.id)).toEqual([HOLDING_2])
+  })
+
+  it('GET ?ledgerId= for a ledger that does not exist at all is 404, not an empty list', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    const res = await app.request('/api/holdings?ledgerId=99999999-9999-4999-8999-999999999999', {
+      headers: { authorization: 'Bearer user_a' },
+    })
+    expect(res.status).toBe(404)
+    expect(((await res.json()) as HoldingResponse).error).toBe('not_found')
+  })
+
+  it('POST ?ledgerId=<uuid> creates the holding inside that ledger, with the session household id and no body-supplied ledgerId or householdId', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createMember('user_a', MEMBER_A)
+    const ledger = await createLedger('user_a', LEDGER_A1, 'Aggressive')
+    const ledgerId = ledger.ledger!.id
+
+    // The schema is `.strict()` — a client cannot even attempt to smuggle
+    // ledgerId or householdId into the body; both are 400.
+    const smuggledLedgerId = await authed(
+      'user_a',
+      'POST',
+      { id: HOLDING_1, memberId: MEMBER_A, ledgerId: 'not-the-real-one', ...envelope },
+      `?ledgerId=${ledgerId}`,
+    )
+    expect(smuggledLedgerId.status).toBe(400)
+    const smuggledHouseholdId = await authed(
+      'user_a',
+      'POST',
+      { id: HOLDING_1, memberId: MEMBER_A, householdId: HOUSEHOLD_B, ...envelope },
+      `?ledgerId=${ledgerId}`,
+    )
+    expect(smuggledHouseholdId.status).toBe(400)
+    expect(holdingsRows).toHaveLength(0)
+
+    const res = await authed('user_a', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope }, `?ledgerId=${ledgerId}`)
+    expect(res.status).toBe(201)
+
+    const stored = holdingsRows.find((h) => h.id === HOLDING_1)!
+    expect(stored.ledgerId).toBe(ledgerId)
+    expect(stored.householdId).toBe(HOUSEHOLD_A)
+  })
+
+  it('POST with no ledgerId still files into the baseline, unchanged', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createMember('user_a', MEMBER_A)
+
+    const res = await authed('user_a', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope })
+    expect(res.status).toBe(201)
+
+    const baseline = ledgerRows.find((l) => l.householdId === HOUSEHOLD_A && l.isBaseline)!
+    const stored = holdingsRows.find((h) => h.id === HOLDING_1)!
+    expect(stored.ledgerId).toBe(baseline.id)
+  })
+
+  it('POST ?ledgerId= for a ledger that does not exist is 404 and writes nothing, before the body is even validated', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createMember('user_a', MEMBER_A)
+
+    // Body is deliberately garbage — if the route validated it before the
+    // ledger, this would come back 400, not 404.
+    const res = await authed(
+      'user_a',
+      'POST',
+      { notAField: true },
+      '?ledgerId=99999999-9999-4999-8999-999999999999',
+    )
+    expect(res.status).toBe(404)
+    expect(holdingsRows).toHaveLength(0)
+  })
+
+  it("the acceptance criterion: Current never changes because another ledger exists — add, edit and delete in a second ledger leave Current's rows byte-identical", async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createMember('user_a', MEMBER_A)
+    await authed('user_a', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope })
+    await authed('user_a', 'POST', { id: HOLDING_2, memberId: MEMBER_A, ...envelope })
+
+    const baseline = ledgerRows.find((l) => l.householdId === HOUSEHOLD_A && l.isBaseline)!
+    const currentBefore = JSON.parse(JSON.stringify(holdingsRows.filter((h) => h.ledgerId === baseline.id)))
+
+    const ledger = await createLedger('user_a', LEDGER_A1, 'Aggressive')
+    const ledgerId = ledger.ledger!.id
+    const SECOND_LEDGER_HOLDING = 'eeeeeeee-5555-4555-8555-555555555555'
+
+    // Add.
+    const created = await authed(
+      'user_a',
+      'POST',
+      { id: SECOND_LEDGER_HOLDING, memberId: MEMBER_A, ...envelope },
+      `?ledgerId=${ledgerId}`,
+    )
+    expect(created.status).toBe(201)
+
+    // Edit — PATCH takes only `?id=`, never `?ledgerId=`, and operates on the
+    // holding wherever it lives, as long as it's this household's.
+    const updated = await authed(
+      'user_a',
+      'PATCH',
+      { ...newEnvelope, expectedVersion: 1 },
+      `?id=${SECOND_LEDGER_HOLDING}`,
+    )
+    expect(updated.status).toBe(200)
+
+    // Delete.
+    const deleted = await authed('user_a', 'DELETE', undefined, `?id=${SECOND_LEDGER_HOLDING}`)
+    expect(deleted.status).toBe(200)
+    expect(holdingsRows.some((h) => h.id === SECOND_LEDGER_HOLDING)).toBe(false)
+
+    // The invariant: Current's own rows, compared field-for-field, not just by count.
+    const currentAfter = JSON.parse(JSON.stringify(holdingsRows.filter((h) => h.ledgerId === baseline.id)))
+    expect(currentAfter).toEqual(currentBefore)
+    expect(currentAfter).toHaveLength(2)
+  })
+
+  it("two-user isolation: user B cannot list, create into, or edit within user A's ledger — 404 on each", async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createHousehold('user_b', HOUSEHOLD_B)
+    await createMember('user_a', MEMBER_A)
+
+    const ledger = await createLedger('user_a', LEDGER_A1, "A's plan")
+    const ledgerId = ledger.ledger!.id
+
+    const list = await app.request(`/api/holdings?ledgerId=${ledgerId}`, { headers: { authorization: 'Bearer user_b' } })
+    expect(list.status).toBe(404)
+    expect(((await list.json()) as HoldingResponse).error).toBe('not_found')
+
+    const create = await authed('user_b', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope }, `?ledgerId=${ledgerId}`)
+    expect(create.status).toBe(404)
+    expect(holdingsRows).toHaveLength(0)
+
+    // Seed a holding into A's ledger directly (bypassing B) to prove B can't edit it either.
+    await authed('user_a', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope }, `?ledgerId=${ledgerId}`)
+    const edit = await authed('user_b', 'PATCH', { ...newEnvelope, expectedVersion: 1 }, `?id=${HOLDING_1}`)
+    expect(edit.status).toBe(404)
+    const del = await authed('user_b', 'DELETE', undefined, `?id=${HOLDING_1}`)
+    expect(del.status).toBe(404)
+    expect(holdingsRows.find((h) => h.id === HOLDING_1)?.ciphertext).toBe(envelope.ciphertext)
   })
 })

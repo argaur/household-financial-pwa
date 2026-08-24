@@ -50,6 +50,29 @@ export async function getBaselineLedger(db: LedgerReadDb, householdId: string): 
 }
 
 /**
+ * Returns a ledger only if it belongs to the given household, null otherwise —
+ * including when the id doesn't exist at all.
+ *
+ * The household filter is part of the lookup itself, exactly like
+ * `deleteLedger` below: a ledger belonging to another household and a ledger
+ * that doesn't exist must be indistinguishable to the caller. Any route using
+ * this to gate a `?ledgerId=` query param should answer both cases with 404,
+ * never 403 — a 403 would confirm the ledger exists.
+ */
+export async function getLedgerForHousehold(
+  db: LedgerReadDb,
+  householdId: string,
+  ledgerId: string,
+): Promise<Ledger | null> {
+  const rows = await db
+    .select()
+    .from(ledgers)
+    .where(and(eq(ledgers.id, ledgerId), eq(ledgers.householdId, householdId)))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/**
  * Returns the household's baseline ledger, creating it if it does not exist.
  *
  * Get-or-create rather than a plain create, for two reasons. Households that
