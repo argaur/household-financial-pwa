@@ -66,7 +66,17 @@ export const ledgerOriginEnum = ['manual', 'ai_suggestion'] as const
 export const ledgers = pgTable('ledgers', {
   id: uuid('id').defaultRandom().primaryKey(),
   householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
+  // The baseline row's name stays a plain 'Current' string forever, envelope
+  // columns left null — it is created server side by ensureBaselineLedger
+  // before the user has necessarily unlocked their vault, and it is not user
+  // data, so it is the one row exempt from encryption by design. A
+  // non-baseline ledger stores name as null with the envelope populated
+  // instead. Nullable for that reason, not because a ledger can go nameless.
+  name: text('name'),
+  ciphertext: text('ciphertext'),
+  iv: text('iv'),
+  alg: text('alg'),
+  version: integer('version').notNull().default(1),
   isBaseline: boolean('is_baseline').notNull().default(false),
   origin: text('origin', { enum: ledgerOriginEnum }).notNull().default('manual'),
   aiEditsUsed: integer('ai_edits_used').notNull().default(0),

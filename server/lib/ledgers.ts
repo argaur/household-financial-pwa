@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { ledgers, holdings, familyMembers } from '../../drizzle/schema.js'
 import type { db as Db } from './db.js'
-import { memberScopedCreateSchema, rowIdSchema } from './envelope.js'
+import { encryptedCreateSchema, memberScopedCreateSchema, rowIdSchema } from './envelope.js'
 
 export type Ledger = typeof ledgers.$inferSelect
 
@@ -10,6 +10,11 @@ export type Ledger = typeof ledgers.$inferSelect
  * Reserved name for the baseline ledger. "Current never changes because a
  * ledger exists" is the guiding invariant of D-016, and this row is what
  * "Current" means in the database.
+ *
+ * The one plaintext ledger name in the system. `ensureBaselineLedger` writes
+ * it as a literal string before the user has necessarily unlocked their
+ * vault, and it is not user data, so this row alone is exempt from the
+ * envelope every other ledger name now carries.
  */
 export const BASELINE_LEDGER_NAME = 'Current'
 
@@ -37,7 +42,14 @@ export const MAX_NON_BASELINE_LEDGERS = 4
  */
 export const MAX_LEDGER_HOLDINGS = 200
 
-/** 60 characters is what the ledger switcher can render without truncating. */
+/**
+ * 60 characters is what the ledger switcher can render without truncating.
+ *
+ * No longer enforced here — a ledger's name is now sealed client side before
+ * it ever reaches the server, so the server has no plaintext length to check.
+ * Kept as the one place the limit is documented; `src/lib/ledgers-api.ts`
+ * carries the client-side copy that actually enforces it.
+ */
 export const MAX_LEDGER_NAME_CHARS = 60
 
 export async function getBaselineLedger(db: LedgerReadDb, householdId: string): Promise<Ledger | null> {
@@ -132,19 +144,23 @@ export async function listLedgers(db: LedgerReadDb, householdId: string): Promis
  * having it quietly dropped. `holdings` entries reuse `memberScopedCreateSchema`
  * unchanged — the same shape POST /api/holdings accepts, one row at a time.
  *
+ * The ledger's own name is likewise never sent as plaintext: it arrives sealed
+ * as `{ ciphertext, iv, alg }`, the same envelope every other encrypted table
+ * accepts (`encryptedCreateSchema`), extended with the fields this route needs.
+ * There is no length check here any more — `MAX_LEDGER_NAME_CHARS` moved to the
+ * client, the same way it already exists for holdings fields, because the
+ * server cannot read a name it never sees plaintext.
+ *
  * `isBaseline`, `origin`, `snapshotOf` and `householdId` are absent by design.
  * All four are decided by the server; a client can never mint a second
  * "Current", nor claim a ledger came from the AI planner, nor file a ledger
  * under someone else's household.
  */
-export const createLedgerSchema = z
-  .object({
-    id: rowIdSchema,
-    name: z.string().trim().min(1).max(MAX_LEDGER_NAME_CHARS),
-    source: z.enum(['blank', 'copy']),
-    holdings: z.array(memberScopedCreateSchema).max(MAX_LEDGER_HOLDINGS),
-  })
-  .strict()
+export const createLedgerSchema = encryptedCreateSchema.extend({
+  id: rowIdSchema,
+  source: z.enum(['blank', 'copy']),
+  holdings: z.array(memberScopedCreateSchema).max(MAX_LEDGER_HOLDINGS),
+})
 
 export type CreateLedgerInput = z.infer<typeof createLedgerSchema>
 
@@ -211,7 +227,12 @@ export async function createLedger(
     .values({
       id: input.id,
       householdId,
-      name: input.name,
+      // name stays null: this is a non-baseline ledger, and its name lives only
+      // in the envelope below. Only ensureBaselineLedger ever writes a literal
+      // `name`.
+      ciphertext: input.ciphertext,
+      iv: input.iv,
+      alg: input.alg,
       // Always false. A baseline is minted by ensureBaselineLedger alone; if a
       // client could ask for one, the partial unique index would be the only
       // thing standing between a household and two conflicting "Current"s.

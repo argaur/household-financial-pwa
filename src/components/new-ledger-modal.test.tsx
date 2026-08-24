@@ -27,6 +27,12 @@ const ledger: Ledger = {
   id: 'l2',
   householdId: 'h1',
   name: 'New strategy',
+  // As handed back by src/lib/ledgers-api.ts: already decrypted, so the
+  // component under test never sees the envelope itself.
+  ciphertext: 'Y2lwaGVydGV4dA',
+  iv: 'aXYtYnl0ZXM',
+  alg: 'AES-256-GCM',
+  version: 1,
   isBaseline: false,
   origin: 'manual',
   snapshotOf: 'baseline',

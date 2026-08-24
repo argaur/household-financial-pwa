@@ -143,6 +143,12 @@ interface TabProps {
 }
 
 function Tab({ ledger, active, onSelect, canDelete, deleting, onDelete }: TabProps) {
+  // `name` is `string | null` on the type — a decrypted or baseline ledger
+  // always has one by the time it reaches this component (an unreadable name
+  // is dropped in src/lib/ledgers-api.ts, never handed over as null), but this
+  // still degrades to a label rather than rendering nothing if that ever
+  // changes.
+  const label = ledger.name ?? 'Untitled ledger'
   return (
     <div
       className={cn(
@@ -160,12 +166,12 @@ function Tab({ ledger, active, onSelect, canDelete, deleting, onDelete }: TabPro
           active ? 'text-primary' : 'text-foreground hover:bg-accent hover:text-accent-foreground',
         )}
       >
-        {ledger.name}
+        {label}
       </button>
       {canDelete && (
         <button
           type="button"
-          aria-label={`Delete ${ledger.name}`}
+          aria-label={`Delete ${label}`}
           disabled={deleting}
           onClick={(e) => {
             e.stopPropagation()

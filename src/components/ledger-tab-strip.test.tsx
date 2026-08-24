@@ -25,6 +25,13 @@ function makeLedger(overrides: Partial<Ledger>): Ledger {
     id: 'l1',
     householdId: 'h1',
     name: 'Current',
+    // Already-decrypted shape, exactly what src/lib/ledgers-api.ts hands the
+    // UI — a non-baseline row would carry a real ciphertext, but this
+    // component only ever reads the decrypted `name`, so null stands in fine.
+    ciphertext: null,
+    iv: null,
+    alg: null,
+    version: 1,
     isBaseline: true,
     origin: 'manual',
     snapshotOf: null,
@@ -147,6 +154,33 @@ describe('LedgerTabStrip', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '+ New' }))
     await screen.findByRole('dialog')
+  })
+
+  it('renders a fallback label instead of crashing or showing "null" when a name is null', () => {
+    const unnamed = makeLedger({
+      id: 'unnamed',
+      name: null,
+      ciphertext: 'Y2lwaGVydGV4dA',
+      iv: 'aXYtYnl0ZXM',
+      alg: 'AES-256-GCM',
+      isBaseline: false,
+      snapshotOf: 'l1',
+    })
+    render(
+      <LedgerTabStrip
+        ledgers={[baseline, unnamed]}
+        activeLedgerId={baseline.id}
+        onSelect={vi.fn()}
+        sourceHoldings={[]}
+        unreadableCount={0}
+        onLedgerCreated={vi.fn()}
+        onLedgerDeleted={vi.fn()}
+      />,
+    )
+
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs[1]).toHaveTextContent('Untitled ledger')
+    expect(tabs[1]).not.toHaveTextContent('null')
   })
 
   it('does not overflow at 390px — the strip is horizontally scrollable rather than wrapping or clipping', () => {

@@ -14,9 +14,12 @@ import { listLedgers, createLedger, deleteLedger, createLedgerSchema, type Ledge
  *
  * Two things this route deliberately does NOT do:
  *
- * 1. It never sees plaintext. A ledger's *name* is readable — it is a label the
- *    user picked, not household financial data — but every holding it carries
- *    arrives as `{ ciphertext, iv, alg }` and is stored exactly as received.
+ * 1. It never sees plaintext. A non-baseline ledger's *name* now arrives sealed
+ *    as `{ ciphertext, iv, alg }`, exactly like every holding it carries, and is
+ *    stored exactly as received — this route reads neither. The one exception
+ *    is the baseline "Current" row: `ensureBaselineLedger` (server/lib/ledgers.ts)
+ *    writes it as a literal string before the user has necessarily unlocked
+ *    their vault, so it is not user data and carries no envelope at all.
  *    There is no schema here that accepts an amount, an asset class, an
  *    instrument, a date or a note, and every schema is `.strict()`.
  *
@@ -47,12 +50,22 @@ ledgersRoutes.use('*', async (c, next) => {
  * Only the columns a client needs, listed explicitly rather than spread.
  * `aiEditsUsed` and `projectionHorizonYears` belong to D-017 and D-018 and are
  * withheld until a route actually needs them.
+ *
+ * `name` and the envelope travel together, mirroring `StoredEnvelope`
+ * (server/lib/envelope.ts) and how households/holdings already respond. The
+ * client decides which to trust by whether `ciphertext` is present: null means
+ * the baseline row and a plain `name`; non-null means a sealed row whose `name`
+ * is null and must be decrypted.
  */
 function serialize(row: Ledger) {
   return {
     id: row.id,
     householdId: row.householdId,
     name: row.name,
+    ciphertext: row.ciphertext,
+    iv: row.iv,
+    alg: row.alg,
+    version: row.version,
     isBaseline: row.isBaseline,
     origin: row.origin,
     snapshotOf: row.snapshotOf,

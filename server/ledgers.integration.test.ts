@@ -28,10 +28,12 @@ interface MemberRow extends EnvelopeRow {
   createdAt: Date
   updatedAt: Date
 }
-interface LedgerRow {
-  id: string
+interface LedgerRow extends EnvelopeRow {
   householdId: string
-  name: string
+  // Non-null only for the one row that is exempt from encryption by design:
+  // the baseline "Current" ledger. Every other row carries this as null and
+  // its real value only in ciphertext/iv/alg.
+  name: string | null
   isBaseline: boolean
   origin: string
   snapshotOf: string | null
@@ -113,7 +115,15 @@ vi.mock('./lib/db.js', () => ({
               const created: LedgerRow = {
                 id: (row.id as string) ?? `ledger-${++ledgerCounter}`,
                 householdId: String(row.householdId),
-                name: String(row.name),
+                // Only ensureBaselineLedger ever sends a literal `name`; a
+                // non-baseline create sends ciphertext/iv/alg instead and no
+                // `name` at all, so this must not coerce `undefined` into the
+                // string "undefined".
+                name: (row.name as string | undefined) ?? null,
+                ciphertext: (row.ciphertext as string | undefined) ?? null,
+                iv: (row.iv as string | undefined) ?? null,
+                alg: (row.alg as string | undefined) ?? null,
+                version: 1,
                 isBaseline: Boolean(row.isBaseline),
                 origin: String(row.origin),
                 snapshotOf: (row.snapshotOf as string | null) ?? null,
@@ -245,6 +255,17 @@ const MEMBER_B = 'bbbbbbbb-2222-4222-8222-222222222222'
 const envelope = { ciphertext: 'Y2lwaGVydGV4dC1vbmU', iv: 'aXYtYnl0ZXMtMTIx', alg: 'AES-256-GCM' }
 const reEncrypted = { ciphertext: 'Y2lwaGVydGV4dC1jb3B5', iv: 'aXYtYnl0ZXMtOTk5', alg: 'AES-256-GCM' }
 
+/**
+ * A fake sealed ledger name — this suite never runs real crypto, so `label`
+ * is embedded directly in the "ciphertext" purely so two different POSTs in
+ * the same test are distinguishable by which envelope landed where. It proves
+ * nothing about what real ciphertext looks like; `src/lib/ledgers-api.test.ts`
+ * owns that.
+ */
+function nameEnvelope(label: string) {
+  return { ciphertext: `Y2lwaGVy-${label}`, iv: `aXYtYnl0-${label}`, alg: 'AES-256-GCM' }
+}
+
 /** Deterministic v4-shaped uuids, so bulk payloads pass rowIdSchema. */
 function uuid(n: number) {
   const hex = n.toString(16).padStart(12, '0')
@@ -254,7 +275,11 @@ function uuid(n: number) {
 interface LedgerBody {
   id: string
   householdId: string
-  name: string
+  name: string | null
+  ciphertext: string | null
+  iv: string | null
+  alg: string | null
+  version: number
   isBaseline: boolean
   origin: string
   snapshotOf: string | null
@@ -329,7 +354,7 @@ describe('ledgers routes — auth', () => {
     const post = await app.request('/api/ledgers', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: uuid(1), name: 'Aggressive', source: 'blank', holdings: [] }),
+      body: JSON.stringify({ id: uuid(1), ...nameEnvelope('1'), source: 'blank', holdings: [] }),
     })
     expect(post.status).toBe(401)
 
@@ -340,7 +365,7 @@ describe('ledgers routes — auth', () => {
   it('rejects an invalid token on every verb', async () => {
     expect((await authed('invalid', 'GET')).status).toBe(401)
     expect(
-      (await authed('invalid', 'POST', { id: uuid(1), name: 'Aggressive', source: 'blank', holdings: [] })).status,
+      (await authed('invalid', 'POST', { id: uuid(1), ...nameEnvelope('1'), source: 'blank', holdings: [] })).status,
     ).toBe(401)
     expect((await authed('invalid', 'DELETE', undefined, `?id=${uuid(1)}`)).status).toBe(401)
   })
@@ -354,7 +379,7 @@ describe('ledgers routes — auth', () => {
     const list = await app.request('/api/ledgers', { headers: { authorization: 'Bearer user_a' } })
     expect(list.headers.get('cache-control')).toBe('no-store')
 
-    const created = await authed('user_a', 'POST', { id: uuid(1), name: 'Aggressive', source: 'blank', holdings: [] })
+    const created = await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('1'), source: 'blank', holdings: [] })
     expect(created.headers.get('cache-control')).toBe('no-store')
   })
 
@@ -367,7 +392,7 @@ describe('ledgers routes — auth', () => {
   it('returns 404 on create before a household exists', async () => {
     const res = await authed('user_no_household', 'POST', {
       id: uuid(1),
-      name: 'Aggressive',
+      ...nameEnvelope('1'),
       source: 'blank',
       holdings: [],
     })
@@ -377,14 +402,17 @@ describe('ledgers routes — auth', () => {
 })
 
 describe('ledgers routes — GET', () => {
-  it("lists the household's ledgers with the baseline first, then oldest-created", async () => {
+  it("lists the household's ledgers with the baseline first, then oldest-created first", async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
-    await authed('user_a', 'POST', { id: uuid(1), name: 'Aggressive', source: 'blank', holdings: [] })
-    await authed('user_a', 'POST', { id: uuid(2), name: 'Conservative', source: 'blank', holdings: [] })
+    await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('aggressive'), source: 'blank', holdings: [] })
+    await authed('user_a', 'POST', { id: uuid(2), ...nameEnvelope('conservative'), source: 'blank', holdings: [] })
 
     const { body } = await listLedgersFor('user_a')
-    expect(body.ledgers.map((l) => l.name)).toEqual([BASELINE_LEDGER_NAME, 'Aggressive', 'Conservative'])
+    const baseline = baselineFor(HOUSEHOLD_A)
+    expect(body.ledgers.map((l) => l.id)).toEqual([baseline.id, uuid(1), uuid(2)])
     expect(body.ledgers[0].isBaseline).toBe(true)
+    expect(body.ledgers[0].name).toBe(BASELINE_LEDGER_NAME)
+    expect(body.ledgers[0].ciphertext).toBeNull()
   })
 
   it('serves only the agreed columns — no aiEditsUsed, no projectionHorizonYears', async () => {
@@ -392,8 +420,42 @@ describe('ledgers routes — GET', () => {
     const { body } = await listLedgersFor('user_a')
 
     expect(Object.keys(body.ledgers[0]).sort()).toEqual(
-      ['createdAt', 'householdId', 'id', 'isBaseline', 'name', 'origin', 'snapshotOf', 'updatedAt'].sort(),
+      ['alg', 'ciphertext', 'createdAt', 'householdId', 'id', 'isBaseline', 'iv', 'name', 'origin', 'snapshotOf', 'updatedAt', 'version'].sort(),
     )
+  })
+
+  it("a created non-baseline ledger's wire response carries ciphertext/iv/alg and never a plaintext name", async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    const res = await authed('user_a', 'POST', {
+      id: uuid(1),
+      ...nameEnvelope('aggressive'),
+      source: 'blank',
+      holdings: [],
+    })
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as LedgerResponse
+
+    expect(body.ledger?.name).toBeNull()
+    expect(body.ledger?.ciphertext).toBe('Y2lwaGVy-aggressive')
+    expect(body.ledger?.iv).toBe('aXYtYnl0-aggressive')
+    expect(body.ledger?.alg).toBe('AES-256-GCM')
+
+    // The list response agrees — this is not a create-response-only artifact.
+    const { body: list } = await listLedgersFor('user_a')
+    const created = list.ledgers.find((l) => l.id === uuid(1))
+    expect(created?.name).toBeNull()
+    expect(created?.ciphertext).toBe('Y2lwaGVy-aggressive')
+  })
+
+  it("the baseline ledger's wire response carries a plain name: 'Current' and a null ciphertext", async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    const { body } = await listLedgersFor('user_a')
+
+    const baseline = body.ledgers.find((l) => l.isBaseline)
+    expect(baseline?.name).toBe('Current')
+    expect(baseline?.ciphertext).toBeNull()
+    expect(baseline?.iv).toBeNull()
+    expect(baseline?.alg).toBeNull()
   })
 })
 
@@ -401,15 +463,15 @@ describe('ledgers routes — two-user isolation', () => {
   it("user B never sees user A's ledgers", async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     await createHousehold('user_b', HOUSEHOLD_B)
-    await authed('user_a', 'POST', { id: uuid(1), name: "A's plan", source: 'blank', holdings: [] })
-    await authed('user_b', 'POST', { id: uuid(2), name: "B's plan", source: 'blank', holdings: [] })
+    await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('a-plan'), source: 'blank', holdings: [] })
+    await authed('user_b', 'POST', { id: uuid(2), ...nameEnvelope('b-plan'), source: 'blank', holdings: [] })
 
     const a = await listLedgersFor('user_a')
-    expect(a.body.ledgers.map((l) => l.name)).toEqual([BASELINE_LEDGER_NAME, "A's plan"])
+    expect(a.body.ledgers.map((l) => l.id)).toEqual([baselineFor(HOUSEHOLD_A).id, uuid(1)])
     expect(a.body.ledgers.every((l) => l.householdId === HOUSEHOLD_A)).toBe(true)
 
     const b = await listLedgersFor('user_b')
-    expect(b.body.ledgers.map((l) => l.name)).toEqual([BASELINE_LEDGER_NAME, "B's plan"])
+    expect(b.body.ledgers.map((l) => l.id)).toEqual([baselineFor(HOUSEHOLD_B).id, uuid(2)])
     expect(b.body.ledgers.every((l) => l.householdId === HOUSEHOLD_B)).toBe(true)
   })
 
@@ -417,7 +479,7 @@ describe('ledgers routes — two-user isolation', () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     await createHousehold('user_b', HOUSEHOLD_B)
 
-    const res = await authed('user_b', 'POST', { id: uuid(9), name: 'Aggressive', source: 'blank', holdings: [] })
+    const res = await authed('user_b', 'POST', { id: uuid(9), ...nameEnvelope('9'), source: 'blank', holdings: [] })
     expect(res.status).toBe(201)
     expect(((await res.json()) as LedgerResponse).ledger?.householdId).toBe(HOUSEHOLD_B)
 
@@ -427,7 +489,7 @@ describe('ledgers routes — two-user isolation', () => {
   it("user B cannot delete user A's ledger — 404, never 403, and A's row survives", async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     await createHousehold('user_b', HOUSEHOLD_B)
-    await authed('user_a', 'POST', { id: uuid(1), name: "A's plan", source: 'blank', holdings: [] })
+    await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('a-plan'), source: 'blank', holdings: [] })
 
     const res = await authed('user_b', 'DELETE', undefined, `?id=${uuid(1)}`)
     expect(res.status).toBe(404)
@@ -451,11 +513,11 @@ describe('ledgers routes — the 4-ledger cap', () => {
     await createHousehold('user_a', HOUSEHOLD_A)
 
     for (let i = 1; i <= MAX_NON_BASELINE_LEDGERS; i += 1) {
-      const res = await authed('user_a', 'POST', { id: uuid(i), name: `Plan ${i}`, source: 'blank', holdings: [] })
+      const res = await authed('user_a', 'POST', { id: uuid(i), ...nameEnvelope(`${i}`), source: 'blank', holdings: [] })
       expect(res.status).toBe(201)
     }
 
-    const fifth = await authed('user_a', 'POST', { id: uuid(99), name: 'One too many', source: 'blank', holdings: [] })
+    const fifth = await authed('user_a', 'POST', { id: uuid(99), ...nameEnvelope('99'), source: 'blank', holdings: [] })
     expect(fifth.status).toBe(409)
     expect(((await fifth.json()) as LedgerResponse).error).toBe('ledger_cap_reached')
     expect(ledgerRows.filter((l) => !l.isBaseline)).toHaveLength(MAX_NON_BASELINE_LEDGERS)
@@ -466,7 +528,7 @@ describe('ledgers routes — the 4-ledger cap', () => {
     expect(ledgerRows.filter((l) => l.isBaseline)).toHaveLength(1)
 
     for (let i = 1; i <= MAX_NON_BASELINE_LEDGERS; i += 1) {
-      await authed('user_a', 'POST', { id: uuid(i), name: `Plan ${i}`, source: 'blank', holdings: [] })
+      await authed('user_a', 'POST', { id: uuid(i), ...nameEnvelope(`${i}`), source: 'blank', holdings: [] })
     }
     // Baseline + 4 — if the baseline counted, the fourth would have been refused.
     expect(ledgerRows.filter((l) => l.householdId === HOUSEHOLD_A)).toHaveLength(MAX_NON_BASELINE_LEDGERS + 1)
@@ -475,26 +537,26 @@ describe('ledgers routes — the 4-ledger cap', () => {
   it('frees a slot when a ledger is deleted', async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     for (let i = 1; i <= MAX_NON_BASELINE_LEDGERS; i += 1) {
-      await authed('user_a', 'POST', { id: uuid(i), name: `Plan ${i}`, source: 'blank', holdings: [] })
+      await authed('user_a', 'POST', { id: uuid(i), ...nameEnvelope(`${i}`), source: 'blank', holdings: [] })
     }
-    expect((await authed('user_a', 'POST', { id: uuid(99), name: 'Fifth', source: 'blank', holdings: [] })).status).toBe(
-      409,
-    )
+    expect(
+      (await authed('user_a', 'POST', { id: uuid(99), ...nameEnvelope('99'), source: 'blank', holdings: [] })).status,
+    ).toBe(409)
 
     expect((await authed('user_a', 'DELETE', undefined, `?id=${uuid(1)}`)).status).toBe(200)
-    expect((await authed('user_a', 'POST', { id: uuid(99), name: 'Fifth', source: 'blank', holdings: [] })).status).toBe(
-      201,
-    )
+    expect(
+      (await authed('user_a', 'POST', { id: uuid(99), ...nameEnvelope('99'), source: 'blank', holdings: [] })).status,
+    ).toBe(201)
   })
 
   it("one household's ledgers do not consume another household's cap", async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     await createHousehold('user_b', HOUSEHOLD_B)
     for (let i = 1; i <= MAX_NON_BASELINE_LEDGERS; i += 1) {
-      await authed('user_a', 'POST', { id: uuid(i), name: `Plan ${i}`, source: 'blank', holdings: [] })
+      await authed('user_a', 'POST', { id: uuid(i), ...nameEnvelope(`${i}`), source: 'blank', holdings: [] })
     }
 
-    const res = await authed('user_b', 'POST', { id: uuid(50), name: 'B plan', source: 'blank', holdings: [] })
+    const res = await authed('user_b', 'POST', { id: uuid(50), ...nameEnvelope('50'), source: 'blank', holdings: [] })
     expect(res.status).toBe(201)
   })
 })
@@ -534,7 +596,7 @@ describe('ledgers routes — DELETE', () => {
 
     await authed('user_a', 'POST', {
       id: uuid(1),
-      name: 'Aggressive',
+      ...nameEnvelope('aggressive'),
       source: 'copy',
       holdings: [{ id: uuid(41), memberId: MEMBER_A, ...reEncrypted }],
     })
@@ -554,7 +616,7 @@ describe('ledgers routes — DELETE', () => {
 })
 
 describe('ledgers routes — POST body is opaque and strict', () => {
-  it('rejects a plaintext ledger body — no schema here accepts an amount or an asset class', async () => {
+  it('rejects a plaintext ledger body — no schema here accepts an amount, an asset class, or a plaintext name', async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     const res = await authed('user_a', 'POST', {
       id: uuid(1),
@@ -568,13 +630,33 @@ describe('ledgers routes — POST body is opaque and strict', () => {
     expect(ledgerRows.filter((l) => !l.isBaseline)).toHaveLength(0)
   })
 
+  it('rejects a create body missing the envelope entirely', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    const res = await authed('user_a', 'POST', { id: uuid(1), source: 'blank', holdings: [] })
+    expect(res.status).toBe(400)
+    expect(ledgerRows.filter((l) => !l.isBaseline)).toHaveLength(0)
+  })
+
+  it("rejects a ledger name envelope smuggling an extra plaintext field alongside it", async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    const res = await authed('user_a', 'POST', {
+      id: uuid(1),
+      ...nameEnvelope('1'),
+      name: 'Aggressive',
+      source: 'blank',
+      holdings: [],
+    })
+    expect(res.status).toBe(400)
+    expect(ledgerRows.filter((l) => !l.isBaseline)).toHaveLength(0)
+  })
+
   it('rejects a holding envelope smuggling an extra plaintext field alongside it', async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     await createMember('user_a', MEMBER_A)
 
     const res = await authed('user_a', 'POST', {
       id: uuid(1),
-      name: 'Aggressive',
+      ...nameEnvelope('1'),
       source: 'copy',
       holdings: [{ id: uuid(41), memberId: MEMBER_A, ...reEncrypted, currentValue: 250000 }],
     })
@@ -589,7 +671,7 @@ describe('ledgers routes — POST body is opaque and strict', () => {
     for (const extra of [{ isBaseline: true }, { origin: 'ai_suggestion' }, { snapshotOf: uuid(5) }]) {
       const res = await authed('user_a', 'POST', {
         id: uuid(1),
-        name: 'Aggressive',
+        ...nameEnvelope('1'),
         source: 'blank',
         holdings: [],
         ...extra,
@@ -605,7 +687,7 @@ describe('ledgers routes — POST body is opaque and strict', () => {
 
     const res = await authed('user_b', 'POST', {
       id: uuid(1),
-      name: 'Aggressive',
+      ...nameEnvelope('1'),
       source: 'blank',
       holdings: [],
       householdId: HOUSEHOLD_A,
@@ -614,19 +696,23 @@ describe('ledgers routes — POST body is opaque and strict', () => {
     expect(ledgerRows.filter((l) => l.householdId === HOUSEHOLD_A && !l.isBaseline)).toHaveLength(0)
   })
 
-  it('rejects an empty name and one past 60 characters', async () => {
+  it('rejects ciphertext that is not base64url', async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
-
-    expect((await authed('user_a', 'POST', { id: uuid(1), name: '', source: 'blank', holdings: [] })).status).toBe(400)
-    expect(
-      (await authed('user_a', 'POST', { id: uuid(1), name: 'x'.repeat(61), source: 'blank', holdings: [] })).status,
-    ).toBe(400)
+    const res = await authed('user_a', 'POST', {
+      id: uuid(1),
+      ciphertext: 'Aggressive growth',
+      iv: 'aXYtYnl0ZXMtMTIx',
+      alg: 'AES-256-GCM',
+      source: 'blank',
+      holdings: [],
+    })
+    expect(res.status).toBe(400)
     expect(ledgerRows.filter((l) => !l.isBaseline)).toHaveLength(0)
   })
 
   it('rejects an unknown source', async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
-    const res = await authed('user_a', 'POST', { id: uuid(1), name: 'Aggressive', source: 'ai', holdings: [] })
+    const res = await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('1'), source: 'ai', holdings: [] })
     expect(res.status).toBe(400)
   })
 
@@ -640,7 +726,7 @@ describe('ledgers routes — POST body is opaque and strict', () => {
       ...reEncrypted,
     }))
 
-    const res = await authed('user_a', 'POST', { id: uuid(1), name: 'Bulk', source: 'copy', holdings: tooMany })
+    const res = await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('bulk'), source: 'copy', holdings: tooMany })
     expect(res.status).toBe(400)
     expect(ledgerRows.filter((l) => !l.isBaseline)).toHaveLength(0)
     expect(holdingRows).toHaveLength(0)
@@ -656,7 +742,7 @@ describe('ledgers routes — POST body is opaque and strict', () => {
       ...reEncrypted,
     }))
 
-    const res = await authed('user_a', 'POST', { id: uuid(1), name: 'Bulk', source: 'copy', holdings: atCap })
+    const res = await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('bulk'), source: 'copy', holdings: atCap })
     expect(res.status).toBe(201)
     expect(holdingRows).toHaveLength(MAX_LEDGER_HOLDINGS)
   })
@@ -671,7 +757,7 @@ describe('ledgers routes — member tenancy on the snapshot copy', () => {
 
     const res = await authed('user_b', 'POST', {
       id: uuid(1),
-      name: 'Borrowed',
+      ...nameEnvelope('borrowed'),
       source: 'copy',
       // MEMBER_A belongs to household A. The FK would accept it; tenancy must not.
       holdings: [{ id: uuid(41), memberId: MEMBER_A, ...reEncrypted }],
@@ -691,7 +777,7 @@ describe('ledgers routes — member tenancy on the snapshot copy', () => {
 
     const res = await authed('user_b', 'POST', {
       id: uuid(1),
-      name: 'Mostly mine',
+      ...nameEnvelope('mostly-mine'),
       source: 'copy',
       holdings: [
         { id: uuid(41), memberId: MEMBER_B, ...reEncrypted },
@@ -710,7 +796,7 @@ describe('ledgers routes — member tenancy on the snapshot copy', () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     const res = await authed('user_a', 'POST', {
       id: uuid(1),
-      name: 'Ghost',
+      ...nameEnvelope('ghost'),
       source: 'copy',
       holdings: [{ id: uuid(41), memberId: uuid(555), ...reEncrypted }],
     })
@@ -731,7 +817,7 @@ describe('ledgers routes — the snapshot copy, and "Current never changes"', ()
 
     const res = await authed('user_a', 'POST', {
       id: uuid(1),
-      name: 'Aggressive',
+      ...nameEnvelope('aggressive'),
       source: 'copy',
       holdings: [
         { id: uuid(41), memberId: MEMBER_A, ...reEncrypted },
@@ -745,6 +831,8 @@ describe('ledgers routes — the snapshot copy, and "Current never changes"', ()
     expect(body.ledger?.origin).toBe('manual')
     expect(body.ledger?.snapshotOf).toBe(baseline.id)
     expect(body.ledger?.householdId).toBe(HOUSEHOLD_A)
+    expect(body.ledger?.name).toBeNull()
+    expect(body.ledger?.ciphertext).toBe('Y2lwaGVy-aggressive')
 
     const copied = holdingRows.filter((h) => h.ledgerId === uuid(1))
     expect(copied.map((h) => h.id)).toEqual([uuid(41), uuid(42)])
@@ -761,7 +849,7 @@ describe('ledgers routes — the snapshot copy, and "Current never changes"', ()
 
   it('sets snapshotOf to null for a blank ledger', async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
-    const res = await authed('user_a', 'POST', { id: uuid(1), name: 'From scratch', source: 'blank', holdings: [] })
+    const res = await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('scratch'), source: 'blank', holdings: [] })
 
     expect(res.status).toBe(201)
     expect(((await res.json()) as LedgerResponse).ledger?.snapshotOf).toBeNull()
@@ -770,9 +858,9 @@ describe('ledgers routes — the snapshot copy, and "Current never changes"', ()
 
   it('never writes a baseline through this route, however the request is dressed up', async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
-    await authed('user_a', 'POST', { id: uuid(1), name: BASELINE_LEDGER_NAME, source: 'copy', holdings: [] })
+    await authed('user_a', 'POST', { id: uuid(1), ...nameEnvelope('current'), source: 'copy', holdings: [] })
 
-    // The name is free text; "baseline" is not. One Current, still.
+    // isBaseline is never client-decided. One Current, still.
     expect(ledgerRows.filter((l) => l.isBaseline)).toHaveLength(1)
     expect(ledgerRows.find((l) => l.id === uuid(1))?.isBaseline).toBe(false)
   })
@@ -785,7 +873,7 @@ describe('ledgers routes — the snapshot copy, and "Current never changes"', ()
     failHoldingsInsert = true
     const res = await authed('user_a', 'POST', {
       id: uuid(1),
-      name: 'Doomed',
+      ...nameEnvelope('doomed'),
       source: 'copy',
       holdings: [{ id: uuid(41), memberId: MEMBER_A, ...reEncrypted }],
     })
@@ -806,14 +894,14 @@ describe('ledgers routes — the snapshot copy, and "Current never changes"', ()
     for (let i = 1; i <= MAX_NON_BASELINE_LEDGERS + 1; i += 1) {
       await authed('user_a', 'POST', {
         id: uuid(i),
-        name: `Doomed ${i}`,
+        ...nameEnvelope(`doomed-${i}`),
         source: 'copy',
         holdings: [{ id: uuid(100 + i), memberId: MEMBER_A, ...reEncrypted }],
       })
     }
 
     failHoldingsInsert = false
-    const res = await authed('user_a', 'POST', { id: uuid(80), name: 'Real', source: 'blank', holdings: [] })
+    const res = await authed('user_a', 'POST', { id: uuid(80), ...nameEnvelope('real'), source: 'blank', holdings: [] })
     expect(res.status).toBe(201)
   })
 })

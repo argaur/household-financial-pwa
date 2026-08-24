@@ -47,7 +47,7 @@ interface HoldingRow {
 interface LedgerRow {
   id: string
   householdId: string
-  name: string
+  name: string | null
   isBaseline: boolean
   origin: string
 }
@@ -153,7 +153,10 @@ vi.mock('./lib/db.js', () => ({
             const created: LedgerRow = {
               id: (row.id as string) ?? `ledger-${++ledgerCounter}`,
               householdId: String(row.householdId),
-              name: String(row.name),
+              // Only ensureBaselineLedger ever sends a literal `name`; a
+              // non-baseline create sends ciphertext/iv/alg instead and no
+              // `name`, so this must not coerce `undefined` into "undefined".
+              name: (row.name as string | undefined) ?? null,
               isBaseline: Boolean(row.isBaseline),
               origin: String(row.origin),
             }
@@ -270,12 +273,19 @@ async function createMember(token: string, id: string) {
   })
 }
 
-/** Creates a second, non-baseline ledger via the real /api/ledgers route. */
-async function createLedger(token: string, id: string, name: string) {
+/**
+ * Creates a second, non-baseline ledger via the real /api/ledgers route.
+ *
+ * `name` no longer travels plaintext (D-020) — the route now expects the
+ * same sealed envelope every other encrypted create accepts. This helper's
+ * callers only ever need a distinct ledger to scope holdings against, never
+ * the label itself, so the (fake, unread) envelope is reused unchanged.
+ */
+async function createLedger(token: string, id: string, _name: string) {
   const res = await app.request('/api/ledgers', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ id, name, source: 'blank', holdings: [] }),
+    body: JSON.stringify({ id, ...envelope, source: 'blank', holdings: [] }),
   })
   return (await res.json()) as LedgerResponse
 }

@@ -11,15 +11,16 @@ import {
   LedgersApiError,
   LedgerCapReachedError,
   LedgerCopyError,
-  type Ledger,
 } from './ledgers-api'
-import { unlockTestVault, lockTestVault, requestBody, rawRequestBody, jsonResponse } from '@/test/encrypted-fixtures'
+import { unlockTestVault, lockTestVault, requestBody, rawRequestBody, jsonResponse, wireRow, legacyWireRow, corrupt } from '@/test/encrypted-fixtures'
 
 const HOUSEHOLD_ID = '11111111-1111-4111-8111-111111111111'
 const MEMBER_A = '22222222-2222-4222-8222-222222222222'
 const MEMBER_B = '33333333-3333-4333-8333-333333333333'
 const SOURCE_ID_1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
 const SOURCE_ID_2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+const LEDGER_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1'
+const BASELINE_ID = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1'
 
 const NOMINEE = 'Ananya Verma'
 const NOTE = 'Synthetic sample note about this holding'
@@ -54,16 +55,7 @@ function sourceHolding(overrides: Partial<Holding> = {}): Holding {
   }
 }
 
-const ledger: Ledger = {
-  id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-  householdId: HOUSEHOLD_ID,
-  name: 'Aggressive equity',
-  isBaseline: false,
-  origin: 'manual',
-  snapshotOf: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
-  createdAt: '2026-03-01T00:00:00.000Z',
-  updatedAt: '2026-03-01T00:00:00.000Z',
-}
+const LEDGER_EXTRA = { isBaseline: false, origin: 'manual' as const, snapshotOf: null }
 
 /** The error a promise rejected with. Fails the test if it resolved instead. */
 async function rejection<T>(promise: Promise<unknown>): Promise<T> {
@@ -84,6 +76,39 @@ function sentHoldings(): Array<Record<string, string>> {
   return requestBody(calls()).holdings as Array<Record<string, string>>
 }
 
+/**
+ * The server never learns a ledger's name — it stores whatever envelope it is
+ * handed and hands the same one back. This models exactly that: read the
+ * sealed envelope out of the request the client just sent, and echo it back
+ * as the created row, the same way `readBack` in holdings-api.ts expects a
+ * create response to look.
+ */
+function mockEchoServer(extra: Partial<Record<string, unknown>> = {}) {
+  vi.mocked(fetch).mockImplementation(async (_url, init) => {
+    const body = JSON.parse(String((init as RequestInit | undefined)?.body)) as Record<string, unknown>
+    return jsonResponse(
+      {
+        ledger: {
+          id: body.id,
+          householdId: HOUSEHOLD_ID,
+          name: null,
+          ciphertext: body.ciphertext,
+          iv: body.iv,
+          alg: body.alg,
+          version: 1,
+          isBaseline: false,
+          origin: 'manual',
+          snapshotOf: null,
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+          ...extra,
+        },
+      },
+      201,
+    )
+  })
+}
+
 describe('ledgers-api', () => {
   let vault: Vault
 
@@ -97,11 +122,25 @@ describe('ledgers-api', () => {
   })
 
   describe('listLedgers', () => {
-    it('returns the ledgers in the order the server sent them, baseline first', async () => {
-      const baseline: Ledger = { ...ledger, id: 'ddd', name: 'Current', isBaseline: true, snapshotOf: null }
-      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledgers: [baseline, ledger] }))
+    it("decrypts a non-baseline ledger's name and leaves the baseline's plain name untouched", async () => {
+      const baseline = legacyWireRow(BASELINE_ID, HOUSEHOLD_ID, {
+        name: 'Current',
+        isBaseline: true,
+        origin: 'manual',
+        snapshotOf: null,
+      })
+      const strategy = await wireRow('ledgers', vault, {
+        id: LEDGER_ID,
+        payload: { name: 'Aggressive equity' },
+        extra: { ...LEDGER_EXTRA, snapshotOf: BASELINE_ID },
+      })
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledgers: [baseline, strategy] }))
 
-      await expect(listLedgers('token')).resolves.toEqual([baseline, ledger])
+      const result = await listLedgers('token')
+
+      expect(result.map((l) => l.name)).toEqual(['Current', 'Aggressive equity'])
+      expect(result[0].ciphertext).toBeNull()
+      expect(result[1].ciphertext).not.toBeNull()
       expect(calls()[0][0]).toBe('/api/ledgers')
     })
 
@@ -111,19 +150,49 @@ describe('ledgers-api', () => {
     })
   })
 
+  describe('ledger name encryption fails closed', () => {
+    it('round-trips a name through seal and decrypt', async () => {
+      const wire = await wireRow('ledgers', vault, { id: LEDGER_ID, payload: { name: 'Aggressive equity' }, extra: LEDGER_EXTRA })
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledgers: [wire] }))
+
+      const [result] = await listLedgers('token')
+      expect(result.name).toBe('Aggressive equity')
+    })
+
+    it('drops a ledger with a tampered ciphertext rather than showing a wrong or null name', async () => {
+      const wire = corrupt(
+        await wireRow('ledgers', vault, { id: LEDGER_ID, payload: { name: 'Aggressive equity' }, extra: LEDGER_EXTRA }),
+      )
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledgers: [wire] }))
+
+      await expect(listLedgers('token')).resolves.toEqual([])
+    })
+
+    it('drops a ledger name sealed under a different row id — the AAD binding was not honored', async () => {
+      // Sealed with LEDGER_ID bound into the AAD, then served back claiming a
+      // different id. decryptWireRow derives the AAD from the id it is handed,
+      // so this must fail exactly like a tampered ciphertext would.
+      const wire = await wireRow('ledgers', vault, { id: LEDGER_ID, payload: { name: 'Aggressive equity' }, extra: LEDGER_EXTRA })
+      const relabelled = { ...wire, id: 'ffffffff-ffff-4fff-8fff-fffffffffff1' }
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledgers: [relabelled] }))
+
+      await expect(listLedgers('token')).resolves.toEqual([])
+    })
+  })
+
   describe('deleteLedger', () => {
     it('sends the id as a query param, not a path segment', async () => {
       vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true }))
 
-      await deleteLedger('token', ledger.id)
+      await deleteLedger('token', LEDGER_ID)
 
-      expect(calls()[0][0]).toBe(`/api/ledgers?id=${ledger.id}`)
+      expect(calls()[0][0]).toBe(`/api/ledgers?id=${LEDGER_ID}`)
       expect(calls()[0][1]?.method).toBe('DELETE')
     })
 
     it('surfaces the server refusing to delete Current', async () => {
       vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'cannot_delete_baseline' }, 400))
-      await expect(deleteLedger('token', ledger.id)).rejects.toMatchObject({
+      await expect(deleteLedger('token', LEDGER_ID)).rejects.toMatchObject({
         name: 'LedgersApiError',
         status: 400,
         message: 'cannot_delete_baseline',
@@ -132,17 +201,19 @@ describe('ledgers-api', () => {
   })
 
   describe('createBlankLedger', () => {
-    it("sends source 'blank' and an empty holdings array", async () => {
-      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledger }, 201))
+    it("seals the name, sends source 'blank' and an empty holdings array, and decrypts the name back", async () => {
+      mockEchoServer()
 
-      await expect(createBlankLedger('token', 'Aggressive equity')).resolves.toEqual(ledger)
+      const result = await createBlankLedger('token', 'Aggressive equity')
+      expect(result.name).toBe('Aggressive equity')
 
       const body = requestBody(calls())
-      expect(Object.keys(body).sort()).toEqual(['holdings', 'id', 'name', 'source'])
+      expect(Object.keys(body).sort()).toEqual(['alg', 'ciphertext', 'holdings', 'id', 'iv', 'source'])
       expect(body.source).toBe('blank')
       expect(body.holdings).toEqual([])
-      expect(body.name).toBe('Aggressive equity')
       expect(calls()[0][1]?.method).toBe('POST')
+      // The plaintext name never crosses the wire.
+      expect(rawRequestBody(calls())).not.toContain('Aggressive equity')
     })
 
     it('rejects a name the server would reject, without asking it', async () => {
@@ -154,9 +225,7 @@ describe('ledgers-api', () => {
 
   describe('the snapshot copy re-encrypts, and never re-uses a ciphertext', () => {
     beforeEach(() => {
-      // A fresh Response per call: a Response body can only be read once, and
-      // one test here posts twice.
-      vi.mocked(fetch).mockImplementation(async () => jsonResponse({ ledger }, 201))
+      mockEchoServer()
     })
 
     it("re-seals each holding under the NEW row id's AAD, back to the identical payload", async () => {
@@ -222,6 +291,7 @@ describe('ledgers-api', () => {
       const first = sentHoldings()[0]
 
       vi.mocked(fetch).mockClear()
+      mockEchoServer()
       await createLedgerFromCurrent('token', 'Two', [source])
       const second = sentHoldings()[0]
 
@@ -250,9 +320,7 @@ describe('ledgers-api', () => {
       expect(requestBody(calls()).source).toBe('copy')
     })
 
-    it('carries no plaintext on the wire', async () => {
-      // The ledger name is readable by design, so it must not itself contain any
-      // of the strings this test looks for — "Aggressive equity" would.
+    it('carries no plaintext on the wire, including the ledger name itself', async () => {
       await createLedgerFromCurrent('token', 'Plan B', [sourceHolding()])
 
       const raw = rawRequestBody(calls())
@@ -264,13 +332,16 @@ describe('ledgers-api', () => {
       expect(raw).not.toContain(NOMINEE)
       expect(raw).not.toContain(NOTE)
       expect(raw).not.toContain('2024-04-01')
+      expect(raw).not.toContain('Plan B')
       expect(Object.keys(sentHoldings()[0]).sort()).toEqual(['alg', 'ciphertext', 'id', 'iv', 'memberId'])
+      const body = requestBody(calls())
+      expect(Object.keys(body).sort()).toEqual(['alg', 'ciphertext', 'holdings', 'id', 'iv', 'source'])
     })
   })
 
   describe('a copy that cannot be made in full is not made at all', () => {
     beforeEach(() => {
-      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledger }, 201))
+      mockEchoServer()
     })
 
     it('aborts the whole copy when one source holding is unusable, and sends nothing', async () => {
@@ -375,6 +446,18 @@ describe('ledgers-api', () => {
       await expect(createLedgerFromCurrent('token', 'Aggressive equity', [sourceHolding()])).rejects.toBeInstanceOf(
         VaultLockedError,
       )
+      expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+    })
+
+    it('a blank create fails with VaultLockedError and sends nothing', async () => {
+      await lockTestVault()
+      await expect(createBlankLedger('token', 'Aggressive equity')).rejects.toBeInstanceOf(VaultLockedError)
+      expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+    })
+
+    it('a list fails with VaultLockedError and sends no request', async () => {
+      await lockTestVault()
+      await expect(listLedgers('token')).rejects.toBeInstanceOf(VaultLockedError)
       expect(vi.mocked(fetch)).not.toHaveBeenCalled()
     })
   })

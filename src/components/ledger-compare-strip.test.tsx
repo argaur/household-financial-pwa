@@ -12,6 +12,11 @@ const copiedLedger: Ledger = {
   id: 'ledger-1',
   householdId: 'h1',
   name: 'Aggressive growth',
+  // Already-decrypted shape, as src/lib/ledgers-api.ts hands it to the UI.
+  ciphertext: 'Y2lwaGVydGV4dA',
+  iv: 'aXYtYnl0ZXM',
+  alg: 'AES-256-GCM',
+  version: 1,
   isBaseline: false,
   origin: 'manual',
   snapshotOf: 'baseline-1',

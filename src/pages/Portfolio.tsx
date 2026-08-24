@@ -314,7 +314,11 @@ export function Portfolio() {
               submittingLabel={editingHolding ? 'Saving…' : 'Adding…'}
               analyticsSurface="portfolio"
               ledgerId={isBaselineActive ? undefined : (activeLedgerId ?? undefined)}
-              ledgerName={isBaselineActive ? 'Current' : (activeLedger?.name ?? 'Current')}
+              /* Falls back to "this ledger", never "Current" — a null name
+                 here would mean an active non-baseline ledger's name failed
+                 to decrypt, and claiming it's Current would be actively
+                 wrong, not just generic. */
+              ledgerName={isBaselineActive ? 'Current' : (activeLedger?.name ?? 'this ledger')}
               onSaved={handleSaved}
               onDeleted={handleDeleted}
             />

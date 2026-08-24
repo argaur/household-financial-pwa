@@ -143,7 +143,13 @@ describe('getBaselineLedger', () => {
 interface FullLedgerRow {
   id: string
   householdId: string
-  name: string
+  // null for every non-baseline row — its real value lives only in the
+  // envelope below, exactly as drizzle/schema.ts now models it.
+  name: string | null
+  ciphertext: string | null
+  iv: string | null
+  alg: string | null
+  version: number
   isBaseline: boolean
   origin: string
   snapshotOf: string | null
@@ -210,7 +216,14 @@ function fakeStore(seed: {
               const built: FullLedgerRow = {
                 id: String(row.id),
                 householdId: String(row.householdId),
-                name: String(row.name),
+                // Only ensureBaselineLedger ever sends a literal `name`; a
+                // non-baseline create sends ciphertext/iv/alg instead and no
+                // `name` at all — this must not coerce `undefined` into "undefined".
+                name: (row.name as string | undefined) ?? null,
+                ciphertext: (row.ciphertext as string | undefined) ?? null,
+                iv: (row.iv as string | undefined) ?? null,
+                alg: (row.alg as string | undefined) ?? null,
+                version: 1,
                 isBaseline: Boolean(row.isBaseline),
                 origin: String(row.origin),
                 snapshotOf: (row.snapshotOf as string | null) ?? null,
@@ -266,7 +279,13 @@ function fakeStore(seed: {
 function ledgerRow(overrides: Partial<FullLedgerRow> & { id: string }): FullLedgerRow {
   return {
     householdId: HOUSEHOLD,
-    name: 'Plan',
+    // A non-baseline row's real shape: name null, envelope populated. Callers
+    // that want the baseline's plain name override both explicitly.
+    name: null,
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0',
+    iv: 'ZmFrZS1pdi1ieXRlcw',
+    alg: 'AES-256-GCM',
+    version: 1,
     isBaseline: false,
     origin: 'manual',
     snapshotOf: null,
@@ -315,10 +334,22 @@ describe('listLedgers', () => {
 })
 
 describe('createLedgerSchema', () => {
-  const valid = { id: NEW_LEDGER, name: 'Aggressive', source: 'blank' as const, holdings: [] }
+  const valid = { id: NEW_LEDGER, ...envelope, source: 'blank' as const, holdings: [] }
 
   it('accepts the agreed body', () => {
     expect(createLedgerSchema.safeParse(valid).success).toBe(true)
+  })
+
+  it('rejects a plaintext name — the server never accepts one, only the sealed envelope', () => {
+    expect(createLedgerSchema.safeParse({ ...valid, name: 'Aggressive' }).success).toBe(false)
+  })
+
+  it('rejects ciphertext that is not base64url', () => {
+    expect(createLedgerSchema.safeParse({ ...valid, ciphertext: 'Aggressive growth' }).success).toBe(false)
+  })
+
+  it('rejects a create body missing the envelope entirely', () => {
+    expect(createLedgerSchema.safeParse({ id: NEW_LEDGER, source: 'blank', holdings: [] }).success).toBe(false)
   })
 
   it('rejects every plaintext field a holding could smuggle', () => {
@@ -346,11 +377,6 @@ describe('createLedgerSchema', () => {
     }
   })
 
-  it('trims the name and still requires one real character', () => {
-    expect(createLedgerSchema.parse({ ...valid, name: '  Aggressive  ' }).name).toBe('Aggressive')
-    expect(createLedgerSchema.safeParse({ ...valid, name: '   ' }).success).toBe(false)
-  })
-
   it(`caps holdings at ${MAX_LEDGER_HOLDINGS}`, () => {
     const holdingsAt = (n: number) =>
       Array.from({ length: n }, (_, i) => ({
@@ -370,7 +396,7 @@ describe('createLedger', () => {
     const { db } = fakeStore({ ledgers: [baseline] })
     const outcome = await createLedger(db, HOUSEHOLD, {
       id: NEW_LEDGER,
-      name: BASELINE_LEDGER_NAME,
+      ...envelope,
       source: 'blank',
       holdings: [],
     })
@@ -385,7 +411,7 @@ describe('createLedger', () => {
     const copy = fakeStore({ ledgers: [baseline], members: [{ id: MEMBER, householdId: HOUSEHOLD }] })
     const copied = await createLedger(copy.db, HOUSEHOLD, {
       id: NEW_LEDGER,
-      name: 'Aggressive',
+      ...envelope,
       source: 'copy',
       holdings: [{ id: MEMBER, memberId: MEMBER, ...envelope }],
     })
@@ -394,7 +420,7 @@ describe('createLedger', () => {
     const blank = fakeStore({ ledgers: [baseline] })
     const made = await createLedger(blank.db, HOUSEHOLD, {
       id: NEW_LEDGER,
-      name: 'From scratch',
+      ...envelope,
       source: 'blank',
       holdings: [],
     })
@@ -405,15 +431,15 @@ describe('createLedger', () => {
     const atCap = fakeStore({
       ledgers: [baseline, ...Array.from({ length: MAX_NON_BASELINE_LEDGERS }, (_, i) => ledgerRow({ id: `l${i}` }))],
     })
-    expect((await createLedger(atCap.db, HOUSEHOLD, { id: NEW_LEDGER, name: 'x', source: 'blank', holdings: [] })).status).toBe(
-      'cap_reached',
-    )
+    expect(
+      (await createLedger(atCap.db, HOUSEHOLD, { id: NEW_LEDGER, ...envelope, source: 'blank', holdings: [] })).status,
+    ).toBe('cap_reached')
 
     const oneBelow = fakeStore({
       ledgers: [baseline, ...Array.from({ length: MAX_NON_BASELINE_LEDGERS - 1 }, (_, i) => ledgerRow({ id: `l${i}` }))],
     })
     expect(
-      (await createLedger(oneBelow.db, HOUSEHOLD, { id: NEW_LEDGER, name: 'x', source: 'blank', holdings: [] })).status,
+      (await createLedger(oneBelow.db, HOUSEHOLD, { id: NEW_LEDGER, ...envelope, source: 'blank', holdings: [] })).status,
     ).toBe('created')
   })
 
@@ -424,7 +450,7 @@ describe('createLedger', () => {
     })
     await createLedger(store.db, HOUSEHOLD, {
       id: NEW_LEDGER,
-      name: 'x',
+      ...envelope,
       source: 'copy',
       holdings: [{ id: MEMBER, memberId: MEMBER, ...envelope }],
     })
@@ -438,7 +464,7 @@ describe('createLedger', () => {
 
     const outcome = await createLedger(store.db, HOUSEHOLD, {
       id: NEW_LEDGER,
-      name: 'Borrowed',
+      ...envelope,
       source: 'copy',
       holdings: [{ id: MEMBER, memberId: OTHER_MEMBER, ...envelope }],
     })
@@ -460,7 +486,7 @@ describe('createLedger', () => {
 
     const outcome = await createLedger(store.db, HOUSEHOLD, {
       id: NEW_LEDGER,
-      name: 'Bulk',
+      ...envelope,
       source: 'copy',
       holdings: many,
     })
@@ -476,7 +502,7 @@ describe('createLedger', () => {
 
   it('skips the holdings statement entirely for a blank ledger', async () => {
     const store = fakeStore({ ledgers: [baseline] })
-    await createLedger(store.db, HOUSEHOLD, { id: NEW_LEDGER, name: 'Blank', source: 'blank', holdings: [] })
+    await createLedger(store.db, HOUSEHOLD, { id: NEW_LEDGER, ...envelope, source: 'blank', holdings: [] })
     expect(store.holdingsInsertCalls()).toBe(0)
   })
 
@@ -490,7 +516,7 @@ describe('createLedger', () => {
     await expect(
       createLedger(store.db, HOUSEHOLD, {
         id: NEW_LEDGER,
-        name: 'Doomed',
+        ...envelope,
         source: 'copy',
         holdings: [{ id: MEMBER, memberId: MEMBER, ...envelope }],
       }),

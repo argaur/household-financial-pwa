@@ -1,9 +1,21 @@
+import { z } from 'zod'
 import { isCryptoError } from './crypto'
-import { encryptedFetch, newRowId, openVault, sealRow, type SealedEnvelope, type Vault } from './encrypted-rows'
+import {
+  decryptWireRow,
+  decryptWireRows,
+  encryptedFetch,
+  newRowId,
+  openVault,
+  sealRow,
+  type SealedEnvelope,
+  type Vault,
+  type WireEnvelope,
+} from './encrypted-rows'
 import { HOLDINGS_TABLE, holdingPayloadSchema, type Holding } from './holdings-api'
 
 /**
- * The browser half of /api/ledgers — D-016 strategy ledgers.
+ * The browser half of /api/ledgers — D-016 strategy ledgers, D-020 name
+ * encryption.
  *
  * A ledger is a named container of holdings. "Current" is the baseline, the
  * record of what the household actually owns, and the invariant the feature
@@ -11,10 +23,15 @@ import { HOLDINGS_TABLE, holdingPayloadSchema, type Holding } from './holdings-a
  *
  * TWO THINGS ARE DIFFERENT HERE FROM THE OTHER API CLIENTS.
  *
- * 1. A ledger's `name` is a readable column by approved design (D-016). It is a
- *    label the user picked, not household financial data, so ledger metadata
- *    carries no envelope at all. Every *holding* a ledger carries is still
- *    sealed exactly as `holdings-api.ts` seals one.
+ * 1. A ledger's `name` is sealed exactly like a holding's fields, EXCEPT for
+ *    the one baseline row. "Current" is written server side by
+ *    `ensureBaselineLedger` before the user has necessarily unlocked their
+ *    vault, and it is not user data, so it alone travels as a plain `name`
+ *    with no envelope. Every non-baseline ledger's name arrives as
+ *    `{ ciphertext, iv, alg }` and this module decrypts it the same way
+ *    `holdings-api.ts` decrypts a holding — a null `ciphertext` is the
+ *    "not-yet-encrypted" outcome `decryptWireRow` already models, and here it
+ *    means "this is the baseline row," not "this predates encryption."
  *
  * 2. The snapshot copy's crypto happens here and can happen nowhere else. The
  *    server holds no data key, and a row's ciphertext is bound by AAD to
@@ -25,13 +42,25 @@ import { HOLDINGS_TABLE, holdingPayloadSchema, type Holding } from './holdings-a
  *    that new id's AAD before anything crosses the wire.
  */
 
+/**
+ * Physical table name — part of the AAD every ledger name's ciphertext is
+ * bound to. Mirrors `HOLDINGS_TABLE` in src/lib/holdings-api.ts.
+ */
+export const LEDGERS_TABLE = 'ledgers'
+
 /** The version a freshly created row has once stored. The source row's version is irrelevant to the copy. */
 const NEW_ROW_VERSION = 1
 
 /** Mirrors MAX_LEDGER_HOLDINGS in server/lib/ledgers.ts. */
 export const MAX_LEDGER_HOLDINGS = 200
 
-/** Mirrors MAX_LEDGER_NAME_CHARS in server/lib/ledgers.ts. */
+/**
+ * Mirrors the documented ceiling in server/lib/ledgers.ts, but this is now the
+ * copy that actually enforces it — the server never sees a ledger name
+ * plaintext, so it cannot check its length. `sealRow` cannot be asked to seal
+ * an over-length name and reject it; this module's own validation is what
+ * stands between a client bug and an oversized ciphertext.
+ */
 export const MAX_LEDGER_NAME_CHARS = 60
 
 /** Mirrors `memberIdSchema` / `rowIdSchema` in server/lib/envelope.ts, which accept v4 UUIDs only. */
@@ -40,11 +69,29 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 export const LEDGER_ORIGINS = ['manual', 'ai_suggestion'] as const
 export type LedgerOrigin = (typeof LEDGER_ORIGINS)[number]
 
-/** Exactly the columns server/routes/ledgers.ts serialises. No envelope: ledger metadata is readable. */
+/** The one thing a ledger's envelope carries. */
+const ledgerPayloadSchema = z.object({
+  name: z.string().trim().min(1).max(MAX_LEDGER_NAME_CHARS),
+})
+type LedgerPayload = z.infer<typeof ledgerPayloadSchema>
+
+/**
+ * Exactly the columns server/routes/ledgers.ts serialises.
+ *
+ * `name` is `null` for every non-baseline ledger — its real value lives only
+ * in `ciphertext`/`iv`/`alg` until decrypted. The baseline row is the reverse:
+ * a plain `name` and a null envelope. A caller can tell the two apart by
+ * whether `ciphertext` is null, exactly as any other encrypted table's caller
+ * would.
+ */
 export interface Ledger {
   id: string
   householdId: string
-  name: string
+  name: string | null
+  ciphertext: string | null
+  iv: string | null
+  alg: string | null
+  version: number
   isBaseline: boolean
   origin: LedgerOrigin
   /** The baseline this ledger was copied from, or `null` for a blank one. */
@@ -53,11 +100,18 @@ export interface Ledger {
   updatedAt: string
 }
 
+interface LedgerWire extends WireEnvelope {
+  name: string | null
+  isBaseline: boolean
+  origin: LedgerOrigin
+  snapshotOf: string | null
+}
+
 interface LedgerListResponse {
-  ledgers: Ledger[]
+  ledgers: LedgerWire[]
 }
 interface LedgerResponse {
-  ledger: Ledger | null
+  ledger: LedgerWire | null
 }
 
 /** One re-sealed holding as POST /api/ledgers accepts it: a new id, the same member, a fresh envelope. */
@@ -130,10 +184,50 @@ function describeFailure(error: unknown): string {
   return 'UNKNOWN'
 }
 
+/** A decrypted or baseline wire row, assembled back into a {@link Ledger}. */
+function assemble(wire: LedgerWire, payload: LedgerPayload): Ledger {
+  return { ...wire, name: payload.name }
+}
+
+/**
+ * Decrypt every ledger's name, except the baseline row, which never carries a
+ * ciphertext and keeps the plain `name` the server sent.
+ *
+ * An unreadable name (tampered ciphertext, wrong key) is dropped rather than
+ * shown as `null` — a ledger whose name cannot be trusted is not one the UI
+ * should present as if it were merely unnamed. This mirrors how
+ * `listHoldings` handles an unreadable row, minus the count: with at most five
+ * ledgers per household, a caller that needs one is better served fixing the
+ * underlying key problem than acting on a count.
+ */
+async function decryptLedgers(dataKey: CryptoKey, wire: LedgerWire[]): Promise<Ledger[]> {
+  const decrypted = await decryptWireRows(LEDGERS_TABLE, dataKey, wire, ledgerPayloadSchema, assemble)
+  const ledgers: Ledger[] = []
+  decrypted.outcomes.forEach((outcome, index) => {
+    if (outcome.status === 'decrypted') ledgers.push(outcome.row)
+    // The baseline row: no ciphertext by design, so `wire[index].name` is
+    // already the plain, correct value.
+    else if (outcome.status === 'not-yet-encrypted') ledgers.push({ ...wire[index] })
+  })
+  return ledgers
+}
+
+/** Decrypt the single row a create responds with, so a wrong-shaped write surfaces immediately. */
+async function readBackLedger(dataKey: CryptoKey, wire: LedgerWire | null): Promise<Ledger> {
+  if (!wire) throw new LedgersApiError(500, 'ledger_missing_in_response')
+  const outcome = await decryptWireRow(LEDGERS_TABLE, dataKey, wire, ledgerPayloadSchema, assemble)
+  // A freshly created non-baseline ledger always carries a ciphertext this
+  // client just sealed — 'not-yet-encrypted' here would mean the server
+  // dropped it, exactly the class of bug readBack in holdings-api.ts guards.
+  if (outcome.status !== 'decrypted') throw new LedgersApiError(500, `ledger_${outcome.status}`)
+  return outcome.row
+}
+
 export async function listLedgers(token: string | null): Promise<Ledger[]> {
+  const vault = await openVault()
   const res = await encryptedFetch('/api/ledgers', token, fail)
   const body = (await res.json()) as LedgerListResponse
-  return body.ledgers ?? []
+  return decryptLedgers(vault.dataKey, body.ledgers ?? [])
 }
 
 /**
@@ -146,7 +240,8 @@ export async function deleteLedger(token: string | null, id: string): Promise<vo
 }
 
 export async function createBlankLedger(token: string | null, name: string): Promise<Ledger> {
-  return postLedger(token, name, 'blank', [])
+  const vault = await openVault()
+  return postLedger(token, vault, name, 'blank', [])
 }
 
 /**
@@ -172,11 +267,19 @@ export async function createLedgerFromCurrent(
 ): Promise<Ledger> {
   const vault = await openVault()
   const holdings = await resealForCopy(vault, sourceHoldings)
-  return postLedger(token, name, 'copy', holdings)
+  return postLedger(token, vault, name, 'copy', holdings)
 }
 
+/**
+ * Seals `{ name }` under a freshly minted row id, then posts it alongside the
+ * (already sealed, for a copy) holdings. `vault` is passed in rather than
+ * opened here so `createLedgerFromCurrent` seals the name and the holdings
+ * against the same unlocked vault rather than risking two separate reads of
+ * it.
+ */
 async function postLedger(
   token: string | null,
+  vault: Vault,
   name: string,
   source: 'blank' | 'copy',
   holdings: LedgerHoldingWrite[],
@@ -186,14 +289,16 @@ async function postLedger(
     throw new LedgersApiError(400, 'invalid_ledger_name')
   }
 
+  const id = newRowId()
+  const sealed = await sealRow(LEDGERS_TABLE, vault, id, NEW_ROW_VERSION, { name: trimmed })
+
   const res = await encryptedFetch('/api/ledgers', token, fail, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id: newRowId(), name: trimmed, source, holdings }),
+    body: JSON.stringify({ id, source, holdings, ...sealed }),
   })
   const body = (await res.json()) as LedgerResponse
-  if (!body.ledger) throw new LedgersApiError(500, 'ledger_missing_in_response')
-  return body.ledger
+  return readBackLedger(vault.dataKey, body.ledger)
 }
 
 /**

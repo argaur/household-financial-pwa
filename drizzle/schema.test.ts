@@ -278,6 +278,10 @@ describe('drizzle/schema.ts — ledgers table', () => {
       'id',
       'householdId',
       'name',
+      'ciphertext',
+      'iv',
+      'alg',
+      'version',
       'isBaseline',
       'origin',
       'aiEditsUsed',
@@ -293,7 +297,17 @@ describe('drizzle/schema.ts — ledgers table', () => {
     expect(columns.id.notNull).toBe(true)
 
     expect(columns.householdId.notNull).toBe(true)
-    expect(columns.name.notNull).toBe(true)
+    // Nullable since D-020 (migration 0005): every non-baseline ledger's name
+    // travels sealed in ciphertext/iv/alg instead. Only the baseline
+    // "Current" row keeps a plain, non-null name.
+    expect(columns.name.notNull).toBe(false)
+
+    expect(columns.ciphertext.notNull).toBe(false)
+    expect(columns.iv.notNull).toBe(false)
+    expect(columns.alg.notNull).toBe(false)
+    expect(columns.version.notNull).toBe(true)
+    expect(columns.version.hasDefault).toBe(true)
+    expect(columns.version.default).toBe(1)
 
     expect(columns.isBaseline.notNull).toBe(true)
     expect(columns.isBaseline.hasDefault).toBe(true)
