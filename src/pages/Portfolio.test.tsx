@@ -369,6 +369,24 @@ describe('Portfolio', () => {
     })
   })
 
+  it('deletes a holding on the Current tab: the row disappears and no ledger_edited event fires', async () => {
+    listHoldings.mockResolvedValue({ holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 })
+    deleteHolding.mockResolvedValue(undefined)
+    render(<Portfolio />)
+
+    await screen.findByText('Large Cap Index Fund')
+    fireEvent.click(screen.getByText('Large Cap Index Fund'))
+
+    await screen.findByRole('heading', { name: /update holding/i })
+    fireEvent.click(screen.getByRole('button', { name: /remove holding/i }))
+    await screen.findByText(/remove this holding from current\?/i)
+    fireEvent.click(screen.getByRole('button', { name: /^removing|^remove holding$/i }))
+
+    await waitFor(() => expect(deleteHolding).toHaveBeenCalledWith('test-token', holding.id))
+    await screen.findByText(/nothing recorded yet/i)
+    expect(track).not.toHaveBeenCalledWith('ledger_edited', {})
+  })
+
   describe('ledger switching', () => {
     it('fires ledger_switched only on a user-initiated tab change, never on initial mount', async () => {
       listLedgers.mockResolvedValue([baselineLedger, nonBaselineLedger])

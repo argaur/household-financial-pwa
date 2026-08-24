@@ -38,11 +38,15 @@ interface HoldingFormProps {
    * The non-baseline ledger this holding belongs to. Threaded into
    * `createHolding` on add; an edit never takes this — a holding keeps
    * whichever ledger it already lives in (server/routes/holdings.ts: PATCH
-   * and DELETE act on `?id=` alone). Its presence is also what gates the
-   * "Remove holding" affordance and the `ledger_edited` event: both are
-   * defined as happening inside a non-baseline ledger, never Current.
+   * and DELETE act on `?id=` alone). Its presence also gates the
+   * `ledger_edited` event, which is defined as happening inside a
+   * non-baseline ledger, never Current. The "Remove holding" affordance is
+   * no longer gated on it — delete is available while editing regardless of
+   * which ledger the holding is in.
    */
   ledgerId?: string
+  /** Display name of the ledger the confirm copy names, e.g. "Current" on the baseline tab. */
+  ledgerName?: string
   onSaved: (holding: Holding) => void
   /** Fired after a successful delete, so the caller can drop the row and close the sheet. */
   onDeleted?: (id: string) => void
@@ -56,13 +60,14 @@ export function HoldingForm({
   submittingLabel,
   analyticsSurface,
   ledgerId,
+  ledgerName = 'Current',
   onSaved,
   onDeleted,
 }: HoldingFormProps) {
   const { getToken } = useAuth()
   const editing = Boolean(initialHolding)
   const online = useOnline()
-  const canDelete = editing && Boolean(ledgerId)
+  const canDelete = editing
 
   const [memberId, setMemberId] = useState(initialHolding?.memberId ?? members[0]?.id ?? '')
   const [instrumentId, setInstrumentId] = useState(initialHolding?.instrumentId ?? '')
@@ -148,7 +153,9 @@ export function HoldingForm({
     try {
       const token = await getToken()
       await deleteHolding(token, initialHolding.id)
-      track('ledger_edited', {})
+      // Same gate as the add/edit path above — "ledger_edited" is defined as
+      // happening inside a non-baseline ledger, never Current.
+      if (ledgerId) track('ledger_edited', {})
       onDeleted?.(initialHolding.id)
     } catch {
       setDeleteError("Couldn't remove that holding. Please try again.")
@@ -334,7 +341,7 @@ export function HoldingForm({
           {deleteError && <p className="text-caption text-destructive">{deleteError}</p>}
           {confirmingDelete ? (
             <div className="space-y-2">
-              <p className="text-caption text-muted-foreground">Remove this holding from this ledger? This can't be undone.</p>
+              <p className="text-caption text-muted-foreground">Remove this holding from {ledgerName}? This can't be undone.</p>
               <div className="flex gap-2">
                 <Button
                   type="button"

@@ -424,6 +424,17 @@ describe('holdings routes', () => {
     expect(holdingsRows[0].ciphertext).toBe(envelope.ciphertext)
   })
 
+  it('deletes a holding that lives in the baseline (Current) ledger', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+    await createMember('user_a', MEMBER_A)
+    await authed('user_a', 'POST', { id: HOLDING_1, memberId: MEMBER_A, ...envelope })
+    expect(holdingsRows.some((h) => h.id === HOLDING_1)).toBe(true)
+
+    const res = await authed('user_a', 'DELETE', undefined, `?id=${HOLDING_1}`)
+    expect(res.status).toBe(200)
+    expect(holdingsRows.some((h) => h.id === HOLDING_1)).toBe(false)
+  })
+
   it("user B can never update user A's holding", async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
     await createHousehold('user_b', HOUSEHOLD_B)

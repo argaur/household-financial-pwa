@@ -268,6 +268,7 @@ describe('HoldingForm', () => {
           submittingLabel="Saving…"
           analyticsSurface="test"
           ledgerId="ledger-1"
+          ledgerName="ledger-1"
           onSaved={vi.fn()}
           onDeleted={vi.fn()}
           {...overrides}
@@ -314,14 +315,14 @@ describe('HoldingForm', () => {
       expectNoPortfolioShape(call[1] as Record<string, unknown>)
     })
 
-    it('offers Remove holding only when editing inside a ledger, never on Current and never on add', () => {
+    it('offers Remove holding when editing, on Current as well as inside a ledger, but never on add', () => {
       const { unmount } = renderInLedger()
       expect(screen.getByRole('button', { name: /remove holding/i })).toBeInTheDocument()
       unmount()
 
-      // Editing on the Current tab: no ledgerId, so no remove affordance.
-      const { unmount: unmountCurrent } = renderInLedger({ ledgerId: undefined })
-      expect(screen.queryByRole('button', { name: /remove holding/i })).not.toBeInTheDocument()
+      // Editing on the Current tab: no ledgerId, but the affordance still shows.
+      const { unmount: unmountCurrent } = renderInLedger({ ledgerId: undefined, ledgerName: 'Current' })
+      expect(screen.getByRole('button', { name: /remove holding/i })).toBeInTheDocument()
       unmountCurrent()
 
       // Adding inside a ledger: nothing exists yet to remove.
@@ -329,15 +330,23 @@ describe('HoldingForm', () => {
       expect(screen.queryByRole('button', { name: /remove holding/i })).not.toBeInTheDocument()
     })
 
+    it('on the Current tab, the confirm copy reads "Remove this holding from Current?"', async () => {
+      renderInLedger({ ledgerId: undefined, ledgerName: 'Current' })
+
+      fireEvent.click(screen.getByRole('button', { name: /remove holding/i }))
+      await screen.findByText('Remove this holding from Current? This can\'t be undone.')
+      expect(deleteHolding).not.toHaveBeenCalled()
+    })
+
     it('requires a confirmation step before deleting, and Cancel backs out without calling the API', async () => {
       renderInLedger()
 
       fireEvent.click(screen.getByRole('button', { name: /remove holding/i }))
-      await screen.findByText(/remove this holding from this ledger/i)
+      await screen.findByText(/remove this holding from ledger-1/i)
       expect(deleteHolding).not.toHaveBeenCalled()
 
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
-      await waitFor(() => expect(screen.queryByText(/remove this holding from this ledger/i)).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByText(/remove this holding from ledger-1/i)).not.toBeInTheDocument())
       expect(deleteHolding).not.toHaveBeenCalled()
     })
 

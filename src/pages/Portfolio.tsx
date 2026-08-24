@@ -314,6 +314,7 @@ export function Portfolio() {
               submittingLabel={editingHolding ? 'Saving…' : 'Adding…'}
               analyticsSurface="portfolio"
               ledgerId={isBaselineActive ? undefined : (activeLedgerId ?? undefined)}
+              ledgerName={isBaselineActive ? 'Current' : (activeLedger?.name ?? 'Current')}
               onSaved={handleSaved}
               onDeleted={handleDeleted}
             />
