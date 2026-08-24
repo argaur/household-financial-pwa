@@ -8,6 +8,7 @@ import { householdKeysRoutes } from './routes/household-keys.js'
 import { familyMembersRoutes } from './routes/family-members.js'
 import { instrumentsRoutes } from './routes/instruments.js'
 import { holdingsRoutes } from './routes/holdings.js'
+import { ledgersRoutes } from './routes/ledgers.js'
 import { protectionRoutes } from './routes/protection.js'
 import { clerkWebhookRoutes } from './routes/clerk-webhook.js'
 
@@ -61,6 +62,7 @@ app.route('/household-keys', householdKeysRoutes)
 app.route('/family-members', familyMembersRoutes)
 app.route('/instruments', instrumentsRoutes)
 app.route('/holdings', holdingsRoutes)
+app.route('/ledgers', ledgersRoutes)
 app.route('/protection', protectionRoutes)
 app.route('/clerk-webhook', clerkWebhookRoutes)
 

@@ -61,6 +61,22 @@ export interface EventMap {
   key_setup_completed: Record<string, never>
   vault_unlocked: { method: 'passphrase' | 'recovery_code' }
   consent_accepted: { disclaimer_version: string }
+  // Strategy ledgers (D-016/D-018). Per METRICS_PLAN.md's property discipline,
+  // no event here may carry anything describing what a household owns — so
+  // there is no ledger name, no holding count, no amount and no asset class on
+  // any of them. A ledger is countable, never readable.
+  //
+  // `source` is the one property carried, because criterion 1's funnel segments
+  // on it: a ledger copied from Current is a different intent from an empty one.
+  ledger_created: { source: 'blank' | 'copy' }
+  // Criterion 1b — the number that decides whether the side-by-side compare
+  // view is ever built — needs only the fact that a switch happened, so that a
+  // session boundary can be measured between it and the matching creation.
+  ledger_switched: Record<string, never>
+  ledger_deleted: Record<string, never>
+  // Fires when a 5th ledger is attempted and blocked (METRICS_PLAN criterion 3
+  // class: a capacity signal, not a failure).
+  ledger_cap_reached: Record<string, never>
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {

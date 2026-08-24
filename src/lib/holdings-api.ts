@@ -9,8 +9,16 @@ import {
   type WireEnvelope,
 } from './encrypted-rows'
 
-/** Physical table name — half of the AAD every holding ciphertext is bound to. */
-const TABLE = 'holdings'
+/**
+ * Physical table name — part of the AAD every holding ciphertext is bound to.
+ *
+ * Exported because the ledger snapshot copy re-seals holdings under new row ids
+ * (src/lib/ledgers-api.ts) and must bind them to the same table, character for
+ * character. A second literal there would be a silent way to produce rows that
+ * never decrypt.
+ */
+export const HOLDINGS_TABLE = 'holdings'
+const TABLE = HOLDINGS_TABLE
 
 export const ASSET_CLASSES = ['equity', 'debt', 'gold', 'hybrid', 'real-estate', 'alternative'] as const
 export type AssetClass = (typeof ASSET_CLASSES)[number]
@@ -20,7 +28,7 @@ export type AssetClass = (typeof ASSET_CLASSES)[number]
  * instrument, the amounts, the dates, the nominee and the notes all live in
  * here; only `id`, `householdId`, `memberId` and the version stay outside.
  */
-const holdingPayloadSchema = z.object({
+export const holdingPayloadSchema = z.object({
   instrumentId: z.string(),
   assetClass: z.enum(ASSET_CLASSES),
   investedAmount: z.string(),

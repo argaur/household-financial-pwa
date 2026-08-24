@@ -45,6 +45,20 @@ After onboarding, the **Portfolio tab** (`/portfolio`) lists every holding group
 
 **What's enforced:** the same server-side household scoping as members — every holding is created/edited/listed against your own household only. The family member a holding is assigned to is verified server-side to belong to your household too (not just any member ID that exists somewhere in the database) — this is checked with its own isolation test, since the plain foreign key alone doesn't enforce it. `asset_class` is derived from the instrument you pick, not accepted from the client. Editing a holding uses a `?id=` query parameter rather than a `/holdings/:id` path segment — this project's Vercel zero-config build only routes single-path-segment `/api/*` requests to the catch-all function (see `app/CLAUDE.md`).
 
+### Trying out a different plan (strategy ledgers)
+
+Your **Current** ledger is the record of what your household actually owns. A strategy ledger is a separate copy you can change freely to see what a different plan would look like, without touching Current.
+
+On the **Portfolio tab**, a strip across the top reads `Current | your ledgers | + New`. Tap **+ New** to name a ledger and choose whether to copy your current holdings into it or start it empty. You can keep up to **four** ledgers alongside Current; at four, **+ New** is disabled and explains why. Current itself can never be renamed or deleted — every other ledger has a delete option.
+
+**Current never changes because a ledger exists.** A ledger is a full copy taken at the moment you create it, not a live view: editing a ledger later never writes back to Current, and editing Current later does not flow into a ledger you already made.
+
+**What's enforced:** the same server-side household scoping as everything else — a ledger is listed, created and deleted against your own household only, proven by its own two-user isolation test. A request naming another household's ledger gets "not found" rather than "forbidden", so it can't be used to confirm that someone else's ledger exists. The four-ledger cap is checked on the server, not just hidden in the UI. Deleting uses a `?id=` query parameter rather than a `/ledgers/:id` path segment, for the same Vercel routing reason as holdings.
+
+**How the copy works, and why it happens in your browser.** Your holdings are encrypted with a key the server never has, and each row's encryption is tied to that specific row's identity — so the server cannot copy a holding into a new ledger even in principle. It would produce rows nobody could ever open again, including you. Instead your browser decrypts each holding, re-encrypts it for its new row, and sends the finished result. The server only checks that the rows belong to your household, enforces the cap, and stores them.
+
+One consequence worth knowing: **if any of your holdings cannot be decrypted, the "copy my current holdings" option is switched off.** A copy that silently skipped unreadable rows would leave you comparing a plan against an incomplete picture of what you own, with nothing on screen to tell you. Starting an empty ledger is still available.
+
 ### Recording insurance and protection
 
 The **Profile** screen (`/profile`) hosts a "Protection" card for recording insurance/protection coverage per family member: type (term life, health, disability, other), cover amount, status (active, lapsed, pending), and optionally annual premium and provider. Reached via the "Manage your protection cover →" link on the dashboard, alongside the existing Portfolio and Explore links.

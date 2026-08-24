@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { HoldingForm } from '@/components/holding-form'
+import { LedgerTabStrip } from '@/components/ledger-tab-strip'
 import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
 import { listHoldings, type Holding } from '@/lib/holdings-api'
+import { listLedgers, type Ledger } from '@/lib/ledgers-api'
 
 type State = 'loading' | 'loaded' | 'error'
 
@@ -23,8 +25,11 @@ export function Portfolio() {
   const { getToken } = useAuth()
   const [state, setState] = useState<State>('loading')
   const [holdings, setHoldings] = useState<Holding[]>([])
+  const [unreadableHoldingsCount, setUnreadableHoldingsCount] = useState(0)
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [instruments, setInstruments] = useState<Instrument[]>([])
+  const [ledgers, setLedgers] = useState<Ledger[]>([])
+  const [activeLedgerId, setActiveLedgerId] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null)
   // Sheet content is position:fixed and taller than the viewport; some mobile
@@ -40,15 +45,19 @@ export function Portfolio() {
     ;(async () => {
       try {
         const token = await getToken()
-        const [holdingsResult, membersResult, instrumentsResult] = await Promise.all([
+        const [holdingsResult, membersResult, instrumentsResult, ledgersResult] = await Promise.all([
           listHoldings(token),
           listFamilyMembers(token),
           listInstruments(),
+          listLedgers(token),
         ])
         if (cancelled) return
         setHoldings(holdingsResult.holdings)
+        setUnreadableHoldingsCount(holdingsResult.unreadableCount)
         setMembers(membersResult.members)
         setInstruments(instrumentsResult)
+        setLedgers(ledgersResult)
+        setActiveLedgerId((prev) => prev ?? ledgersResult.find((l) => l.isBaseline)?.id ?? ledgersResult[0]?.id ?? null)
         setState('loaded')
       } catch {
         if (cancelled) return
@@ -64,6 +73,16 @@ export function Portfolio() {
     setSheetOpen(false)
     setEditingHolding(null)
     window.scrollTo({ top: scrollPositionRef.current, behavior: 'auto' })
+  }
+
+  function handleLedgerCreated(ledger: Ledger) {
+    setLedgers((prev) => [...prev, ledger])
+  }
+
+  function handleLedgerDeleted(id: string) {
+    const baselineId = ledgers.find((l) => l.isBaseline)?.id ?? null
+    setLedgers((prev) => prev.filter((l) => l.id !== id))
+    setActiveLedgerId((prev) => (prev === id ? baselineId : prev))
   }
 
   function handleSaved(holding: Holding) {
@@ -113,6 +132,18 @@ export function Portfolio() {
 
         {state === 'error' && (
           <p className="text-caption text-destructive">We couldn't load your holdings. Refresh to try again.</p>
+        )}
+
+        {state === 'loaded' && activeLedgerId && (
+          <LedgerTabStrip
+            ledgers={ledgers}
+            activeLedgerId={activeLedgerId}
+            onSelect={setActiveLedgerId}
+            sourceHoldings={holdings}
+            unreadableCount={unreadableHoldingsCount}
+            onLedgerCreated={handleLedgerCreated}
+            onLedgerDeleted={handleLedgerDeleted}
+          />
         )}
 
         {state === 'loaded' && holdings.length === 0 && (

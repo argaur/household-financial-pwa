@@ -35,6 +35,26 @@ vi.mock('@/lib/holdings-api', async (importOriginal) => {
   }
 })
 
+const listLedgers = vi.fn()
+vi.mock('@/lib/ledgers-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/ledgers-api')>()
+  return {
+    ...actual,
+    listLedgers: (...args: unknown[]) => listLedgers(...args),
+  }
+})
+
+const baselineLedger = {
+  id: 'l1',
+  householdId: 'h1',
+  name: 'Current',
+  isBaseline: true,
+  origin: 'manual' as const,
+  snapshotOf: null,
+  createdAt: '',
+  updatedAt: '',
+}
+
 const member = {
   id: 'm1',
   householdId: 'h1',
@@ -91,10 +111,12 @@ describe('Portfolio', () => {
     listHoldings.mockReset()
     createHolding.mockReset()
     updateHolding.mockReset()
+    listLedgers.mockReset()
     // The list clients return the decrypted rows plus counts of what could
     // not be read — see src/lib/encrypted-rows.ts.
     listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
     listInstruments.mockResolvedValue([instrument])
+    listLedgers.mockResolvedValue([baselineLedger])
   })
 
   it('shows the empty state and a CTA when there are no holdings', async () => {
@@ -219,5 +241,11 @@ describe('Portfolio', () => {
     await waitFor(() => expect(updateHolding).toHaveBeenCalled())
 
     expect(scrollToSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 40 }))
+  })
+
+  it('mounts the ledger tab strip with Current always present', async () => {
+    listHoldings.mockResolvedValue({ holdings: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    render(<Portfolio />)
+    await screen.findByRole('tab', { name: 'Current' })
   })
 })
