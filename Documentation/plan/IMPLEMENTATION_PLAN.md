@@ -171,3 +171,132 @@ Second-order risk, deliberately placed mid-sequence rather than first: the **Com
 None. No new scope surfaced during planning — this plan implements exactly the 13 v1 features in `SOLUTION_BRIEF.md`, the schema in `DATA_MODEL.md`, and the screens in `SPEC.md` §4. Two placement decisions were made *within* existing scope (not new scope) and are logged here for traceability rather than silently absorbed:
 - **Protection UI placement** — `DATA_MODEL.md` left this as "Profile or dedicated section (Phase 2 decision)"; resolved as a card inside Profile (Slice 5) to avoid adding a 5th nav tab, consistent with the locked 4-tab + FAB nav.
 - **Protection analytics event** — `METRICS_PLAN.md` has no dedicated event for protection CRUD; routed under the Universal Baseline `feature_used` event rather than inventing a new named event outside the metrics plan.
+
+---
+---
+
+# D-016 Bundle — Ledger Slice 1 (Phase 3 Plan, 2026-08-24)
+
+**Status:** draft — pending "Plan approved"
+**Build arc:** `extends-existing`. **Pattern source:** the v1 holdings CRUD stack above (Slice 4 — Hono routes in `server/`, Drizzle schema in `server/db/schema.ts`, household-scoping middleware from Slice 1, React holdings forms/list in `src/`). Slice 0's skeleton (health check, PostHog, Sentry, event registry, CI) is already live — verified, not rebuilt.
+**Inputs:** `SOLUTION_BRIEF.md` (D-016 amendment), `DECISIONS_LOG.md` D-016/D-017/D-018/D-019, `DATA_MODEL.md` "D-016 Bundle Additions", `METRICS_PLAN.md` "D-016 Feature Bundle" section.
+**Scope of this plan:** the ledger feature only (D-018 §2's "thin slice 1"). AI counsel, goal planner, bulk import, and the full-platform redesign are named in D-016/D-017/D-018 but are **out of scope for this plan** — see Out of Plan below. This matches D-017 §8's build order ("ledgers land first") and avoids planning around the still-unprovisioned Anthropic key.
+
+## 1. Summary & Guiding Principle
+
+Household financial plans stop being a single static record. A household can create up to 4 additional "strategy ledgers" alongside the untouched "Current" baseline, each a full copy of Current's holdings that can then be edited independently, with a three-number delta strip comparing it back to Current. **Guiding principle: Current never changes because a ledger exists.** Every schema and API decision below optimizes for that one invariant over convenience elsewhere (e.g., no delta-overlay storage, full snapshots only, per D-018 §4).
+
+**Confirmed scope decisions:**
+
+| In scope | Out of scope (this plan) |
+|---|---|
+| `ledgers` table, `holdings.ledger_id` migration | AI counsel / goal planner (blocked on Anthropic key — D-018 Open Items) |
+| Tab strip (`Current \| ledgers \| + New`) | Bulk-import Excel template/upload |
+| Name-and-copy create modal, 4-ledger cap | Full-platform mint/treasury redesign (D-016 item 4) |
+| Editable per-ledger dashboard (reuses Slice-4 holdings CRUD, scoped by `ledger_id`) | Projections (compound-growth line) — separate chunk, see Chunk 5 below, sequenced after slice 1 ships since D-018 §2 doesn't list it in the thin slice |
+| Compare strip: total value / equity share / monthly SIP vs. Current | Side-by-side multi-ledger view (deferred behind `ledger_switched` usage data per D-018 Revisit-if) |
+| `ledger_created` / `ledger_switched` telemetry (D-018 §1) | Instrument drift detection — moved to Out of Plan below after the gate review found its own load-bearing `[H]` unresolved (Open Decision #1); not part of this plan's approved chunk sequence |
+
+Any scope creep during build routes back to Solution Stage and gets logged in `DECISIONS_LOG.md`, never absorbed silently.
+
+## 3. The ONE structural decision
+
+**Holdings move from a direct `household_id` FK to being reached through a new `ledgers` table (household → ledgers → holdings), on a live table with real user data.** `[P]` — confirmed by reading `server/db/schema.ts`: `holdings.household_id` is a live, populated NOT NULL FK today (verified 2026-08-24, current schema file).
+
+**Resolution — additive, no drop:** `holdings.household_id` is **kept, not dropped**. `holdings.ledger_id` is added as a new nullable FK, backfilled (one `ledgers` row per existing household, `is_baseline=true`, `name='Current'`, then every existing holding's `ledger_id` set to that row), verified row-count-equal to the pre-migration count, then set `NOT NULL`. This revises the "removed as a direct relationship" line in `DATA_MODEL.md`'s D-016 Additions section — that line assumed a drop; keeping `household_id` avoids the destructive step entirely (a redundant column costs nothing at this data volume and gives every query a cheap integrity check: `holding.household_id` must equal `holding.ledger.household_id`). **Evidence this resolves it, not reasoning:** additive-only migrations on a live table with zero drops are the one migration shape that has a clean, tested rollback (drop the new column, done) — matching the plan-template's mandatory additive → backfill → cutover rule, and skipping "drop" entirely because there is nothing destructive to drop.
+
+This is also the Chunk 1 project-killer candidate (see Chunk Ordering Rationale) — same risk from the structural and the build-sequencing angle, which is why it is first in both.
+
+## 4. Data Model & Schema
+
+Full field-level detail already in `DATA_MODEL.md` → "D-016 Bundle Additions" (Stage 0, approved). This section states only what changed from that draft per the Section 3 resolution above, plus API shapes.
+
+**Schema delta from the Stage 0 draft:** `holdings.household_id` is retained (not removed) alongside the new `holdings.ledger_id`. Everything else in the Stage 0 draft (`ledgers`, `ledger_projection_settings`, `instruments.is_active`/`updated_at`, `households.ai_plans_created`) stands as written. `[P]` for `ledgers`/`ledger_id` (this plan), `[H]` for `ledger_projection_settings`/`instruments` soft-delete columns/`ai_plans_created` — those belong to Chunks 4–6, out of this plan's Slice-1 scope, not yet implemented or schema-verified against real query shapes.
+
+**Indexes (write-frequent queries first):**
+- `ledgers(household_id)` — every dashboard load lists a household's ledgers. Not unique (multiple ledgers per household).
+- Partial unique index `ledgers(household_id) WHERE is_baseline` — DB-level backstop for "exactly one Current per household," per the Stage 0 draft's own note that this needs a backstop beyond app-layer logic.
+- `holdings(ledger_id)` — every ledger-dashboard load and the compare-strip aggregate query filter by this. Composite `(ledger_id, asset_class)` covers the compare-strip's equity-share GROUP BY without a second index.
+- `holdings(household_id)` index from v1 is retained as-is `[P]` — confirmed present in `server/db/schema.ts` (still used by any household-wide query, e.g. a future cross-ledger view).
+
+**Schema-to-source mapping (extends-existing coverage):** the ledger CRUD routes and the editable dashboard/compare-strip UI (Chunks 2–3) mirror the Slice-4 holdings-CRUD pattern source named above. The tab strip, name-and-copy modal, and compare-strip visualization are **net-new frontend artifacts with no v1 precedent** (per `DATA_MODEL.md` note 10 — no existing UI needs mirroring for these) — called out explicitly here since this plan skips the optional §7 section. `mirrors src/features/holdings/` is `[H]` until the exact path is confirmed against the live tree at Chunk 3 kickoff — non-blocking for this gate since it is a same-day build-time confirmation of a path this project's own docs already reference, not an unverified architectural bet.
+
+**API shapes** (Hono routes, `{ data, error }` envelope per the existing pattern in `server/`):
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `GET /api/ledgers` | Session-scoped household (Slice-1 middleware) | Returns all ledgers for the caller's household, `is_baseline` first |
+| `POST /api/ledgers` | Session-scoped household | Body: `{ name, copyFrom: 'current' }`. Server-side 4-ledger cap check (409 if at cap) and snapshot-copy transaction (all Current holdings re-encrypted under the same household data key, per D-018 §4) |
+| `GET /api/ledgers/:id/holdings` | Session-scoped household + `ledger_id` ownership check | 404 if the ledger doesn't belong to the caller's household — never a 403 that confirms existence |
+| `PATCH/POST/DELETE /api/ledgers/:id/holdings/:holdingId` | Same | Reuses Slice-4 holdings validation logic, scoped by `ledger_id` instead of bare `household_id` |
+| `GET /api/ledgers/:id/compare` | Same | Server-computed three-number delta vs. the household's baseline ledger |
+| `DELETE /api/ledgers/:id` | Same | Rejects with 400 if `is_baseline=true` — Current can never be deleted via this route |
+
+## 8. Chunk Map & Boundary Contracts
+
+**Chunk ordering rationale — project-killer first.** Chunk 1 (the migration in Section 3) is the project-killer: every other chunk's routes and UI assume `holdings.ledger_id` exists and is correctly backfilled. A wrong backfill silently corrupts which holdings belong to which ledger — on real data (Gaurav's own household is the only live one, but the correctness bar is the same as if it weren't). Discovering a backfill bug after Chunk 3 ships (once the UI lets users create and edit ledgers) means untangling live user edits from a bad migration; discovering it in Chunk 1, before any ledger-aware UI exists, means re-running one script. Chunks 2–3 are additive CRUD/UI on a stack (Hono + Drizzle + Clerk-scoped middleware) already proven in v1 Slice 1 — well-trodden, not novel. **Instrument drift detection was drafted as a Chunk 4 and removed from this plan's approved sequence during the gate review** (see Out of Plan) — its `instruments.updated_at` semantics carried a load-bearing, unresolved `[H]` (Open Decision #1), and the gate does not let an unresolved load-bearing hypothesis onto the approved critical path. It becomes its own follow-on chunk once that hypothesis is resolved.
+
+### Chunk 1 — Ledger schema migration
+- **Owns:** `ledgers` table (new), `holdings.ledger_id` column (new)
+- **Reads but does not own:** `households` (via `household_id` FK, owned by the pre-existing households chunk)
+- **Endpoints:** none — schema/migration only
+- **Acceptance criteria:** migration runs against a Neon branch first (never directly against production, per the project's own `RUNBOOK.md` convention); post-migration row count of `holdings` unchanged; every existing holding has a non-null `ledger_id` pointing at an `is_baseline=true` ledger for its household; `npm run db:probe` (the project's own ground-truth check, not `_journal.json`) confirms applied state in both the branch and, after promotion, production.
+- **Dispatch steps:**
+  - [ ] Write the Drizzle migration adding `ledgers` (with `is_baseline`, `origin`, `ai_edits_used`, `snapshot_of`, `projection_horizon_years`) and nullable `holdings.ledger_id`, plus the partial unique index on `ledgers(household_id) WHERE is_baseline` and the `holdings(ledger_id)` / composite `(ledger_id, asset_class)` indexes `[model: sonnet]`
+  - [ ] Run the migration against a Neon branch (never production directly) `[model: sonnet]`
+  - [ ] Write and run the backfill script (one `Current` ledger per household, backfill `holdings.ledger_id`) and verify row-count-equal + no-null before setting `NOT NULL` — this is the project-killer step named in the Chunk Ordering Rationale, real household data, wrong output is expensive to unwind `[model: opus]`
+  - [ ] Verify via `npm run db:probe` on the branch, then again after promotion to production `[model: sonnet]`
+
+### Chunk 2 — Ledger CRUD API + tab strip UI
+- **Owns:** none new (API surface only, over Chunk 1's tables)
+- **Reads but does not own:** `ledgers`, `holdings` (owned by Chunk 1)
+- **Endpoints:** `GET/POST /api/ledgers`, `DELETE /api/ledgers/:id`
+- **Acceptance criteria:** two-user isolation test (User B's token cannot list/create/delete against User A's household — mirrors the Slice-1 v1 pattern-source test); 4-ledger cap returns 409 on the 5th attempt; `is_baseline` ledger rejects delete; `ledger_created` event fires with the correct properties (per `METRICS_PLAN.md`)
+- **Dispatch steps:**
+  - [ ] Write `GET /api/ledgers`, `DELETE /api/ledgers/:id` (with the `is_baseline` delete guard) and the 4-ledger cap check on `POST` `[model: sonnet]`
+  - [ ] Write the `POST /api/ledgers` snapshot-copy transaction — copies every Current holding to the new ledger, re-encrypted under the household's existing data key (D-018 §4); this touches the D-014 client-side-encryption boundary directly, security-sensitive `[model: opus]`
+  - [ ] Write the two-user isolation test mirroring the Slice-1 v1 pattern-source test `[model: sonnet]`
+  - [ ] Build the tab strip UI (`Current | ledgers | + New`, at-cap disabled state) `[model: sonnet]`
+  - [ ] Build the name-and-copy create modal `[model: sonnet]`
+  - [ ] Wire `ledger_created` telemetry per `METRICS_PLAN.md` `[model: sonnet]`
+
+### Chunk 3 — Ledger dashboard (editable) + compare strip
+- **Owns:** none new
+- **Reads but does not own:** `ledgers`, `holdings` (Chunk 1); reuses the Slice-4 holdings-CRUD component and validation logic as its documented contract (`mirrors src/features/holdings/` — exact path confirmed against the live tree before code, not assumed)
+- **Endpoints:** `GET/PATCH/POST/DELETE /api/ledgers/:id/holdings*`, `GET /api/ledgers/:id/compare`
+- **Acceptance criteria:** editing a non-baseline ledger never writes to Current's rows (isolation test: edit ledger A, assert Current's holdings table unchanged); compare-strip numbers match a hand-computed fixture; `ledger_switched` fires on tab change
+- **Dispatch steps:**
+  - [ ] Confirm the `src/features/holdings/` mirror path against the live tree (resolves the `[H]` tag in §4) `[model: sonnet]`
+  - [ ] Write `GET/PATCH/POST/DELETE /api/ledgers/:id/holdings*` scoped by `ledger_id`, reusing Slice-4 validation logic `[model: sonnet]`
+  - [ ] Write `GET /api/ledgers/:id/compare` (total value / equity share / monthly SIP delta vs. Current) `[model: sonnet]`
+  - [ ] Write the isolation test proving an edit to ledger A never writes Current's rows `[model: sonnet]`
+  - [ ] Adapt the Slice-4 holdings UI to render inside a ledger-scoped dashboard, and build the compare-strip UI `[model: sonnet]`
+  - [ ] Wire `ledger_switched` telemetry on tab change `[model: sonnet]`
+
+**Chunk 4 (Instrument drift detection) drafted then withdrawn from this plan** — see Open Decision #1 and Out of Plan below.
+
+## 9. Open Decisions
+
+1. **`[H]` Seed-script upsert semantics for `instruments.updated_at`, blocking a follow-on chunk, not this one.** Not yet resolved: does the seed script diff field-by-field to decide whether to bump `updated_at`, or bump on every re-run regardless of change? A naive "always bump" would make every ledger show a drift warning after any seed re-run, even a no-op one — false positives would erode the warning's credibility. **Not load-bearing for Chunks 1–3 (Slice 1 ships without this).** This is why Instrument drift detection was withdrawn as this plan's Chunk 4 during the gate review rather than kept on the approved sequence with an unresolved `[H]` under it — it becomes its own plan/chunk once this is resolved, not before.
+2. **`[H]` Whether `holding.household_id` and `holding.ledger.household_id` are ever allowed to diverge.** Assumed no (Section 3) but no DB-level CHECK constraint is planned for Slice 1 — enforcement is app-layer only (every write path sets both from the same session-resolved household). Acceptable for Slice 1 given the existing app-layer-only precedent (v1 has no Postgres RLS either), but flagged so a future chunk can add the constraint if a real bug ever surfaces here.
+3. Resolved, not open: AI counsel/bulk-import/redesign timing — explicitly out of this plan (see Out of Plan below), not an open decision on this plan's critical path.
+
+## Chunk Ordering / Build Sequence (extends-existing arc — no Slice 0)
+
+Skipping Slice 0: `/health`, PostHog, Sentry, `/docs`, and the typed event registry are confirmed live from v1 (verified via `app/CLAUDE.md`'s Gate status and `/api/health` — not re-verified in this planning pass, `[S]`, cheap to spot-check at Chunk 1 kickoff).
+
+1. **Chunk 1 — Ledger schema migration** (project-killer, first)
+2. **Chunk 2 — Ledger CRUD API + tab strip UI**
+3. **Chunk 3 — Ledger dashboard + compare strip** (closes D-018 §2's thin slice 1 — last chunk in this plan)
+
+Each chunk is one commit, vertical (capability + tests + analytics events + `HOW_TO_USE.md` update), matching the v1 slice contract above.
+
+## Out of Plan (D-016 bundle)
+
+- **Instrument drift detection** — drafted as this plan's Chunk 4, **withdrawn during the erd-gate review** (2026-08-24): its `instruments.updated_at` seed-upsert semantics were a load-bearing `[H]` with no resolution (Open Decision #1), and the gate does not pass an unresolved load-bearing hypothesis onto the approved critical path. Becomes its own chunk once that hypothesis is resolved — schema (`instruments.is_active`/`updated_at`) already Stage-0-drafted in `DATA_MODEL.md`.
+- **Projections** (D-018 §3) — in scope per the brief, but not part of this thin slice; needs its own chunk (schema already Stage-0-drafted as `ledger_projection_settings`) sequenced after Slice 1 ships and adoption data exists.
+- **AI counsel / goal planner / AI-on-Current suggestion cards** — blocked on the Anthropic key not yet wired into Vercel (D-018 Open Items). No chunk written until the key is provisioned; do not plan around an unconfirmed dependency.
+- **Bulk-import Excel template** — no schema dependency on ledgers, could be sequenced independently, but not planned here to keep this plan's gate scoped to one reviewable structural decision (Section 3) rather than several unrelated ones.
+- **Full-platform mint/treasury redesign** (D-016 item 4, D-017 §7 reopening the landing page) — a visual-language pass across every screen, orthogonal to the ledger schema work; deliberately not bundled into a plan whose Section 3 is a live-table migration, so a redesign PR never has to wait on a schema PR's review cycle or vice versa.
+
+None of the above is scope creep into this plan — each is a named, already-decided (D-016/D-017/D-018) piece of scope, or a piece withdrawn by the gate itself, deliberately sequenced into a later plan rather than silently dropped.

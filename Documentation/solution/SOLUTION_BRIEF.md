@@ -217,4 +217,111 @@ Gaurav approved this Read-Back with answers to every ambiguity and the architect
 - Build order: strategy ledgers land first, since the AI layer, the goal planner, and the redesigned dashboard all assume ledgers exist.
 - The bulk-import template's member-name prefill is an accepted, disclosed PII exposure (a downloaded file, plaintext by construction), documented alongside the AI-call exception rather than blocked.
 
-**Phase 1 (Solution Stage interview) is queued, not started.** Gaurav asked to run it in a new session for better reasoning quality, given this session's smart-zone state.
+~~**Phase 1 (Solution Stage interview) is queued, not started.**~~ **Run 2026-08-17** in a fresh session, as Gaurav asked. Results below.
+
+---
+
+## Phase 1 Solution Stage — D-016 Feature Bundle (2026-08-17)
+
+Eight questions asked against the Phase 0 read-back above, scoped to this bundle only. The v1 sections earlier in this document are untouched and still stand. Full decision text in `DECISIONS_LOG.md` D-018.
+
+**Status: Solution Approved 2026-08-17.** Phase 1 complete for this bundle. Next: Phase 2 (Design).
+
+### Core User Journey (this bundle)
+
+A user on the dashboard sees a tab strip reading `Current | <their ledgers> | + New`. `+ New` opens a light modal asking two things only, a name and whether to start blank or from a copy of Current, then drops them into an editable dashboard for that ledger. Every ledger renders the same view as Current (donut, Reserve treatment, summary, per D-017 §5), plus a compare strip showing its delta against Current.
+
+Rejected: a separate "Strategy Lab" page (makes ledgers a place you visit rather than part of the daily view), and AI-only ledger creation (hard-couples ledgers to the one item blocked on an API key, and contradicts the locked build order).
+
+### Feature List (this bundle)
+
+| # | Feature | Slice | Why it's in |
+|---|---|---|---|
+| 1 | Ledger tab strip (`Current \| ledgers \| + New`) plus name-and-copy modal | 1 | The whole journey; locked Q1 |
+| 2 | Editable per-ledger dashboard, same view as Current | 1 | D-017 §5, non-negotiable |
+| 3 | Compare strip: delta vs Current on three numbers (total value, equity share, monthly SIP) | 1 | Minimum that makes a ledger mean something; locked Q2 |
+| 4 | Four-ledger cap plus Current, fixed constant in schema and copy | 1 | Locked Q2 |
+| 5 | Instrument-drift warning (bold, red-toned) on affected ledgers | 1 | D-017 §6 |
+| 6 | Per-ledger compound-growth projection: one user-overridable annual return rate per asset class, user-chosen horizon, deterministic maths, no AI, works on Current too | 2 | Promoted from v1 non-goal at Q3; see the amendment note below |
+| 7 | Instrument-aware Excel bulk-import template, generated client-side, with row-level accept/reject preview on return | 3 | D-016 item 3 |
+| 8 | AI counsel cards: Sonnet 5 via the D-017 thin proxy, structured outputs, Apply or Dismiss only, may target Current as well as ledgers | 4 | D-016 item 2, widened at Q3b |
+| 9 | AI goal planner, same proxy, same cap, output adoptable as a ledger | 4 | D-016 item 2 |
+| 10 | Soft cap-hit message ("limitations, paid tier coming soon"), never a hard block | 4 | D-017 §4 |
+| 11 | Mint treasury redesign across every screen, landing page included | 5 | D-016 item 4, D-017 §7 |
+| 12 | Encryption-exception disclosure section on `/why` and `/privacy` | 4 | Q7; also the bundle's headline portfolio artifact |
+| 13 | Bulk-import PII disclosure on the download UI and `/privacy` | 3 | D-017 §9 |
+
+**Build order is locked by D-017 §8:** ledgers first. Slices 2 to 5 may reorder among themselves; slice 1 cannot move.
+
+**Scope amendment, stated explicitly rather than absorbed silently:** projections and net-worth-over-time were an explicit v1 non-goal (row 5 of the v1 non-goals table above, "v2, needs historical snapshots not captured in v1's schema"). Feature 6 reopens it deliberately, at Gaurav's instruction on 2026-08-17. It does not need historical snapshots, because it projects forward from present values using user-set rates rather than reconstructing the past. The v1 non-goal on net-worth-*history* still stands unchanged.
+
+### Explicit Non-Goals (this bundle)
+
+Carried from D-017: no third-plus ledger beyond the cap, no AI chat, no autonomous AI execution, no multi-editor households, no instrument-price auto-fetching (D-002 stands).
+
+Added at Q3:
+
+| # | Not building | Why cut |
+|---|---|---|
+| 1 | Side-by-side ledger comparison view | Out entirely, not deferred. Revisit only if `ledger_switched` shows people actually live in more than one ledger |
+| 2 | Arbitrary CSV or bank/broker statement import | Bulk import accepts the generated template only. No column mapping for foreign files |
+| 3 | Ledger sharing or export (public link, PDF, send-to-anyone) | Export is an encryption-boundary decision and does not get made as a side effect of this bundle |
+
+Two items proposed as non-goals were **rejected and promoted to goals** at Q3: projections (feature 6) and AI acting on Current (feature 8).
+
+### Technical Shape (this bundle)
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Ledger storage | **Full encrypted snapshot.** `ledger_id` on the holdings table, `is_baseline` flag marks Current. Creating a ledger copies every holding row, each encrypted with the same household data key | Every existing query works by adding one filter. The server cannot diff ciphertext anyway (D-014), so any overlay logic would run in the browser regardless. Makes ledger history genuinely immutable, which is exactly what the drift warning needs |
+| Snapshot semantics | **Editing Current after a ledger exists does not change that ledger.** The ledger keeps the snapshot it was made from | Confirmed explicitly at Q4. Must be stated in the ledger tab copy, with the snapshot date |
+| AI call path | Browser decrypts, POSTs plaintext over TLS to a thin server route, route forwards to Anthropic and relays the reply, writes nothing to Neon and nothing to logs | D-017 §1, not reopened |
+| AI model | **`claude-sonnet-5`**, structured outputs via `output_config.format`, effort `medium` | Reasoning over a small well-shaped payload with a schema-clean output the UI renders as cards. Near-Opus quality at roughly half the price |
+| Projection engine | Client-side, deterministic, no server call | No AI, no external data, reproducible numbers the user can audit |
+| Excel template | Generated in the browser from the live instrument table | No upload of household data anywhere, and the template can never drift from the library |
+
+Rejected: delta-overlay ledger storage (every read path would need a merge, and orphaned overlay entries under encryption are genuinely fiddly), client-only ledgers (they would vanish on device switch, contradicting the encrypted-sync model), Haiku 4.5 or Opus 5 for the proxy, and a split Haiku-plus-Sonnet routing (two prompts and two failure modes for a saving of a few rupees).
+
+### Third-Party Services (delta only)
+
+| Service | Purpose | Cost | Decision |
+|---|---|---|---|
+| Anthropic API | AI counsel and goal planner, through the thin proxy | `claude-sonnet-5` at $3/$15 per Mtok. A call is roughly 4k input, 1k output, so about $0.027 (roughly ₹2.40). Worst case per household at the cap (2 plans plus 4 edits) is about ₹14 | Locked Q5 |
+
+No other new service. The Excel template needs a client-side spreadsheet library, not a service.
+
+**Open, blocking implementation of features 8 to 10 only:** no Anthropic API key exists anywhere in this environment (project `.env*` files, the `~/.claude` tree, and other project memories were all searched on 2026-08-17). One must be minted at console.anthropic.com and set in Vercel Production env, never committed and never shipped to the browser. Ledgers, projections, bulk import, and the redesign are unaffected.
+
+### Risk Register (this bundle)
+
+| # | Risk | Likelihood / impact | Mitigation |
+|---|---|---|---|
+| 1 | **Projections read as advice.** "Education not advice" is a hard regulatory constraint. A growth line reaching a large number by 2041 is a projection, but a retail user reads it as a promise and a regulator may read it as a performance representation. The AI counsel cards sit right next to it | Low if handled, **high impact** | Visible assumption strip on every projection (your rate, your horizon, not a forecast) plus the standing disclaimer. Rates are user-set by design, so the assumption is the user's, not the product's. Copy for projections and AI cards is reviewed against the education-not-advice line before merge, same rule as nudges |
+| 2 | Four items is a large bundle for a solo builder with a day job. Same pattern that stalled this project twice | Medium | Locked build order plus the 30-day checkpoint below |
+| 3 | No Anthropic API key exists | Certain until resolved | Mint before the AI slice. Blocks nothing else |
+| 4 | The encryption exception damages trust rather than demonstrating judgment | Low | Disclosed in plain language on `/why` and `/privacy`; the exception is genuinely narrow (no Neon writes, no logs) |
+| 5 | The redesign touches every screen, and three screens already shipped unseen because Claude cannot sign in or set a passphrase | Medium, and known to recur | A human visual pass per screen before promotion. This is a hard constraint on the redesign item |
+| 6 | ~~Stale-load defect worsens under a redesign~~ | **Closed 2026-08-06** | Root cause was a missing `virtual:pwa-register` import; pinned by `pwa-registration.config.test.ts`. Kept here because the risk was live when this register was drafted |
+| 7 | Bulk-import template carries plaintext member names outside the encryption boundary | Accepted, disclosed (D-017 §9) | Warning on the download UI, documented beside the AI exception |
+| 8 | Snapshot ledgers drift from Current and confuse users expecting updates to flow through | Medium, low impact | Ledger tab states the snapshot date; D-017 §6 drift warning covers instrument changes |
+
+**Cost and Kill budget** (also in `DECISIONS_LOG.md` D-018):
+
+| Budget | Value |
+|---|---|
+| Max monthly infra cost | ₹0 across Neon, Vercel, Clerk, PostHog, Sentry. Plus Anthropic on `claude-sonnet-5`, bounded by the 2 plans x 2 edits per household cap, not by a monthly figure. At 200 households the lifetime ceiling is roughly ₹2,800. First free tier to bite is still Clerk at 10k MAU |
+| Kill criterion | **None. Replaced by a checkpoint, by Gaurav's decision at Q8a.** Review ledger slice 1 progress 30 days after the first commit. No automatic descope and no forced action. Recorded as a deliberate deviation from the Blueprint mandatory-field contract, not an omission. Reasoning and the counter-argument are in D-018 |
+
+### Recruiter Signal (this bundle)
+
+Leads with **the encryption exception decision**, with the Mint redesign as supporting craft evidence. Detail in `PORTFOLIO_ANGLE.md`.
+
+### DEFERRED Items (this bundle)
+
+| Item | Why deferred | Revisit before |
+|---|---|---|
+| Side-by-side compare view | Cut as a non-goal, but genuinely the strongest demo screenshot in the bundle | Only if `ledger_switched` shows real multi-ledger usage |
+| Per-user (rather than per-household) AI cap | D-017 §3 deferred it pending real usage; no schema decision assumes user-level | Before any multi-editor work |
+| Whether the AI proxy needs streaming | D-017 flagged that streaming could force persistence and break the "never at rest" claim | Phase 2 design of the proxy route |
+| Projection horizon presets vs free entry | Gaurav said "the horizon they pick"; whether that is a free number field or a small set of presets is a UI decision | Phase 2, `SPEC.md` |
+| Mobile width (390px) verification on redesigned screens | Existing open item, unchanged by this bundle, and the redesign enlarges it | Before promoting the redesign slice |

@@ -153,3 +153,95 @@ against PostHog answers the second, and nothing in the pipeline forced anyone to
 - `signup_failed` / `login_failed` — Clerk's prebuilt components expose no failure callback; needs a
   custom auth form.
 - `learn_card_clicked` — the nudge CTA was simply never clicked during the verification pass.
+
+---
+
+## D-016 Feature Bundle — Metrics (Phase 1, 2026-08-17)
+
+Added by the Phase 1 Solution Stage interview for the D-016 bundle. Everything above is unchanged. Scope and feature numbering: `SOLUTION_BRIEF.md` §"Phase 1 Solution Stage — D-016 Feature Bundle".
+
+**Status: approved 2026-08-17** with the Phase 1 gate.
+
+### Falsifiable success criteria
+
+Seven criteria, all approved at Q6. Percentages are conservative first reads with no prior usage data, same reasoning as D-006, and are movable.
+
+| # | Criterion | Measured by |
+|---|---|---|
+| 1 | 30% of households with 2+ holdings create at least one alternate ledger within 60 days of launch | `ledger_created` per household |
+| 1b | Of households that create a ledger, **40% switch back to it at least once after the session in which they made it** | `ledger_switched` with a session boundary between it and the matching `ledger_created` |
+| 2 | 20% of households at Completeness tier 2+ view at least one AI counsel suggestion within 30 days | `ai_suggestion_shown` |
+| 3 | Fewer than 5% of households exhaust both caps within 90 days | `ai_cap_reached` |
+| 4 | 15% of households with 5+ manually entered holdings use bulk import for a subsequent addition within 60 days | `bulk_import_completed` after 5 or more prior `holding_created` |
+| 5 | Onboarding completion does not drop more than 5 percentage points against the pre-redesign baseline, at 30 days | Existing onboarding funnel, compared across the redesign ship date |
+| 6 | 25% of households with at least one ledger open a projection within 60 days, **and 10% override at least one default asset-class return rate** | `projection_viewed`, `projection_rate_overridden` |
+| 7 | At least 30% of AI suggestions shown against Current are Applied rather than Dismissed | `ai_suggestion_applied` / `ai_suggestion_shown`, both filtered `target = current` |
+
+**Criterion 1b is the one that decides future scope.** Creating a ledger is curiosity; returning to it is use. The side-by-side compare view was cut as a non-goal precisely so this number could decide whether it is ever worth building.
+
+**Criterion 3 is a capacity and cost check, not a value metric.** Hitting it is not failure. It is the signal that a paid tier might be worth designing.
+
+**Criterion 5 is a design QA gate, not a growth metric.** Visual quality is judged by Gaurav directly.
+
+**Criterion 6's second clause carries the weight.** Viewing a projection could be idle curiosity; overriding a rate means the user is actually modelling something.
+
+**Criterion 7 has the sharpest consequence.** Below 30%, AI suggestions are noise being shown against the user's protected baseline record, which is the single most expensive place in the product to be noisy. That would be grounds to revert feature 8's widening back to ledgers only.
+
+### New events
+
+Every bundle feature has at least one event. Exit check passed; see the coverage table below.
+
+| Event | Key properties | Feature | Fires when |
+|---|---|---|---|
+| `ledger_created` | `source` (blank / copy) | (1) | User confirms the new-ledger modal |
+| `ledger_switched` | — | (1) | User taps a non-active tab in the ledger strip |
+| `ledger_deleted` | — | (1) | User deletes a ledger |
+| `ledger_edited` | — | (2) | A holding is added, changed, or removed inside a non-baseline ledger |
+| `compare_strip_viewed` | — | (3) | A non-Current ledger dashboard renders its delta strip |
+| `ledger_cap_reached` | — | (4) | User attempts a fifth ledger and is blocked |
+| `instrument_drift_warning_shown` | — | (5) | A ledger renders the red-toned drift warning |
+| `projection_viewed` | `horizon_years` | (6) | User opens a projection on any ledger, Current included |
+| `projection_rate_overridden` | `asset_class` | (6) | User changes a default annual return rate |
+| `bulk_import_template_downloaded` | — | (7) | User downloads the generated template |
+| `bulk_import_completed` | `rows_clean`, `rows_rejected` | (7) | User commits a reviewed import |
+| `ai_suggestion_shown` | `target` (current / ledger), `kind` (counsel / goal_plan) | (8)(9) | A suggestion card renders |
+| `ai_suggestion_applied` | `target`, `kind` | (8)(9) | User taps Apply |
+| `ai_suggestion_dismissed` | `target`, `kind` | (8)(9) | User taps Dismiss |
+| `ai_cap_reached` | `cap_type` (plans / edits) | (10) | The soft cap-hit message renders |
+| `why_page_viewed` (existing) / `privacy_page_viewed` | `section` | (12) | User opens the page; `section` distinguishes the encryption-exception anchor |
+| `pii_disclosure_shown` | `surface` (bulk_import / privacy) | (13) | The plaintext-download warning renders |
+| *(no dedicated event)* | — | (11) redesign | Measured as non-regression on the existing onboarding funnel, not as its own event |
+
+**Property discipline, carried from the 2026-08-01 correction above.** No event may carry anything describing what a household owns. That rule is why `ledger_edited` has no instrument or amount properties, why `ai_suggestion_shown` records `kind` and not the suggestion text, and why `bulk_import_completed` records row *counts* and not row contents. The AI proxy is a further case: **it must not emit analytics at all**, since anything it could usefully report is derived from plaintext holdings. Cap accounting happens server-side against a counter, not by inspecting payloads.
+
+### Dashboard additions
+
+| Chart | Type | Metric | Segment by |
+|---|---|---|---|
+| Ledger adoption | Funnel | `dashboard_viewed` → `ledger_created` → `ledger_switched` (post-session) | `source` |
+| Ledger depth | Bar | Ledgers per household (0 / 1 / 2 / 3 / 4) | — |
+| Projection engagement | Funnel | `projection_viewed` → `projection_rate_overridden` | — |
+| AI suggestion outcome | Bar | Applied vs Dismissed | `target`, `kind` |
+| Cap pressure | Trend | `ai_cap_reached` per household per week | `cap_type` |
+| Bulk import quality | Trend | `rows_rejected` / (`rows_clean` + `rows_rejected`) | — |
+| Redesign non-regression | Trend | Onboarding completion rate, annotated at the redesign ship date | — |
+
+### Exit check: feature-to-metric coverage
+
+| Feature | Metric |
+|---|---|
+| 1 Tab strip and create modal | Criteria 1, 1b |
+| 2 Editable per-ledger dashboard | `ledger_edited` |
+| 3 Compare strip | `compare_strip_viewed` |
+| 4 Four-ledger cap | `ledger_cap_reached` |
+| 5 Drift warning | `instrument_drift_warning_shown` |
+| 6 Projections | Criterion 6 |
+| 7 Bulk import | Criterion 4 |
+| 8 AI counsel | Criteria 2, 7 |
+| 9 Goal planner | Criterion 2 (`kind = goal_plan`) |
+| 10 Soft cap message | Criterion 3 |
+| 11 Redesign | Criterion 5 |
+| 12 Encryption disclosure | `privacy_page_viewed` with `section` |
+| 13 PII disclosure | `pii_disclosure_shown` |
+
+No feature is without a metric. Nothing cut at the exit check.

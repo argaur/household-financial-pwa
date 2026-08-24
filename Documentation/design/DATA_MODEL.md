@@ -314,3 +314,103 @@ Every screen with dynamic data. Design must produce layouts for every non-dash c
 5. **The FAB ("+") adds a holding**, not anything else. All other creation flows (add member, update household name) live inside Profile. This keeps the primary action always visible and unambiguous.
 6. **Pagination:** not needed in v1. A household is unlikely to have >50 holdings manually. If they do, server returns all and UI renders all — no infinite scroll.
 7. **`rate_value` / `rate_as_of`** are shown on instrument detail cards for fixed-rate instruments (SSY, GPF, etc.). The UI should show a "Rate as of [date]" label and a note to verify current rates — these are manually maintained in the seed data and may be 1–3 months stale.
+
+---
+
+## D-016 Bundle Additions — Strategy Ledgers, Projections, AI Cap (Design Stage 0, 2026-08-17)
+
+**Phase:** Design Stage 0 for the D-016/D-017/D-018 feature bundle. Scoped to what the approved brief locks: ledgers build first (D-017 §8); AI counsel, goal planner, and bulk import follow once ledgers exist and the Anthropic key is provisioned. Modeled here together since they touch the same tables, built in that order.
+
+### ledgers (new)
+
+**Description:** A strategy plan layered on top of a household's holdings. Every household has exactly one baseline ledger ("Current," `is_baseline = true`), created by migration for existing households and at household-creation time for new ones. Up to four additional ledgers per household (D-018 §2 cap, a fixed constant enforced at the API layer, not the DB).
+
+**Owner:** The household (`household_id`).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| id | uuid | yes | PK |
+| household_id | uuid | yes | FK → households.id, ON DELETE CASCADE |
+| name | text | yes | User-entered on create; "Current" reserved for the baseline row |
+| is_baseline | boolean | yes | Default `false`. Exactly one `true` row per household, enforced at the API layer (a partial unique index on `(household_id) WHERE is_baseline` is the DB-level backstop) |
+| origin | enum | yes | `manual` / `ai_suggestion`. Only `ai_suggestion` ledgers count against the 2-plans-per-household AI cap (D-017 §2) |
+| ai_edits_used | int | yes | Default `0`. Counts AI-driven edits only (D-017 §2); capped at 2 in application logic |
+| snapshot_of | uuid | no | FK → ledgers.id, self-reference. Set at creation to the ledger it was copied from (usually Current); null for the baseline row itself. Powers the "created from Current on [date]" copy (D-018 §4) |
+| projection_horizon_years | int | no | User-chosen; null until the user opens the projection view for this ledger |
+| created_at | timestamptz | yes | auto — this is the "snapshot date" shown in ledger tab copy |
+| updated_at | timestamptz | yes | auto |
+
+**States:**
+
+| State | Condition | UI implication |
+|---|---|---|
+| loading | Ledger list fetch in flight | Tab strip shows skeleton pills |
+| empty | Household has only the baseline ledger | Tab strip shows `Current | + New` only, no compare strip |
+| populated | 1+ non-baseline ledgers exist | Tab strip shows `Current | <ledger names> | + New`; compare strip visible on non-baseline tabs |
+| creating | Name-and-copy modal submitting | Modal fields disabled, submit shows spinner |
+| at-cap | 4 non-baseline ledgers already exist | `+ New` disabled/hidden, tooltip explains the 4-ledger cap |
+| error | Create/fetch failed | Toast + retry; modal stays open on create failure |
+
+### holdings — amended
+
+**`ledger_id` added:** `uuid`, required, FK → `ledgers.id`, ON DELETE CASCADE. Every holding now belongs to exactly one ledger, not directly to a household (household is reached via `ledger.household_id`). **Migration:** for every existing household, insert one `ledgers` row (`name = 'Current'`, `is_baseline = true`, `origin = 'manual'`), then backfill every existing `holdings.ledger_id` to that row's id, then add the `NOT NULL` constraint. Full snapshot on ledger creation (D-018 §4): creating a non-baseline ledger copies every Current holding row with a new `ledger_id`, re-encrypted under the same household data key — **editing Current after the copy does not propagate**, confirmed explicitly by Gaurav.
+
+**Compare strip (D-018 §2):** computed, not stored — three numbers per non-baseline ledger, each diffed against Current: `SUM(current_value)`, `SUM(current_value WHERE asset_class='equity') / SUM(current_value)`, `SUM(monthly_sip)`. Query scoped by `ledger_id`, no new columns.
+
+### instruments — amended
+
+**`is_active`** (`boolean`, default `true`) and **`updated_at`** (`timestamptz`, auto) added. Instruments are now soft-deleted, never hard-deleted, so a ledger's historical holding reference never dangles (D-017 §6). **Drift detection:** on ledger view, for each holding, compare `instrument.is_active = false` OR `instrument.updated_at > holding.created_at`. If either is true, render the bold red-toned warning banner naming what changed — the holding row itself stays untouched, per D-017 §6's "never delete or silently reconcile" rule.
+
+### ledger_projection_settings (new)
+
+**Description:** Per-ledger, per-asset-class user-overridable annual return rate for the deterministic compound-growth projection line (D-018 §3). No AI involved, no historical snapshots needed — projects forward from present `holdings.current_value`.
+
+**Owner:** The parent ledger.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| ledger_id | uuid | yes | FK → ledgers.id, ON DELETE CASCADE. Composite PK with asset_class |
+| asset_class | enum | yes | Same enum as `holdings.asset_class` |
+| annual_rate_pct | numeric | yes | User-overridable; seeded with a sane default per class (e.g. equity 12%, debt 7%) on first view, not stored until the user opens/edits it |
+
+**States:** loading (skeleton rate rows) / populated (rates shown, editable inline) / saving (field disabled, inline spinner) / error (toast, value reverts).
+
+### households — amended
+
+**`ai_plans_created`** (`int`, default `0`) added. Counts `ledgers` rows with `origin = 'ai_suggestion'` created by this household; capped at 2 (D-018 §5, D-017 §2). Denormalized counter rather than a `COUNT()` query so the cap-exhausted UI state is a single-row read, not a join, on every dashboard load.
+
+### AI suggestion cards — not persisted
+
+Per D-017 §1, the thin proxy writes nothing to Neon and nothing to logs. AI suggestion cards (Apply/Dismiss, targeting Current or any ledger — D-018 §3) exist only in browser state for the duration of the response; Apply commits as a normal holdings write, Dismiss discards with no trace. No new table.
+
+### Relationships — amended
+
+```
+households     1 ──── N  ledgers             (household has many ledgers, exactly one is_baseline)
+ledgers        1 ──── N  holdings            (holdings now belong to a ledger, not directly to a household)
+ledgers        1 ──── N  ledger_projection_settings
+ledgers        N ──── 1  ledgers             (snapshot_of self-reference, nullable)
+```
+
+`households 1──N holdings` is removed as a direct relationship; reached transitively via `ledgers`.
+
+### State Matrix — additions
+
+| Screen | Loading | Empty | Populated | Error | Auth-blocked |
+|---|---|---|---|---|---|
+| Ledger tab strip | Skeleton pills | `Current | + New` only | Tab strip + compare strip on non-baseline tabs | Toast + retry | Redirect to /sign-in |
+| New-ledger modal | Submitting: fields disabled + spinner | Blank name field, blank-or-copy toggle defaulted to copy | — | Inline validation + API toast; modal stays open | Redirect to /sign-in |
+| Ledger dashboard (non-baseline) | 3-card skeleton + donut placeholder | N/A — always created from a copy, never empty | Donut + compare strip + editable holdings | Toast + retry; stale data visible if cached | Redirect to /sign-in |
+| Instrument-drift banner | N/A | Not rendered (no drift) | Bold red-toned banner listing changed/removed instruments | N/A | N/A |
+| Projection view | Rate rows skeleton | Rates unset: defaults shown, editable | Compound-growth line rendered for chosen horizon | Toast; last valid line stays visible | Redirect to /sign-in |
+| AI suggestion card | Spinner while proxy call in flight | N/A | Apply/Dismiss card with proposed diff | Toast naming the failure; card removed | Redirect to /sign-in |
+| AI cap-exhausted state | N/A | N/A | Soft message: "AI limitations reached, paid tier coming soon"; manual editing stays fully available | N/A | Redirect to /sign-in |
+| Bulk-import template download | Generating: button spinner | N/A | Prefilled `.xlsx`, every applicable instrument name + field | Toast + retry | Redirect to /sign-in |
+| Bulk-import upload | Parsing: progress indicator | N/A | Row-by-row validation summary, confirm-to-commit | Per-row error list; valid rows still committable | Redirect to /sign-in |
+
+### Notes for Design (D-016 bundle)
+
+8. **Ledgers build first, alone.** AI suggestion cards, projections, and bulk import all reference ledger/holding shapes that don't exist until the `ledgers` table and `holdings.ledger_id` migration ship. Design and slice this bundle in that order, matching D-017 §8.
+9. **The compare strip has exactly three numbers in slice 1** (total value, equity share, monthly SIP) — no side-by-side view, deferred behind the `ledger_switched` adoption signal (D-018, Revisit-if clause).
+10. **The instrument-drift banner is the one new UI surface with no existing precedent in this app** — v1 never showed a warning banner anywhere. Design should treat its visual weight (bold, red-toned per D-017 §6) as a first-class state, not a small inline note.
+11. **AI cap-exhausted is a soft, permanent-feeling state, not an error.** It should read as a product limitation with a future ("paid tier coming soon"), never as a failure — copy needs a different visual register than the toast-based error states elsewhere in this doc.
