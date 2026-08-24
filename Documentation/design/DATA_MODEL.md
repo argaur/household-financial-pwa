@@ -331,7 +331,11 @@ Every screen with dynamic data. Design must produce layouts for every non-dash c
 |---|---|---|---|
 | id | uuid | yes | PK |
 | household_id | uuid | yes | FK → households.id, ON DELETE CASCADE |
-| name | text | yes | User-entered on create; "Current" reserved for the baseline row |
+| name | text | no | Plaintext only for the baseline row ("Current," written server-side by `ensureBaselineLedger` before the vault may be unlocked). Every other row stores `name = null` — the real value lives client-side-encrypted in `ciphertext`/`iv`/`alg`/`version` below. Reversed from "ledger name stays plaintext" by D-020 (migration `0005_luxuriant_aqueduct`) |
+| ciphertext | text | no | Encrypted `{ name }` envelope, D-020. Null for the baseline row, set for every other ledger |
+| iv | text | no | AES-GCM IV for `ciphertext`. Null for the baseline row |
+| alg | text | no | Cipher identifier for `ciphertext`. Null for the baseline row |
+| version | int | yes | Envelope schema version, default `1`. Present on the baseline row too even though it carries no ciphertext |
 | is_baseline | boolean | yes | Default `false`. Exactly one `true` row per household, enforced at the API layer (a partial unique index on `(household_id) WHERE is_baseline` is the DB-level backstop) |
 | origin | enum | yes | `manual` / `ai_suggestion`. Only `ai_suggestion` ledgers count against the 2-plans-per-household AI cap (D-017 §2) |
 | ai_edits_used | int | yes | Default `0`. Counts AI-driven edits only (D-017 §2); capped at 2 in application logic |

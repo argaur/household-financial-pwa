@@ -312,3 +312,20 @@ device, never anything the server could see. The `/privacy` leak list needs no c
 - **Revisit if:** Phase 3 planning hits a screen where "what does this look like" blocks writing a task — at that point run a scoped Stage 3 pass for that screen alone, not the full stage.
 
 **Gate status: Stage 0 approved 2026-08-24. Stages 1–5 skipped by explicit decision. Phase 3 (Plan) is next.**
+
+---
+
+## D-020 — Ledger delete on Current unblocked; ledger name encrypted, reversing D-016 (2026-08-24)
+
+- **Date:** 2026-08-24
+- **Phase:** 4 Build, Chunk 1 follow-up review — two small decisions from the same session with Gaurav
+- **Decision:**
+  1. **Delete now works on the Current (baseline) ledger.** The server was always safe — `deleteHolding` was deliberately never baseline-aware — but `src/components/holding-form.tsx` gated the affordance on `canDelete = editing && Boolean(ledgerId)`, and the baseline tab passes no `ledgerId`, so Current was blocked for no server-side reason. The `ledgerId` half of that condition is dropped, leaving `canDelete = editing`; the confirm copy now names the ledger ("Remove this holding from Current? This can't be undone."); the `ledger_edited` analytics event stays guarded by `if (ledgerId)` on the delete path, so a Current-ledger delete fires no event, matching how Current edits were already excluded.
+  2. **Ledger names are now client-side encrypted**, reversing D-016's explicit "ledger name stays plaintext" design call. Migration `0005_luxuriant_aqueduct` is purely additive plus one relaxation: `ALTER TABLE "ledgers" ALTER COLUMN "name" DROP NOT NULL`, `ADD COLUMN "ciphertext" text`, `ADD COLUMN "iv" text`, `ADD COLUMN "alg" text`, `ADD COLUMN "version" integer DEFAULT 1 NOT NULL`. Server: `createLedgerSchema` extends `encryptedCreateSchema`, so a plaintext `name` is now rejected as an unknown key (verified empirically — `.extend()` inherits Zod strictness). `serialize()` returns `name` and the envelope together. Client: `src/lib/ledgers-api.ts` seals `{ name }` under a new `LEDGERS_TABLE = 'ledgers'` AAD binding via `sealRow`, unseals via `decryptWireRow`/`decryptWireRows`, mirroring `holdings-api.ts`; the 60-character max-length check moved client-side since the server can no longer read a name.
+  - **The baseline row is the one exemption, by design.** `ensureBaselineLedger` writes `'Current'` server-side before the user has necessarily unlocked their vault, and it is not user data, so that row keeps a plain `name` with null envelope columns forever. Every non-baseline ledger stores `name = null` with the envelope populated.
+- **Why the reversal carries no product-facing change:** production holds exactly one ledger row (the baseline "Current"), and this branch (`d016-ledgers`) has never been merged to `main`, so no user has ever created a second ledger or ever seen a ledger name stored as plaintext. There was no legacy plaintext ledger data to migrate or delete. This is purely internal encryption hardening, not a response to any observed exposure.
+- **Rejected alternative(s):** Leaving ledger name plaintext as D-016 originally called it — rejected once the reversal was recognized as free (no user-facing state to migrate) and consistent with the rest of the household data model, where D-014 already encrypts everything else client-side.
+- **Status:** Migration `0005` is generated, committed, and **not applied to any database, including production.** `deleteHolding`/`holding-form.tsx` changes and the ledger-name encryption changes are committed on `d016-ledgers` and **not merged to `main`**; production remains pre-D-016 code with schema at `0004`. Suite **1151/1151** across 90 files, typecheck clean (baseline before this work was 1136/1136).
+- **Revisit if:** this branch is promoted and the migration is applied — at that point verify the baseline-row exemption still holds against real production data (the "Current" row for the one existing household), not just against test fixtures.
+
+---
