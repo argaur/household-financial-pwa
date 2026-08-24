@@ -74,6 +74,13 @@ export interface EventMap {
   // session boundary can be measured between it and the matching creation.
   ledger_switched: Record<string, never>
   ledger_deleted: Record<string, never>
+  // A non-Current ledger dashboard renders its delta strip (METRICS_PLAN
+  // feature 3). No properties — the strip's numbers describe what a
+  // household owns, which the property-discipline rule above forbids.
+  compare_strip_viewed: Record<string, never>
+  // A holding is added, changed, or removed inside a non-baseline ledger
+  // (METRICS_PLAN feature 2). No properties, same reason as above.
+  ledger_edited: Record<string, never>
   // Fires when a 5th ledger is attempted and blocked (METRICS_PLAN criterion 3
   // class: a capacity signal, not a failure).
   ledger_cap_reached: Record<string, never>

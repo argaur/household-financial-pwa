@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { decryptRow } from './crypto'
 import { VaultLockedError, type Vault } from './crypto/key-store'
-import { listHoldings, createHolding, updateHolding, HoldingsApiError, type HoldingInput } from './holdings-api'
+import { listHoldings, createHolding, updateHolding, deleteHolding, HoldingsApiError, type HoldingInput } from './holdings-api'
 import {
   unlockTestVault,
   lockTestVault,
@@ -292,5 +292,56 @@ describe('holdings-api', () => {
     await expect(updateHolding('token', 'hold-1', input, 1)).rejects.toBeInstanceOf(HoldingsApiError)
     expect(calls()[0][0]).toBe('/api/holdings?id=hold-1')
     expect(calls()[0][1]?.method).toBe('PATCH')
+  })
+
+  describe('ledger scoping', () => {
+    it('lists the household baseline when no ledgerId is passed, unchanged', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ holdings: [] }))
+      await listHoldings('token')
+      expect(calls()[0][0]).toBe('/api/holdings')
+    })
+
+    it('fetches a specific ledger when ledgerId is passed', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ holdings: [] }))
+      await listHoldings('token', 'ledger-1')
+      expect(calls()[0][0]).toBe('/api/holdings?ledgerId=ledger-1')
+    })
+
+    it('encodes a ledgerId containing reserved characters', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ holdings: [] }))
+      await listHoldings('token', 'ledger/1&x')
+      expect(calls()[0][0]).toBe('/api/holdings?ledgerId=ledger%2F1%26x')
+    })
+
+    it('creates into the baseline when no ledgerId is passed, unchanged', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'invalid_holding' }, 400))
+      await expect(createHolding('token', input)).rejects.toBeInstanceOf(HoldingsApiError)
+      expect(calls()[0][0]).toBe('/api/holdings')
+    })
+
+    it('creates into the given ledger when ledgerId is passed', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'invalid_holding' }, 400))
+      await expect(createHolding('token', input, 'ledger-1')).rejects.toBeInstanceOf(HoldingsApiError)
+      expect(calls()[0][0]).toBe('/api/holdings?ledgerId=ledger-1')
+      expect(calls()[0][1]?.method).toBe('POST')
+    })
+  })
+
+  describe('deleteHolding', () => {
+    it('sends the id as a query param, never a ?ledgerId=', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true }))
+      await deleteHolding('token', 'hold-1')
+      expect(calls()[0][0]).toBe('/api/holdings?id=hold-1')
+      expect(calls()[0][1]?.method).toBe('DELETE')
+    })
+
+    it('throws HoldingsApiError with the server error code on failure', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'not_found' }, 404))
+      await expect(deleteHolding('token', 'hold-1')).rejects.toMatchObject({
+        name: 'HoldingsApiError',
+        status: 404,
+        message: 'not_found',
+      })
+    })
   })
 })

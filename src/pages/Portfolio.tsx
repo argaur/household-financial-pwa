@@ -5,12 +5,20 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { HoldingForm } from '@/components/holding-form'
 import { LedgerTabStrip } from '@/components/ledger-tab-strip'
+import { LedgerCompareStrip } from '@/components/ledger-compare-strip'
+import { track } from '@/lib/analytics'
 import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
 import { listHoldings, type Holding } from '@/lib/holdings-api'
 import { listLedgers, type Ledger } from '@/lib/ledgers-api'
 
 type State = 'loading' | 'loaded' | 'error'
+
+/** Insert-or-replace by id — shared by the Current and per-ledger holding lists. */
+function upsertHolding(prev: Holding[], holding: Holding): Holding[] {
+  const exists = prev.some((h) => h.id === holding.id)
+  return exists ? prev.map((h) => (h.id === holding.id ? holding : h)) : [...prev, holding]
+}
 
 const currency = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
 function formatInr(value: string): string {
@@ -24,12 +32,19 @@ function formatInr(value: string): string {
 export function Portfolio() {
   const { getToken } = useAuth()
   const [state, setState] = useState<State>('loading')
+  // Current's holdings only. Used for the Current tab, as the compare
+  // baseline for every non-baseline ledger, and as the copy-modal source —
+  // never repurposed to hold another ledger's rows.
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [unreadableHoldingsCount, setUnreadableHoldingsCount] = useState(0)
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [ledgers, setLedgers] = useState<Ledger[]>([])
   const [activeLedgerId, setActiveLedgerId] = useState<string | null>(null)
+  // The selected non-baseline ledger's holdings, fetched separately from
+  // Current. Idle while the Current tab is active.
+  const [ledgerHoldings, setLedgerHoldings] = useState<Holding[]>([])
+  const [ledgerHoldingsState, setLedgerHoldingsState] = useState<State | 'idle'>('idle')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null)
   // Sheet content is position:fixed and taller than the viewport; some mobile
@@ -69,6 +84,40 @@ export function Portfolio() {
     }
   }, [getToken])
 
+  const activeLedger = ledgers.find((l) => l.id === activeLedgerId) ?? null
+  // Defaults true while ledgers haven't loaded yet, so nothing tries to fetch
+  // a non-baseline ledger's holdings before the tab strip itself exists.
+  const isBaselineActive = activeLedger?.isBaseline ?? true
+
+  // Fetches the selected non-baseline ledger's holdings whenever the active
+  // tab changes to one. Guarded against the stale-response race the same way
+  // as the effect above: a slow fetch for a ledger the user has since tabbed
+  // away from must not overwrite what the newer tab already loaded.
+  useEffect(() => {
+    if (!activeLedgerId || isBaselineActive) {
+      setLedgerHoldings([])
+      setLedgerHoldingsState('idle')
+      return
+    }
+    let cancelled = false
+    setLedgerHoldingsState('loading')
+    ;(async () => {
+      try {
+        const token = await getToken()
+        const result = await listHoldings(token, activeLedgerId)
+        if (cancelled) return
+        setLedgerHoldings(result.holdings)
+        setLedgerHoldingsState('loaded')
+      } catch {
+        if (cancelled) return
+        setLedgerHoldingsState('error')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeLedgerId, isBaselineActive, getToken])
+
   function closeSheet() {
     setSheetOpen(false)
     setEditingHolding(null)
@@ -85,11 +134,28 @@ export function Portfolio() {
     setActiveLedgerId((prev) => (prev === id ? baselineId : prev))
   }
 
+  /** Only fires for a user-initiated change — the initial-mount assignment above sets activeLedgerId directly, never through here. */
+  function handleSelectLedger(id: string) {
+    if (id === activeLedgerId) return
+    track('ledger_switched', {})
+    setActiveLedgerId(id)
+  }
+
   function handleSaved(holding: Holding) {
-    setHoldings((prev) => {
-      const exists = prev.some((h) => h.id === holding.id)
-      return exists ? prev.map((h) => (h.id === holding.id ? holding : h)) : [...prev, holding]
-    })
+    if (isBaselineActive) {
+      setHoldings((prev) => upsertHolding(prev, holding))
+    } else {
+      setLedgerHoldings((prev) => upsertHolding(prev, holding))
+    }
+    closeSheet()
+  }
+
+  function handleDeleted(id: string) {
+    if (isBaselineActive) {
+      setHoldings((prev) => prev.filter((h) => h.id !== id))
+    } else {
+      setLedgerHoldings((prev) => prev.filter((h) => h.id !== id))
+    }
     closeSheet()
   }
 
@@ -105,9 +171,16 @@ export function Portfolio() {
     setSheetOpen(true)
   }
 
-  const totalCurrentValue = holdings.reduce((sum, h) => sum + Number(h.currentValue), 0)
+  // The Current tab's own state is used verbatim (byte-identical to before
+  // this chunk); a non-baseline tab substitutes its own fetch and state.
+  const displayedHoldings = isBaselineActive ? holdings : ledgerHoldings
+  const displayedReady = state === 'loaded' && (isBaselineActive || ledgerHoldingsState === 'loaded')
+  const displayedLoading = state === 'loaded' && !isBaselineActive && ledgerHoldingsState === 'loading'
+  const displayedError = state === 'loaded' && !isBaselineActive && ledgerHoldingsState === 'error'
+
+  const totalCurrentValue = displayedHoldings.reduce((sum, h) => sum + Number(h.currentValue), 0)
   const groupedByMember = members
-    .map((member) => ({ member, memberHoldings: holdings.filter((h) => h.memberId === member.id) }))
+    .map((member) => ({ member, memberHoldings: displayedHoldings.filter((h) => h.memberId === member.id) }))
     .filter((group) => group.memberHoldings.length > 0)
 
   return (
@@ -115,9 +188,10 @@ export function Portfolio() {
       <div className="container max-w-lg md:max-w-2xl lg:max-w-4xl py-12 md:py-16 space-y-6 pb-28">
         <header className="space-y-1">
           <h1 className="font-display text-display">Your holdings</h1>
-          {state === 'loaded' && holdings.length > 0 && (
+          {displayedReady && displayedHoldings.length > 0 && (
             <p className="text-caption text-muted-foreground">
-              {holdings.length} holding{holdings.length === 1 ? '' : 's'} · {formatInr(String(totalCurrentValue))}
+              {displayedHoldings.length} holding{displayedHoldings.length === 1 ? '' : 's'} ·{' '}
+              {formatInr(String(totalCurrentValue))}
             </p>
           )}
         </header>
@@ -138,7 +212,7 @@ export function Portfolio() {
           <LedgerTabStrip
             ledgers={ledgers}
             activeLedgerId={activeLedgerId}
-            onSelect={setActiveLedgerId}
+            onSelect={handleSelectLedger}
             sourceHoldings={holdings}
             unreadableCount={unreadableHoldingsCount}
             onLedgerCreated={handleLedgerCreated}
@@ -146,7 +220,25 @@ export function Portfolio() {
           />
         )}
 
-        {state === 'loaded' && holdings.length === 0 && (
+        {/* Never on the Current tab (DATA_MODEL.md:348-349) — only once the
+            selected ledger's own holdings have actually loaded, so the strip
+            never renders against a moment-ago ledger's stale numbers. */}
+        {state === 'loaded' && !isBaselineActive && activeLedger && ledgerHoldingsState === 'loaded' && (
+          <LedgerCompareStrip ledger={activeLedger} ledgerHoldings={ledgerHoldings} baselineHoldings={holdings} />
+        )}
+
+        {displayedLoading && (
+          <div className="space-y-3">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        )}
+
+        {displayedError && (
+          <p className="text-caption text-destructive">We couldn't load this ledger's holdings. Refresh to try again.</p>
+        )}
+
+        {displayedReady && displayedHoldings.length === 0 && (
           <div className="rounded-lg border border-dashed p-8 text-center space-y-4">
             <p className="text-body font-medium">Nothing recorded yet.</p>
             <p className="text-body text-muted-foreground">
@@ -158,7 +250,7 @@ export function Portfolio() {
           </div>
         )}
 
-        {state === 'loaded' && holdings.length > 0 && (
+        {displayedReady && displayedHoldings.length > 0 && (
           <div className="space-y-6">
             {groupedByMember.map(({ member, memberHoldings }) => {
               const memberTotal = memberHoldings.reduce((sum, h) => sum + Number(h.currentValue), 0)
@@ -197,7 +289,7 @@ export function Portfolio() {
         )}
       </div>
 
-      {state === 'loaded' && holdings.length > 0 && (
+      {displayedReady && displayedHoldings.length > 0 && (
         <Button
           onClick={openAddSheet}
           size="icon"
@@ -221,7 +313,9 @@ export function Portfolio() {
               submitLabel={editingHolding ? 'Save changes' : 'Add to plan'}
               submittingLabel={editingHolding ? 'Saving…' : 'Adding…'}
               analyticsSurface="portfolio"
+              ledgerId={isBaselineActive ? undefined : (activeLedgerId ?? undefined)}
               onSaved={handleSaved}
+              onDeleted={handleDeleted}
             />
           </div>
         </SheetContent>

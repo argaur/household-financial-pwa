@@ -12,6 +12,7 @@ import { LIBRARY_SECTIONS } from '@/lib/library-sections'
 import {
   createHolding,
   updateHolding,
+  deleteHolding,
   HoldingsApiError,
   ASSET_CLASSES,
   type Holding,
@@ -33,7 +34,18 @@ interface HoldingFormProps {
   submitLabel: string
   submittingLabel: string
   analyticsSurface: string
+  /**
+   * The non-baseline ledger this holding belongs to. Threaded into
+   * `createHolding` on add; an edit never takes this — a holding keeps
+   * whichever ledger it already lives in (server/routes/holdings.ts: PATCH
+   * and DELETE act on `?id=` alone). Its presence is also what gates the
+   * "Remove holding" affordance and the `ledger_edited` event: both are
+   * defined as happening inside a non-baseline ledger, never Current.
+   */
+  ledgerId?: string
   onSaved: (holding: Holding) => void
+  /** Fired after a successful delete, so the caller can drop the row and close the sheet. */
+  onDeleted?: (id: string) => void
 }
 
 export function HoldingForm({
@@ -43,11 +55,14 @@ export function HoldingForm({
   submitLabel,
   submittingLabel,
   analyticsSurface,
+  ledgerId,
   onSaved,
+  onDeleted,
 }: HoldingFormProps) {
   const { getToken } = useAuth()
   const editing = Boolean(initialHolding)
   const online = useOnline()
+  const canDelete = editing && Boolean(ledgerId)
 
   const [memberId, setMemberId] = useState(initialHolding?.memberId ?? members[0]?.id ?? '')
   const [instrumentId, setInstrumentId] = useState(initialHolding?.instrumentId ?? '')
@@ -63,6 +78,9 @@ export function HoldingForm({
   const [notes, setNotes] = useState(initialHolding?.notes ?? '')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const selectedInstrument = instruments.find((i) => i.id === instrumentId)
   const assetClassLabel = selectedInstrument
@@ -97,12 +115,19 @@ export function HoldingForm({
 
     try {
       const token = await getToken()
+      // Editing never carries ledgerId — a holding keeps its ledger. Adding
+      // threads it through so the row is created in the ledger being viewed
+      // rather than always landing in Current.
       const holding = editing
         ? await updateHolding(token, initialHolding!.id, input, initialHolding!.version)
-        : await createHolding(token, input)
+        : await createHolding(token, input, ledgerId)
       track(editing ? 'holding_updated' : 'holding_created', {
         member_id: holding.memberId,
       })
+      // "A holding is added, changed, or removed inside a NON-baseline
+      // ledger" (METRICS_PLAN feature 2) — never for Current, hence gated on
+      // ledgerId rather than firing unconditionally.
+      if (ledgerId) track('ledger_edited', {})
       onSaved(holding)
     } catch (err) {
       const message =
@@ -113,6 +138,23 @@ export function HoldingForm({
       track('error_shown', { error_type: 'holding_save_failed', surface: analyticsSurface, message })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!initialHolding) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const token = await getToken()
+      await deleteHolding(token, initialHolding.id)
+      track('ledger_edited', {})
+      onDeleted?.(initialHolding.id)
+    } catch {
+      setDeleteError("Couldn't remove that holding. Please try again.")
+      setConfirmingDelete(false)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -286,6 +328,47 @@ export function HoldingForm({
       >
         {submitting ? submittingLabel : submitLabel}
       </Button>
+
+      {canDelete && (
+        <div className="space-y-2 border-t pt-4">
+          {deleteError && <p className="text-caption text-destructive">{deleteError}</p>}
+          {confirmingDelete ? (
+            <div className="space-y-2">
+              <p className="text-caption text-muted-foreground">Remove this holding from this ledger? This can't be undone.</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="flex-1"
+                  disabled={!online || deleting}
+                  onClick={handleDelete}
+                >
+                  {deleting ? 'Removing…' : 'Remove holding'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="flex-1"
+                  disabled={deleting}
+                  onClick={() => setConfirmingDelete(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-destructive hover:text-destructive"
+              disabled={submitting}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Remove holding
+            </Button>
+          )}
+        </div>
+      )}
     </form>
   )
 }

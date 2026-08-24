@@ -134,9 +134,19 @@ async function readBack(dataKey: CryptoKey, wire: HoldingWire | null): Promise<H
   return outcome.row
 }
 
-export async function listHoldings(token: string | null): Promise<HoldingList> {
+/**
+ * Query param, not a /:id path segment — see the module doc on
+ * `updateHolding` below for why. `ledgerId`, when supplied, scopes the fetch
+ * to that ledger's holdings; omitted, this is unchanged: the household's
+ * Current/baseline holdings (server/routes/holdings.ts).
+ */
+function holdingsPath(ledgerId?: string): string {
+  return ledgerId ? `/api/holdings?ledgerId=${encodeURIComponent(ledgerId)}` : '/api/holdings'
+}
+
+export async function listHoldings(token: string | null, ledgerId?: string): Promise<HoldingList> {
   const vault = await openVault()
-  const res = await encryptedFetch('/api/holdings', token, fail)
+  const res = await encryptedFetch(holdingsPath(ledgerId), token, fail)
   const body = (await res.json()) as HoldingsListResponse
   const decrypted = await decryptWireRows(TABLE, vault.dataKey, body.holdings, holdingPayloadSchema, assemble)
   return {
@@ -146,14 +156,18 @@ export async function listHoldings(token: string | null): Promise<HoldingList> {
   }
 }
 
-export async function createHolding(token: string | null, input: HoldingInput): Promise<Holding> {
+/**
+ * @param ledgerId when supplied, the holding is created inside that ledger;
+ * omitted, it files into the household's baseline (Current) as before.
+ */
+export async function createHolding(token: string | null, input: HoldingInput, ledgerId?: string): Promise<Holding> {
   const vault = await openVault()
   // The id is generated here because the AAD binds the ciphertext to its row,
   // and that binding has to exist before the bytes leave the browser.
   const id = newRowId()
   const sealed = await sealRow(TABLE, vault, id, 1, toPayload(input))
 
-  const res = await encryptedFetch('/api/holdings', token, fail, {
+  const res = await encryptedFetch(holdingsPath(ledgerId), token, fail, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id, memberId: input.memberId, ...sealed }),
@@ -186,4 +200,13 @@ export async function updateHolding(
   })
   const body = (await res.json()) as HoldingResponse
   return readBack(vault.dataKey, body.holding)
+}
+
+/**
+ * Acts on the holding by id alone, in whichever ledger it lives — the route
+ * never takes `?ledgerId=` for PATCH/DELETE (server/routes/holdings.ts). No
+ * vault needed: a delete carries no ciphertext to seal.
+ */
+export async function deleteHolding(token: string | null, id: string): Promise<void> {
+  await encryptedFetch(`/api/holdings?id=${encodeURIComponent(id)}`, token, fail, { method: 'DELETE' })
 }
