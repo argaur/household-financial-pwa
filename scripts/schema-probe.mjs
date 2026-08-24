@@ -21,9 +21,32 @@
  */
 
 import dotenv from 'dotenv'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { neon } from '@neondatabase/serverless'
 
 dotenv.config({ path: '.env.local' })
+
+/**
+ * How many migrations the repository thinks exist. Read from `_journal.json`
+ * rather than hardcoded: the count was written as a literal `3` when this
+ * script was authored, which meant every future migration would make the probe
+ * report a mismatch that was really just the probe being stale. The whole point
+ * of this file is to compare the repository against the database, so the
+ * repository side of that comparison has to be read, not remembered.
+ */
+function journalCount() {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const journal = JSON.parse(
+      readFileSync(join(here, '..', 'drizzle', 'migrations', 'meta', '_journal.json'), 'utf8'),
+    )
+    return { count: journal.entries.length, tags: journal.entries.map((e) => e.tag) }
+  } catch {
+    return { count: null, tags: [] }
+  }
+}
 
 // Assembled rather than written literally: the repository-wide secret guard
 // blocks any command whose output could carry a secret-shaped identifier, and
@@ -145,13 +168,70 @@ async function main() {
 
   const applied0002 = stillNotNull.length === 0
 
+  // ── 0003/0004: the D-016 ledger tables ───────────────────────────────────
+  //
+  // Checked structurally rather than by migration number, because "did 0003
+  // run" is not the question that matters — "is the ledger relationship in a
+  // state the app can rely on" is. The three integrity counts at the end are
+  // the D-016 Chunk 1 acceptance criteria, asked of the database directly.
+  section('D-016 — ledgers')
+  const hasLedgers = tableNames.includes('ledgers')
+  line('ledgers table', hasLedgers ? 'present' : 'MISSING')
+
+  let ledgersOk = false
+  if (hasLedgers) {
+    const ledgerIdNullable = nullableOf.get('holdings.ledger_id')
+    line(
+      'holdings.ledger_id',
+      ledgerIdNullable === undefined
+        ? 'ABSENT'
+        : ledgerIdNullable
+          ? 'present, nullable (pre-0004 — backfill not yet locked in)'
+          : 'present, NOT NULL (0004 applied)',
+    )
+
+    const [idx] = await sql`
+      select count(*)::int as c from pg_indexes
+      where schemaname = 'public' and tablename = 'ledgers'
+        and indexdef ilike '%unique%' and indexdef ilike '%is_baseline%'
+    `
+    line('one-baseline-per-household index', idx.c > 0 ? 'present' : 'MISSING')
+
+    const [integrity] = await sql`
+      select
+        (select count(*)::int from holdings where ledger_id is null) as orphan_holdings,
+        (select count(*)::int from holdings h join ledgers l on l.id = h.ledger_id
+           where h.household_id <> l.household_id)                   as cross_household,
+        (select count(*)::int from ledgers where is_baseline)         as baselines,
+        (select count(*)::int from households)                        as households,
+        (select count(*)::int from ledgers)                           as ledgers
+    `
+    line('ledgers', String(integrity.ledgers))
+    line('holdings with no ledger', `${integrity.orphan_holdings}${integrity.orphan_holdings ? '  <-- BACKFILL INCOMPLETE' : ''}`)
+    line(
+      'holdings under a foreign ledger',
+      `${integrity.cross_household}${integrity.cross_household ? '  <-- DATA CORRUPTION' : ''}`,
+    )
+    line(
+      'baseline ledgers vs households',
+      `${integrity.baselines} / ${integrity.households}${integrity.baselines === integrity.households ? '' : '  <-- MISMATCH'}`,
+    )
+
+    ledgersOk =
+      idx.c > 0 &&
+      integrity.orphan_holdings === 0 &&
+      integrity.cross_household === 0 &&
+      integrity.baselines === integrity.households
+  }
+
   // ── What drizzle itself thinks it applied ────────────────────────────────
   section("drizzle's own ledger")
+  const journal = journalCount()
   try {
     const ledger = await sql`select count(*)::int as c from drizzle.__drizzle_migrations`
     line('rows applied', String(ledger[0].c))
-    line('rows in _journal', '3 (0000, 0001, 0002)')
-    if (ledger[0].c !== 3) {
+    line('rows in _journal', journal.count === null ? '(journal unreadable)' : `${journal.count} (${journal.tags.join(', ')})`)
+    if (journal.count !== null && ledger[0].c !== journal.count) {
       console.log('  ^ mismatch: the ledger and the repository disagree about how many ran')
     }
   } catch (err) {
@@ -185,6 +265,19 @@ async function main() {
   section('Verdict')
   if (applied0001 && applied0002) {
     console.log('MIGRATION STATE: 0000, 0001, 0002 all applied — encryption code can write here.')
+    if (!hasLedgers) {
+      console.log('D-016 LEDGERS: not yet migrated here (pre-0003).')
+    } else if (ledgersOk) {
+      const locked = nullableOf.get('holdings.ledger_id') === false
+      console.log(
+        locked
+          ? 'D-016 LEDGERS: migrated, backfilled and locked (ledger_id NOT NULL). Chunk 1 complete here.'
+          : 'D-016 LEDGERS: migrated and backfilled, integrity clean — ready for the NOT NULL migration.',
+      )
+    } else {
+      console.log('D-016 LEDGERS: PRESENT BUT NOT CLEAN — see the failures flagged above.')
+      console.log('  do NOT apply the NOT NULL migration against this database.')
+    }
   } else if (!applied0001) {
     console.log('MIGRATION STATE: stopped at 0000. 0001 has NOT been applied.')
     console.log(`  missing: ${hasKeyTable ? '' : `${keyTableName} table; `}${missingCrypto.join(', ') || '—'}`)

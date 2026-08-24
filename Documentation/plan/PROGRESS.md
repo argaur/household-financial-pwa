@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-08-24 — D-016 Chunk 1: ledger schema migration (branch-verified, NOT promoted)
+
+1. **Slices done:** D-016 Ledger Slice 1, **Chunk 1 of 3** — `ledgers` table and `holdings.ledger_id`, additive-only. Applied and fully verified on Neon branch `d016-chunk1-migration-test`; **production is deliberately untouched** and still sits at migration 0002, pending Gaurav's go-ahead to promote.
+2. **Current state:** Migration `0003` adds `ledgers` + nullable `ledger_id` + a partial unique index on `(household_id) WHERE is_baseline`; `scripts/backfill-ledgers.mjs` (idempotent, dry-run by default) mints one `Current` ledger per household and backfills every holding; `0004` then sets `NOT NULL`. Branch verified 6 holdings → 6, zero orphans, zero cross-household misfiling, 1 baseline / 1 household. Suite **993/993**, typecheck clean. `db:probe` extended with a D-016 section and now reads `_journal.json` instead of a hardcoded `3` — it would otherwise have reported a false mismatch on every future migration.
+3. **Next slice:** Chunk 2 — ledger CRUD API + tab strip UI. **Its shape changed before any code was written:** the plan's server-side snapshot-copy and server-computed compare are both impossible under D-014, so both move client-side (see Open decisions).
+4. **Open decisions:** **The compare strip cannot be a SQL aggregate.** `DATA_MODEL.md` line 358 specifies `SUM(current_value)` / equity share / `SUM(monthly_sip)` scoped by `ledger_id`, but those columns are `NULL` on every encrypted row — migration 0002 relaxed them precisely so ciphertext could be written. Same for the snapshot copy: the server holds no data key, and AAD binds ciphertext to `{tableName, householdId, rowId, version}`, so a verbatim byte copy into a new row id would be permanently undecryptable. Both approved to move client-side; `DATA_MODEL.md` §358 and the plan's §4 API table are now stale and need amending. Also new: the `(ledger_id, asset_class)` composite index was dropped from the plan for the same reason.
+5. **Kill criterion check:** Project feature-complete since 2026-07-21. OK.
+
+---
+
 ## 2026-07-28 — live click-throughs (Slices 2/4/5, 9 partial) + nudge analytics fix
 
 1. **Slices done:** None — verification and one closed review finding. Slices 2, 4 and 5 all **PASS** live on a purpose-made throwaway account; Slice 9 passes steps 1–5 before a browser-extension disconnect. The two manual Clerk-dashboard steps are done (Gaurav — the panel is a cross-origin Svix iframe that ignores synthetic clicks), verified by probing rather than by trusting the dashboard: unsigned `POST /api/clerk-webhook` returned 500 → 401 once the secret actually reached the running function.

@@ -10,6 +10,7 @@ import {
   householdKeys,
   instruments,
   goals,
+  ledgers,
 } from './schema'
 
 /**
@@ -259,5 +260,154 @@ describe('drizzle/migrations/0002 — NOT NULL relaxation, additive only', () =>
 
     const dropNotNullMatches = sql.match(/ALTER\s+TABLE\s+\S+\s+ALTER\s+COLUMN\s+\S+\s+DROP\s+NOT\s+NULL/g) ?? []
     expect(dropNotNullMatches).toHaveLength(11)
+  })
+})
+
+/**
+ * D-016 — ledgers table and holdings.ledger_id (nullable, backfill lands in a
+ * later migration before NOT NULL is applied).
+ */
+describe('drizzle/schema.ts — ledgers table', () => {
+  it('maps to the ledgers table', () => {
+    expect(getTableName(ledgers)).toBe('ledgers')
+  })
+
+  it('has the expected columns', () => {
+    const columns = getTableColumns(ledgers)
+    const expectedKeys = [
+      'id',
+      'householdId',
+      'name',
+      'isBaseline',
+      'origin',
+      'aiEditsUsed',
+      'snapshotOf',
+      'projectionHorizonYears',
+      'createdAt',
+      'updatedAt',
+    ].sort()
+
+    expect(Object.keys(columns).sort()).toEqual(expectedKeys)
+
+    expect(columns.id.primary).toBe(true)
+    expect(columns.id.notNull).toBe(true)
+
+    expect(columns.householdId.notNull).toBe(true)
+    expect(columns.name.notNull).toBe(true)
+
+    expect(columns.isBaseline.notNull).toBe(true)
+    expect(columns.isBaseline.hasDefault).toBe(true)
+    expect(columns.isBaseline.default).toBe(false)
+
+    expect(columns.origin.notNull).toBe(true)
+    expect(columns.origin.hasDefault).toBe(true)
+    expect(columns.origin.default).toBe('manual')
+
+    expect(columns.aiEditsUsed.notNull).toBe(true)
+    expect(columns.aiEditsUsed.hasDefault).toBe(true)
+    expect(columns.aiEditsUsed.default).toBe(0)
+
+    // Nullable, self-referencing FK
+    expect(columns.snapshotOf.notNull).toBe(false)
+
+    expect(columns.projectionHorizonYears.notNull).toBe(false)
+
+    expect(columns.createdAt.notNull).toBe(true)
+    expect(columns.createdAt.hasDefault).toBe(true)
+    expect(columns.updatedAt.notNull).toBe(true)
+    expect(columns.updatedAt.hasDefault).toBe(true)
+  })
+})
+
+describe('drizzle/schema.ts — holdings.ledger_id', () => {
+  it('is NOT NULL — 0003 added it nullable, the backfill ran, 0004 locked it in', () => {
+    const columns = getTableColumns(holdings)
+    expect(columns.ledgerId).toBeDefined()
+    expect(columns.ledgerId.notNull).toBe(true)
+  })
+
+  it('still has household_id, unchanged and NOT NULL', () => {
+    const columns = getTableColumns(holdings)
+    expect(columns.householdId).toBeDefined()
+    expect(columns.householdId.notNull).toBe(true)
+  })
+})
+
+describe('drizzle/migrations/0003 — ledgers table, additive only', () => {
+  const migrationsDir = path.resolve(__dirname, 'migrations')
+
+  function migration0003File(): string {
+    const files = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql') && f.startsWith('0003'))
+      .sort()
+    if (files.length === 0) {
+      throw new Error('No migration SQL file starting with "0003" found — run `npm run db:generate` first.')
+    }
+    return files[0]
+  }
+
+  it('contains no DROP TABLE, DROP COLUMN, SET NOT NULL, RENAME, or TRUNCATE statements', () => {
+    const file = migration0003File()
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8').toUpperCase()
+
+    expect(sql).not.toMatch(/DROP\s+TABLE/)
+    expect(sql).not.toMatch(/DROP\s+COLUMN/)
+    expect(sql).not.toMatch(/SET\s+NOT\s+NULL/)
+    expect(sql).not.toMatch(/RENAME/)
+    expect(sql).not.toMatch(/TRUNCATE/)
+  })
+
+  it('creates the ledgers table and adds holdings.ledger_id without NOT NULL', () => {
+    const file = migration0003File()
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8').toUpperCase()
+
+    expect(sql).toMatch(/CREATE\s+TABLE\s+"?LEDGERS"?/)
+    expect(sql).toMatch(/ADD\s+COLUMN\s+"?LEDGER_ID"?/)
+    expect(sql).not.toMatch(/"LEDGER_ID"[^,]*NOT\s+NULL/)
+  })
+
+  it('creates a partial unique index on ledgers(household_id) WHERE is_baseline', () => {
+    const file = migration0003File()
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8').toUpperCase()
+
+    expect(sql).toMatch(/CREATE\s+UNIQUE\s+INDEX.*LEDGERS_HOUSEHOLD_BASELINE_IDX/)
+    expect(sql).toMatch(/WHERE\s+"LEDGERS"\."IS_BASELINE"/)
+  })
+})
+
+/**
+ * The cutover half of the additive -> backfill -> cutover sequence. Kept as its
+ * own migration deliberately: 0003 and 0004 are separated by a data step
+ * (scripts/backfill-ledgers.mjs), and collapsing them into one file would make
+ * the constraint fail on any database that already holds rows.
+ */
+describe('drizzle/migrations/0004 — holdings.ledger_id cutover', () => {
+  const migrationsDir = path.resolve(__dirname, 'migrations')
+
+  function migration0004File(): string {
+    const files = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql') && f.startsWith('0004'))
+      .sort()
+    if (files.length === 0) {
+      throw new Error('No migration SQL file starting with "0004" found — run `npm run db:generate` first.')
+    }
+    return files[0]
+  }
+
+  it('sets ledger_id NOT NULL and does nothing else destructive', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0004File()), 'utf-8').toUpperCase()
+
+    expect(sql).toMatch(/ALTER\s+COLUMN\s+"?LEDGER_ID"?\s+SET\s+NOT\s+NULL/)
+    expect(sql).not.toMatch(/DROP\s+TABLE/)
+    expect(sql).not.toMatch(/DROP\s+COLUMN/)
+    expect(sql).not.toMatch(/TRUNCATE/)
+    expect(sql).not.toMatch(/DELETE\s+FROM/)
+  })
+
+  it('leaves holdings.household_id alone — it is retained, never dropped', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0004File()), 'utf-8').toUpperCase()
+    expect(sql).not.toMatch(/HOUSEHOLD_ID/)
   })
 })

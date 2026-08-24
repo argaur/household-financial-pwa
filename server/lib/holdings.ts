@@ -2,6 +2,7 @@ import { eq, and } from 'drizzle-orm'
 import { holdings, familyMembers } from '../../drizzle/schema.js'
 import type { db as Db } from './db.js'
 import type { MemberScopedCreate, EncryptedUpdate, UpdateOutcome } from './envelope.js'
+import { ensureBaselineLedger } from './ledgers.js'
 
 export type Holding = typeof holdings.$inferSelect
 
@@ -48,6 +49,14 @@ export async function createHolding(
 ): Promise<Holding> {
   await assertMemberInHousehold(db, householdId, input.memberId)
 
+  // Every holding created through this v1 route belongs to the household's
+  // baseline ledger — "Current". D-016 added ledgers alongside holdings rather
+  // than replacing the household relationship, so this path's behaviour is
+  // unchanged: what used to be "the household's holdings" is now, identically,
+  // "the household's Current ledger's holdings". Ledger-scoped creation is a
+  // separate route; this one never writes into a non-baseline ledger.
+  const baseline = await ensureBaselineLedger(db, householdId)
+
   // `version` is left to its column default of 1 — the client encrypted
   // against version 1, and letting the database own it means a client cannot
   // announce a version it did not earn.
@@ -56,6 +65,7 @@ export async function createHolding(
     .values({
       id: input.id,
       householdId,
+      ledgerId: baseline.id,
       memberId: input.memberId,
       ciphertext: input.ciphertext,
       iv: input.iv,

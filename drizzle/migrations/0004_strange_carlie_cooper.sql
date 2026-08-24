@@ -1,0 +1,1 @@
+ALTER TABLE "holdings" ALTER COLUMN "ledger_id" SET NOT NULL;

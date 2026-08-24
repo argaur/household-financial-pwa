@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { familyMembers, holdings } from '../../drizzle/schema.js'
+import { familyMembers, holdings, ledgers } from '../../drizzle/schema.js'
 import { listHoldings, createHolding, updateHolding, HoldingError, type CreateHoldingInput } from './holdings.js'
+
+type LedgerRow = { id: string; householdId: string; name: string; isBaseline: boolean; origin: string }
 
 /**
  * The lib layer now stores and returns opaque envelopes. What is worth testing
@@ -12,10 +14,13 @@ import { listHoldings, createHolding, updateHolding, HoldingError, type CreateHo
 function fakeDb(rows: { members: unknown[]; holdings: unknown[] }, options: { updateMatches?: boolean } = {}) {
   const inserted: Array<Record<string, unknown>> = []
   const updated: Array<Record<string, unknown>> = []
+  const ledgerRows: LedgerRow[] = []
+  let ledgerCounter = 0
   function pickRows(table: unknown): unknown[] {
     if (table === familyMembers) return rows.members
     if (table === holdings) return rows.holdings
-    return []
+    if (table === ledgers) return ledgerRows
+    throw new Error('fake db: unhandled table in select()')
   }
   return {
     select: vi.fn(() => ({
@@ -28,13 +33,27 @@ function fakeDb(rows: { members: unknown[]; holdings: unknown[] }, options: { up
         }),
       })),
     })),
-    insert: vi.fn(() => ({
+    insert: vi.fn((table: unknown) => ({
       values: vi.fn((row: Record<string, unknown>) => ({
         returning: vi.fn(() => {
-          // `inserted` records the raw values() payload, so a test can assert
-          // exactly which columns the lib layer writes.
-          inserted.push(row)
-          return Promise.resolve([{ version: 1, createdAt: new Date(), updatedAt: new Date(), ...row }])
+          if (table === ledgers) {
+            const ledgerRow: LedgerRow = {
+              id: (row.id as string) ?? `ledger-${++ledgerCounter}`,
+              householdId: row.householdId as string,
+              name: row.name as string,
+              isBaseline: row.isBaseline as boolean,
+              origin: row.origin as string,
+            }
+            ledgerRows.push(ledgerRow)
+            return Promise.resolve([ledgerRow])
+          }
+          if (table === holdings) {
+            // `inserted` records the raw values() payload, so a test can assert
+            // exactly which columns the lib layer writes.
+            inserted.push(row)
+            return Promise.resolve([{ version: 1, createdAt: new Date(), updatedAt: new Date(), ...row }])
+          }
+          throw new Error('fake db: unhandled table in insert()')
         }),
       })),
     })),
@@ -81,14 +100,31 @@ describe('createHolding', () => {
     expect(db._inserted).toHaveLength(1)
     // Exactly the readable columns plus the envelope — no amount, no asset
     // class, no instrument, no note can reach the database from here.
+    //
+    // `ledgerId` joined this list with D-016. It does not widen what a caller
+    // can write: like `householdId`, it is resolved server-side (from the
+    // household's baseline ledger) and is not readable from the request body.
+    // The property this assertion exists to protect — that no plaintext
+    // financial field reaches a column — is unchanged.
     expect(Object.keys(db._inserted[0]).sort()).toEqual([
       'alg',
       'ciphertext',
       'householdId',
       'id',
       'iv',
+      'ledgerId',
       'memberId',
     ])
+  })
+
+  it('files the holding under the household baseline ledger, not a client-supplied one', async () => {
+    const db = fakeDb({ members: [member], holdings: [] })
+    // A caller trying to plant its own ledger_id — the input type does not carry
+    // one, and the insert must ignore it rather than honour it.
+    await createHolding(db as never, 'h1', { ...validInput, ledgerId: 'attacker-ledger' } as never)
+
+    expect(db._inserted[0].ledgerId).toBeDefined()
+    expect(db._inserted[0].ledgerId).not.toBe('attacker-ledger')
   })
 
   it('leaves the version to the column default of 1 rather than accepting one', async () => {

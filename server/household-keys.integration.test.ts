@@ -33,8 +33,18 @@ interface HouseholdKeyRow {
   updatedAt: Date
 }
 
+interface LedgerRow {
+  id: string
+  householdId: string
+  name: string
+  isBaseline: boolean
+  origin: string
+}
+
 let households: HouseholdRow[] = []
 let keyRows: HouseholdKeyRow[] = []
+let ledgerRows: LedgerRow[] = []
+let ledgerCounter = 0
 
 vi.mock('./lib/db.js', () => ({
   db: {
@@ -49,12 +59,13 @@ vi.mock('./lib/db.js', () => ({
               return field ? record[field] === value : true
             })
           }
-          const rows =
-            table === householdsTableRef
-              ? households.filter((h) => matches(h, { owner_user_id: 'ownerUserId', id: 'id' }))
-              : table === householdKeysTableRef
-                ? keyRows.filter((k) => matches(k, { household_id: 'householdId' }))
-                : []
+          function rowsFor(): unknown[] {
+            if (table === householdsTableRef) return households.filter((h) => matches(h, { owner_user_id: 'ownerUserId', id: 'id' }))
+            if (table === householdKeysTableRef) return keyRows.filter((k) => matches(k, { household_id: 'householdId' }))
+            if (table === ledgersTableRef) return ledgerRows.filter((l) => matches(l, { household_id: 'householdId', is_baseline: 'isBaseline', id: 'id' }))
+            throw new Error('fake db: unhandled table in select()')
+          }
+          const rows = rowsFor()
           const result = Promise.resolve(rows) as Promise<unknown[]> & { limit: (n: number) => Promise<unknown[]> }
           result.limit = (n: number) => Promise.resolve(rows.slice(0, n))
           return result
@@ -97,8 +108,23 @@ vi.mock('./lib/db.js', () => ({
           keyRows.push(created)
           return [created]
         }
-        const run = (skipOnConflict: boolean) =>
-          table === householdsTableRef ? insertHousehold() : insertKey(skipOnConflict)
+        function insertLedger() {
+          const created: LedgerRow = {
+            id: (row.id as string) ?? `ledger-${++ledgerCounter}`,
+            householdId: row.householdId as string,
+            name: row.name as string,
+            isBaseline: row.isBaseline as boolean,
+            origin: row.origin as string,
+          }
+          ledgerRows.push(created)
+          return [created]
+        }
+        const run = (skipOnConflict: boolean) => {
+          if (table === householdsTableRef) return insertHousehold()
+          if (table === ledgersTableRef) return insertLedger()
+          if (table === householdKeysTableRef) return insertKey(skipOnConflict)
+          throw new Error('fake db: unhandled table in insert()')
+        }
         return {
           returning: () => Promise.resolve(run(false)),
           onConflictDoNothing: () => ({ returning: () => Promise.resolve(run(true)) }),
@@ -136,6 +162,7 @@ vi.mock('drizzle-orm', async (importOriginal) => {
 const schema = await import('../drizzle/schema.js')
 const householdsTableRef = schema.households
 const householdKeysTableRef = schema.householdKeys
+const ledgersTableRef = schema.ledgers
 
 const { app } = await import('./app.js')
 const { householdKeysRateLimiter, HOUSEHOLD_KEYS_RATE_LIMIT } = await import('./routes/household-keys.js')
@@ -227,6 +254,8 @@ describe('household-keys routes', () => {
   beforeEach(() => {
     households = []
     keyRows = []
+    ledgerRows = []
+    ledgerCounter = 0
     householdSeq = 0
     householdKeysRateLimiter.reset()
   })
@@ -452,6 +481,8 @@ describe('household-keys PATCH — credential rotation', () => {
   beforeEach(() => {
     households = []
     keyRows = []
+    ledgerRows = []
+    ledgerCounter = 0
     householdSeq = 0
     householdKeysRateLimiter.reset()
   })

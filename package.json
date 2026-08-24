@@ -15,7 +15,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed-instruments.ts",
-    "db:probe": "node scripts/schema-probe.mjs"
+    "db:probe": "node scripts/schema-probe.mjs",
+    "db:backfill-ledgers": "node scripts/backfill-ledgers.mjs"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.20.0",

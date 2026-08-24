@@ -2,6 +2,7 @@ import { eq, and } from 'drizzle-orm'
 import { households } from '../../drizzle/schema.js'
 import type { db as Db } from './db.js'
 import type { HouseholdScopedCreate, EncryptedUpdate, UpdateOutcome } from './envelope.js'
+import { ensureBaselineLedger } from './ledgers.js'
 
 export type Household = typeof households.$inferSelect
 
@@ -46,6 +47,14 @@ export async function createHouseholdForOwner(
     })
     .returning()
   if (!row) throw new Error('Insert of a household returned no row')
+
+  // Every household gets its baseline "Current" ledger at creation time
+  // (Documentation/design/DATA_MODEL.md, D-016 Bundle Additions). Existing
+  // households were given theirs by scripts/backfill-ledgers.mjs; this is the
+  // same guarantee for new ones. Without it the household's first holding write
+  // would have nothing to point `ledger_id` at.
+  await ensureBaselineLedger(db, row.id)
+
   return row
 }
 

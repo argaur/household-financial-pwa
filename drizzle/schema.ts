@@ -1,5 +1,5 @@
-import { pgTable, uuid, text, boolean, numeric, integer, timestamp, date, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { pgTable, uuid, text, boolean, numeric, integer, timestamp, date, jsonb, uniqueIndex, index, type AnyPgColumn } from 'drizzle-orm/pg-core'
+import { relations, sql } from 'drizzle-orm'
 
 /**
  * Schema source of truth: Documentation/design/DATA_MODEL.md.
@@ -61,11 +61,35 @@ export const instruments = pgTable('instruments', {
 
 export const assetClassEnum = ['equity', 'debt', 'gold', 'hybrid', 'real-estate', 'alternative'] as const
 
+export const ledgerOriginEnum = ['manual', 'ai_suggestion'] as const
+
+export const ledgers = pgTable('ledgers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  isBaseline: boolean('is_baseline').notNull().default(false),
+  origin: text('origin', { enum: ledgerOriginEnum }).notNull().default('manual'),
+  aiEditsUsed: integer('ai_edits_used').notNull().default(0),
+  snapshotOf: uuid('snapshot_of').references((): AnyPgColumn => ledgers.id),
+  projectionHorizonYears: integer('projection_horizon_years'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  householdIdIdx: index('ledgers_household_id_idx').on(t.householdId),
+  householdBaselineIdx: uniqueIndex('ledgers_household_baseline_idx').on(t.householdId).where(sql`${t.isBaseline}`),
+}))
+
 export const holdings = pgTable('holdings', {
   id: uuid('id').defaultRandom().primaryKey(),
   householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
   memberId: uuid('member_id').notNull().references(() => familyMembers.id, { onDelete: 'cascade' }),
   instrumentId: uuid('instrument_id').references(() => instruments.id),
+  // NOT NULL since migration 0004, which ran only after 0003 added the column
+  // nullable and scripts/backfill-ledgers.mjs proved every existing row had been
+  // pointed at its household's baseline ledger. Additive -> backfill -> cutover,
+  // in that order: adding this constraint in 0003 would have failed outright on
+  // any database holding real rows.
+  ledgerId: uuid('ledger_id').notNull().references(() => ledgers.id, { onDelete: 'cascade' }),
   assetClass: text('asset_class', { enum: assetClassEnum }),
   investedAmount: numeric('invested_amount'),
   currentValue: numeric('current_value'),
@@ -86,6 +110,7 @@ export const holdings = pgTable('holdings', {
 }, (t) => ({
   householdIdIdx: index('holdings_household_id_idx').on(t.householdId),
   memberIdIdx: index('holdings_member_id_idx').on(t.memberId),
+  ledgerIdIdx: index('holdings_ledger_id_idx').on(t.ledgerId),
 }))
 
 export const protectionTypeEnum = ['term-life', 'health', 'disability', 'other'] as const
@@ -151,7 +176,19 @@ export const householdsRelations = relations(households, ({ many, one }) => ({
   holdings: many(holdings),
   protection: many(protection),
   goals: many(goals),
+  ledgers: many(ledgers),
   householdKeys: one(householdKeys, { fields: [households.id], references: [householdKeys.householdId] }),
+}))
+
+export const ledgersRelations = relations(ledgers, ({ one, many }) => ({
+  household: one(households, { fields: [ledgers.householdId], references: [households.id] }),
+  holdings: many(holdings),
+  snapshotOf: one(ledgers, {
+    fields: [ledgers.snapshotOf],
+    references: [ledgers.id],
+    relationName: 'ledgerSnapshotOf',
+  }),
+  snapshots: many(ledgers, { relationName: 'ledgerSnapshotOf' }),
 }))
 
 export const familyMembersRelations = relations(familyMembers, ({ one, many }) => ({
@@ -164,6 +201,7 @@ export const holdingsRelations = relations(holdings, ({ one }) => ({
   household: one(households, { fields: [holdings.householdId], references: [households.id] }),
   member: one(familyMembers, { fields: [holdings.memberId], references: [familyMembers.id] }),
   instrument: one(instruments, { fields: [holdings.instrumentId], references: [instruments.id] }),
+  ledger: one(ledgers, { fields: [holdings.ledgerId], references: [ledgers.id] }),
 }))
 
 export const protectionRelations = relations(protection, ({ one }) => ({

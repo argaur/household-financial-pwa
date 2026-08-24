@@ -31,9 +31,18 @@ interface MemberRow extends EnvelopeRow {
   /** Legacy plaintext column, present on rows written before encryption. */
   name?: string | null
 }
+interface LedgerRow {
+  id: string
+  householdId: string
+  name: string
+  isBaseline: boolean
+  origin: string
+}
 
 let households: HouseholdRow[] = []
 let members: MemberRow[] = []
+let ledgerRows: LedgerRow[] = []
+let ledgerCounter = 0
 
 type Filter = [{ name?: string }, unknown]
 
@@ -50,16 +59,20 @@ function matcher(cond: { __eq?: Filter; __and?: Filter[] }, fieldMap: Record<str
 }
 
 const MEMBER_FIELDS = { id: 'id', household_id: 'householdId', version: 'version' }
+const LEDGER_FIELDS = { household_id: 'householdId', is_baseline: 'isBaseline', id: 'id' }
 
 vi.mock('./lib/db.js', () => ({
   db: {
     select: () => ({
       from: (table: unknown) => ({
         where: (cond: { __eq?: Filter; __and?: Filter[] }) => {
-          const rows =
-            table === householdsTableRef
-              ? households.filter(matcher(cond, { owner_user_id: 'ownerUserId' }))
-              : members.filter(matcher(cond, MEMBER_FIELDS))
+          function all(): unknown[] {
+            if (table === householdsTableRef) return households.filter(matcher(cond, { owner_user_id: 'ownerUserId' }))
+            if (table === familyMembersTableRef) return members.filter(matcher(cond, MEMBER_FIELDS))
+            if (table === ledgersTableRef) return ledgerRows.filter(matcher(cond, LEDGER_FIELDS))
+            throw new Error('fake db: unhandled table in select()')
+          }
+          const rows = all()
           const result = Promise.resolve(rows) as Promise<unknown[]> & { limit: (n: number) => Promise<unknown[]> }
           result.limit = (n: number) => Promise.resolve(rows.slice(0, n))
           return result
@@ -69,6 +82,17 @@ vi.mock('./lib/db.js', () => ({
     insert: (table: unknown) => ({
       values: (row: Record<string, unknown>) => ({
         returning: () => {
+          if (table === ledgersTableRef) {
+            const created: LedgerRow = {
+              id: (row.id as string) ?? `ledger-${++ledgerCounter}`,
+              householdId: String(row.householdId),
+              name: String(row.name),
+              isBaseline: Boolean(row.isBaseline),
+              origin: String(row.origin),
+            }
+            ledgerRows.push(created)
+            return Promise.resolve([created])
+          }
           const envelope = {
             id: String(row.id),
             ciphertext: (row.ciphertext as string) ?? null,
@@ -82,14 +106,17 @@ vi.mock('./lib/db.js', () => ({
             households.push(created)
             return Promise.resolve([created])
           }
-          const created: MemberRow = {
-            ...envelope,
-            householdId: String(row.householdId),
-            createdAt: new Date(),
-            updatedAt: new Date(),
+          if (table === familyMembersTableRef) {
+            const created: MemberRow = {
+              ...envelope,
+              householdId: String(row.householdId),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+            members.push(created)
+            return Promise.resolve([created])
           }
-          members.push(created)
-          return Promise.resolve([created])
+          throw new Error('fake db: unhandled table in insert()')
         },
       }),
     }),
@@ -132,6 +159,8 @@ vi.mock('drizzle-orm', async (importOriginal) => {
 
 const schema = await import('../drizzle/schema.js')
 const householdsTableRef = schema.households
+const familyMembersTableRef = schema.familyMembers
+const ledgersTableRef = schema.ledgers
 
 const { app } = await import('./app.js')
 
@@ -172,6 +201,8 @@ describe('family-members routes — two-user isolation', () => {
   beforeEach(() => {
     households = []
     members = []
+    ledgerRows = []
+    ledgerCounter = 0
   })
 
   it('rejects a request with no Authorization header', async () => {

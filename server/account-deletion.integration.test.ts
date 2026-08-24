@@ -56,6 +56,13 @@ interface AnalyticsEventRow {
   id: string
   userId: string
 }
+interface LedgerRow {
+  id: string
+  householdId: string
+  name: string
+  isBaseline: boolean
+  origin: string
+}
 
 let households: HouseholdRow[] = []
 let members: MemberRow[] = []
@@ -63,6 +70,8 @@ let protectionRows: ProtectionRow[] = []
 let holdings: HoldingRow[] = []
 let goals: GoalRow[] = []
 let analyticsEvents: AnalyticsEventRow[] = []
+let ledgerRows: LedgerRow[] = []
+let ledgerCounter = 0
 
 vi.mock('./lib/db.js', () => ({
   db: {
@@ -84,7 +93,9 @@ vi.mock('./lib/db.js', () => ({
               return members.filter((m) => matches(m, { id: 'id', household_id: 'householdId' }))
             if (table === protectionTableRef)
               return protectionRows.filter((p) => matches(p, { id: 'id', household_id: 'householdId' }))
-            return []
+            if (table === ledgersTableRef)
+              return ledgerRows.filter((l) => matches(l, { household_id: 'householdId', is_baseline: 'isBaseline', id: 'id' }))
+            throw new Error('fake db: unhandled table in select()')
           }
           const rows = all()
           const result = Promise.resolve(rows) as Promise<unknown[]> & { limit: (n: number) => Promise<unknown[]> }
@@ -106,13 +117,27 @@ vi.mock('./lib/db.js', () => ({
             members.push(created)
             return Promise.resolve([created])
           }
-          const created: ProtectionRow = {
-            id: row.id as string,
-            householdId: row.householdId as string,
-            memberId: row.memberId as string,
+          if (table === ledgersTableRef) {
+            const created: LedgerRow = {
+              id: (row.id as string) ?? `ledger-${++ledgerCounter}`,
+              householdId: row.householdId as string,
+              name: row.name as string,
+              isBaseline: row.isBaseline as boolean,
+              origin: row.origin as string,
+            }
+            ledgerRows.push(created)
+            return Promise.resolve([created])
           }
-          protectionRows.push(created)
-          return Promise.resolve([created])
+          if (table === protectionTableRef) {
+            const created: ProtectionRow = {
+              id: row.id as string,
+              householdId: row.householdId as string,
+              memberId: row.memberId as string,
+            }
+            protectionRows.push(created)
+            return Promise.resolve([created])
+          }
+          throw new Error('fake db: unhandled table in insert()')
         },
       }),
     }),
@@ -131,6 +156,7 @@ vi.mock('./lib/db.js', () => ({
           protectionRows = protectionRows.filter((p) => !deletedIds.has(p.householdId))
           holdings = holdings.filter((h) => !deletedIds.has(h.householdId))
           goals = goals.filter((g) => !deletedIds.has(g.householdId))
+          ledgerRows = ledgerRows.filter((l) => !deletedIds.has(l.householdId))
           return Promise.resolve(deleted)
         },
       }),
@@ -156,6 +182,7 @@ const schema = await import('../drizzle/schema.js')
 const householdsTableRef = schema.households
 const familyMembersTableRef = schema.familyMembers
 const protectionTableRef = schema.protection
+const ledgersTableRef = schema.ledgers
 
 const { app } = await import('./app.js')
 
@@ -251,6 +278,8 @@ describe('Slice 9 — full create→populate→delete→verify-zero-rows cycle (
     holdings = []
     goals = []
     analyticsEvents = []
+    ledgerRows = []
+    ledgerCounter = 0
   })
 
   it('rejects a webhook call with no signature headers', async () => {
