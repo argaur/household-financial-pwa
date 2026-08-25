@@ -91,7 +91,47 @@ describe('LedgerTabStrip', () => {
     expect(track).not.toHaveBeenCalledWith('ledger_switched', expect.anything())
   })
 
-  it('deletes a non-baseline ledger and fires ledger_deleted', async () => {
+  it('does not call the API on the first click — it asks for confirmation first', () => {
+    deleteLedger.mockResolvedValue(undefined)
+    render(
+      <LedgerTabStrip
+        ledgers={[baseline, strategyA]}
+        activeLedgerId={baseline.id}
+        onSelect={vi.fn()}
+        sourceHoldings={[]}
+        unreadableCount={0}
+        onLedgerCreated={vi.fn()}
+        onLedgerDeleted={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /delete aggressive growth/i }))
+
+    expect(deleteLedger).not.toHaveBeenCalled()
+    expect(screen.getByText(/delete "aggressive growth"\? this can't be undone/i)).toBeInTheDocument()
+  })
+
+  it('cancelling the confirmation leaves the ledger untouched', () => {
+    render(
+      <LedgerTabStrip
+        ledgers={[baseline, strategyA]}
+        activeLedgerId={baseline.id}
+        onSelect={vi.fn()}
+        sourceHoldings={[]}
+        unreadableCount={0}
+        onLedgerCreated={vi.fn()}
+        onLedgerDeleted={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /delete aggressive growth/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+
+    expect(deleteLedger).not.toHaveBeenCalled()
+    expect(screen.queryByText(/this can't be undone/i)).not.toBeInTheDocument()
+  })
+
+  it('deletes a non-baseline ledger and fires ledger_deleted once confirmed', async () => {
     deleteLedger.mockResolvedValue(undefined)
     const onLedgerDeleted = vi.fn()
     render(
@@ -107,10 +147,13 @@ describe('LedgerTabStrip', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /delete aggressive growth/i }))
+    fireEvent.click(screen.getByRole('button', { name: /delete ledger/i }))
 
     await waitFor(() => expect(deleteLedger).toHaveBeenCalledWith('test-token', 'a'))
     expect(track).toHaveBeenCalledWith('ledger_deleted', {})
     expect(onLedgerDeleted).toHaveBeenCalledWith('a')
+    // The confirmation banner clears once the delete is underway/done.
+    expect(screen.queryByText(/this can't be undone/i)).not.toBeInTheDocument()
   })
 
   it('disables + New at the 4-ledger cap and fires ledger_cap_reached on attempt, without opening the modal', () => {

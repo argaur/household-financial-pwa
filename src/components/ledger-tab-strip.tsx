@@ -45,12 +45,14 @@ export function LedgerTabStrip({
 }: LedgerTabStripProps) {
   const { getToken } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const baseline = ledgers.find((l) => l.isBaseline)
   const others = ledgers.filter((l) => !l.isBaseline)
   const atCap = others.length >= MAX_NON_BASELINE_LEDGERS
+  const confirming = others.find((l) => l.id === confirmingId)
 
   function handleNewClick() {
     if (atCap) {
@@ -66,6 +68,7 @@ export function LedgerTabStrip({
   }
 
   async function handleDelete(id: string) {
+    setConfirmingId(null)
     setDeletingId(id)
     setDeleteError(null)
     try {
@@ -96,7 +99,7 @@ export function LedgerTabStrip({
                 onSelect={onSelect}
                 canDelete
                 deleting={deletingId === ledger.id}
-                onDelete={handleDelete}
+                onDelete={setConfirmingId}
               />
             ))}
           </div>
@@ -121,6 +124,36 @@ export function LedgerTabStrip({
         </p>
       )}
       {deleteError && <p className="text-caption text-destructive">{deleteError}</p>}
+
+      {confirming && (
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-caption text-muted-foreground">
+            Delete "{confirming.name ?? 'Untitled ledger'}"? This can't be undone.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="flex-1"
+              disabled={deletingId === confirming.id}
+              onClick={() => handleDelete(confirming.id)}
+            >
+              {deletingId === confirming.id ? 'Deleting…' : 'Delete ledger'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="flex-1"
+              disabled={deletingId === confirming.id}
+              onClick={() => setConfirmingId(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       <NewLedgerModal
         open={modalOpen}
