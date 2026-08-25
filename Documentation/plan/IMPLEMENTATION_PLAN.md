@@ -362,7 +362,7 @@ None. `Documentation/design/DATA_MODEL.md`'s Stage 0 section for this slice alre
   - [ ] Diff the live `tailwind.config.ts`/`globals.css` against the `Documentation/design/tokens/` copies; reconcile any live-only config (plugins, content globs) that the doc copies don't carry `[model: sonnet]`
   - [ ] Cut the live files over to the reconciled, doc-sourced content `[model: sonnet]`
   - [ ] Update `index.html`'s font `<link>` to the documented snippet (Yatra One + Playfair Display + Jost + JetBrains Mono; DM Serif Display and Inter removed) `[model: sonnet]`
-  - [ ] Run `npm run typecheck` and the full suite; fix every test that breaks on a renamed token/class, without weakening the assertion `[model: sonnet]`
+  - [ ] Run `npm run typecheck` and the full suite; fix every test that breaks on a renamed token/class, without weakening the assertion `[model: opus]` — project-killer chunk; a wrong fix here (quietly weakening an assertion to make it pass) silently reduces coverage across every screen at once, expensive to unwind
 
 ### Chunk 2 — Landing retint
 - **Owns:** Landing page component(s), `SiteHeader`'s non-wordmark chrome (wordmark/Yatra One unchanged)
@@ -414,8 +414,8 @@ None. `Documentation/design/DATA_MODEL.md`'s Stage 0 section for this slice alre
 - **Acceptance criteria:** run against an isolated throwaway Neon branch (this project has no safe local write path — `.env.local` points at production, per `app/CLAUDE.md`), a fresh test account walks Landing, Dashboard, Explore, and Portfolio at exactly 390px in both light and dark mode via the Chrome extension; specific attention to the `sm:`-390px breakpoint trap (this exact bug class already shipped once on the ledger slice, caught only by this same rehearsal, not the test suite); any bug found is fixed before merge, not deferred
 - **Dispatch steps:**
   - [ ] Create a throwaway Neon branch, matching the ledger plan's own rehearsal pattern `[model: sonnet]`
-  - [ ] Walk all 4 retinted screens at 390px, both themes, via the Chrome extension; screenshot each `[model: opus]`
-  - [ ] Fix any found visual/breakpoint bugs; re-verify the fixed screen before moving on `[model: sonnet or opus depending on the bug]`
+  - [ ] Walk all 4 retinted screens at 390px, both themes, via the Chrome extension; screenshot each `[model: sonnet]` — browser automation for visual verification is sonnet's default lane
+  - [ ] Fix any found visual/breakpoint bugs; re-verify the fixed screen before moving on `[model: sonnet]` — well-specified once a bug is reproduced (a documented CSS/breakpoint fix), matching how the ledger plan's own same-day bugs were fixed by regular execution, not an architecture call
   - [ ] Confirm `explore_holding_added` fires correctly live (not just in the unit test) during the same rehearsal `[model: sonnet]`
 
 ## T5. Open Decisions
