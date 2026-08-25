@@ -3,83 +3,105 @@
 @tailwind utilities;
 
 /*
-  Design system — Household Financial Planning PWA
-  Voice: CFP one-pager on a vertical canvas. Warm editorial × calm minimal.
-  All values in HSL so Tailwind CSS variable bridge works correctly.
+  Design system — Vittam (Household Financial Planning PWA)
+  Voice: engraved currency / vault. "Light = fresh currency paper.
+  Dark = vault interior. One engraved language, two native materials."
+  Extracted from the approved concept folio (D-016 Slice 5, 2026-08-25):
+  Documentation/design/concept/vittam-mint-folio.html
+  All values in HSL so the Tailwind CSS-variable bridge works correctly.
 */
 
 @layer base {
   :root {
-    /* ── Backgrounds ─────────────────────────────────────────── */
-    --background:     40 20% 97%;   /* #F7F5F1  warm off-white — the "paper" */
-    --card:           40 15% 99%;   /* #FDFCFA  card surface, barely warmer than white */
-    --popover:        40 15% 99%;
+    /* ── Backgrounds — currency paper ────────────────────────── */
+    --background:     96 17% 94%;   /* #F0F3EE  paper background */
+    --card:            90 40% 98%;   /* #FAFCF8  card surface */
+    --popover:         90 40% 98%;
+    --panel:           93 21% 92%;   /* #E9EEE5  recessed panel, e.g. ledger table head */
 
     /* ── Foregrounds ─────────────────────────────────────────── */
-    --foreground:          30 10% 10%;   /* #1A1814  near-black with warmth */
-    --card-foreground:     30 10% 10%;
-    --popover-foreground:  30 10% 10%;
+    --foreground:          138 18% 11%;   /* #17211A  near-black with green cast */
+    --card-foreground:     138 18% 11%;
+    --popover-foreground:  138 18% 11%;
 
-    /* ── Primary — deep teal ─────────────────────────────────── */
-    --primary:            180 60% 26%;   /* #1B6B6B */
-    --primary-foreground:  40 20% 97%;   /* warm white on teal */
+    /* ── Primary — mint (replaces teal, D-016 Slice 5) ──────── */
+    --primary:            160 63% 25%;   /* #186A4F */
+    --primary-strong:     162 70% 20%;   /* #0F5540  hover/active */
+    --primary-foreground: 140 37% 97%;   /* #F4FAF6  on-mint text */
 
     /* ── Secondary / Muted ───────────────────────────────────── */
-    --secondary:            30  8% 93%;   /* #EDEBE6  warm light gray */
-    --secondary-foreground: 30 10% 20%;
-    --muted:                30  8% 93%;
-    --muted-foreground:     30  6% 45%;   /* #6B6660  secondary text */
+    --secondary:            93 21% 92%;   /* #E9EEE5  panel */
+    --secondary-foreground: 138 18% 11%;
+    --muted:                93 21% 92%;
+    --muted-foreground:     133  7% 39%;   /* #5D6B60 */
 
-    /* ── Accent — teal tint (subtle highlight bg) ────────────── */
-    --accent:            180 40% 93%;   /* #E8F3F2 */
-    --accent-foreground: 180 60% 26%;
+    /* ── Accent — mint tint (subtle highlight bg) ────────────── */
+    --accent:            138 25% 90%;   /* #DEEBE2 */
+    --accent-foreground: 160 63% 25%;
+
+    /* ── Brass — second accent, both themes (D-016 Slice 5) ──
+       Never generic UI chrome. Scoped uses only: eyebrow/mono
+       ALL-CAPS labels, guilloche motif, coin-mark rims, dashed
+       import-zone borders, ledger-table accents.               */
+    --brass:              44 58% 35%;   /* #8F7326 */
+    --brass-soft:         42 43% 49%;   /* #B49347 */
+    --brass-foreground:   45 48% 89%;   /* #F0E9D4  brass tint, for on-brass text/bg */
 
     /* ── Destructive ─────────────────────────────────────────── */
     --destructive:            0 70% 35%;   /* #991B1B */
-    --destructive-foreground: 40 20% 97%;
+    --destructive-foreground: 140 37% 97%;
 
     /* ── Borders / Inputs / Ring ─────────────────────────────── */
-    --border: 35 12% 88%;   /* #E8E5E0  warm light border */
-    --input:  35 12% 88%;
-    --ring:  180 60% 26%;   /* teal focus ring */
+    --border:      95 14% 84%;   /* #D4DBCF */
+    --border-soft: 90 17% 89%;   /* #E2E7DD  divider weight, one step lighter */
+    --input:       95 14% 84%;
+    --ring:       160 63% 25%;   /* mint focus ring */
 
     /* ── Radius ──────────────────────────────────────────────── */
-    --radius: 0.5rem;       /* 8px — restrained, not bubbly */
+    --radius: 0.625rem;      /* 10px — folio's dominant card/field radius */
   }
 
   .dark {
-    /* ── Backgrounds ─────────────────────────────────────────── */
-    --background:  30 15%  8%;   /* #141210  warm near-black */
-    --card:        30 12% 11%;   /* #1E1C19 */
-    --popover:     30 12% 11%;
+    /* ── Backgrounds — vault interior ────────────────────────── */
+    --background:  144 17%  6%;   /* #0C110E */
+    --card:        137 16%  9%;   /* #131A15 */
+    --popover:     137 16%  9%;
+    --panel:       140 17%  7%;   /* #0F1511 */
 
     /* ── Foregrounds ─────────────────────────────────────────── */
-    --foreground:          40 20% 97%;
-    --card-foreground:     40 20% 97%;
-    --popover-foreground:  40 20% 97%;
+    --foreground:          111 16% 92%;   /* #E7EDE6 */
+    --card-foreground:     111 16% 92%;
+    --popover-foreground:  111 16% 92%;
 
-    /* ── Primary — lighter teal on dark ─────────────────────── */
-    --primary:            180 50% 42%;   /* #3D9B9B */
-    --primary-foreground:  30 15%  8%;
+    /* ── Primary — mint, native dark value (not a dimmed light one) */
+    --primary:            154 51% 55%;   /* #54C795 */
+    --primary-strong:     154 57% 68%;   /* #7FDCB4  hover/active — lighter, not darker, on dark */
+    --primary-foreground: 147 41%  5%;   /* #08130D  on-mint text */
 
     /* ── Secondary / Muted ───────────────────────────────────── */
-    --secondary:            30 10% 16%;   /* #2C2925 */
-    --secondary-foreground: 40 15% 80%;
-    --muted:                30 10% 16%;
-    --muted-foreground:     30  8% 60%;   /* #A09A94 */
+    --secondary:            140 17%  7%;   /* #0F1511  panel */
+    --secondary-foreground: 111 16% 92%;
+    --muted:                140 17%  7%;
+    --muted-foreground:     134  8% 59%;   /* #8FA093 */
 
     /* ── Accent ──────────────────────────────────────────────── */
-    --accent:            180 30% 18%;
-    --accent-foreground: 180 50% 70%;
+    --accent:            150 29% 12%;   /* #16281F */
+    --accent-foreground: 154 51% 55%;
+
+    /* ── Brass — native dark value, same scoped-use rule as light */
+    --brass:              42 52% 59%;   /* #CDAD62 */
+    --brass-soft:         42 37% 48%;   /* #A98D4E */
+    --brass-foreground:   42 38% 10%;   /* #241E10  brass tint */
 
     /* ── Destructive ─────────────────────────────────────────── */
-    --destructive:            0 62% 50%;
-    --destructive-foreground: 40 20% 97%;
+    --destructive:            0 65% 61%;
+    --destructive-foreground: 147 41%  5%;
 
     /* ── Borders / Inputs / Ring ─────────────────────────────── */
-    --border: 30 10% 18%;   /* #2C2A26 */
-    --input:  30 10% 18%;
-    --ring:  180 50% 42%;
+    --border:      142 13% 17%;   /* #26312A */
+    --border-soft: 140 14% 12%;   /* #1B241E */
+    --input:       142 13% 17%;
+    --ring:       154 51% 55%;
   }
 }
 
@@ -92,14 +114,24 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  /* Tabular figures for all monetary displays */
+  /* Tabular figures for all monetary displays — mono, per folio */
   .tabular {
+    font-family: theme('fontFamily.mono');
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
   }
 
-  /* Section label — the CFP document section header pattern */
+  /* Section label — mono ALL-CAPS eyebrow, the folio's signature label style */
   .section-label {
-    @apply text-xs font-semibold tracking-widest uppercase text-muted-foreground;
+    @apply text-xs font-mono tracking-[.22em] uppercase text-brass;
+  }
+
+  /* Reeded-edge divider — repeating-linear-gradient, folio's .reed */
+  .reed {
+    height: 10px;
+    background: repeating-linear-gradient(90deg, hsl(var(--border)) 0 1px, transparent 1px 5px);
+    border-top: 1px solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
+    opacity: .8;
   }
 }

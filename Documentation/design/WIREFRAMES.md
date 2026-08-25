@@ -918,4 +918,18 @@ Onboarding, Profile, and instrument-detail wireframes are deferred to their own 
 
 ### Gate: Stage 2 (corrected) and Stage 3 (folio-satisfied for the 5 flagship screens; remaining screens deferred to their own future slices, using the folio as reference) — both confirmed by Gaurav 2026-08-25. Proceeding to Stage 4 (Design System).
 
+### Stage 4 — Design System (2026-08-25, draft, pending gate)
+
+Tokens extracted directly from the folio's CSS into the existing token files (updated in place, not duplicated):
+
+- `Documentation/design/tokens/globals.css` — `--primary`/`--primary-strong` retinted mint (native per-theme values, not a dimmed single hue), new `--brass`/`--brass-soft`/`--brass-foreground` tokens in both themes, new `--panel`/`--border-soft` tokens, `--radius` raised 8px → 10px, new `.reed` utility, `section-label` utility switched from sans+muted to mono+brass.
+- `Documentation/design/tokens/tailwind.config.ts` — `fontFamily.serif`/`sans`/`mono` swapped to Bodoni MT / Gill Sans Nova / Cascadia Mono (DM Serif Display + Inter retired), new `colors.brass` and `colors.panel`, `colors.asset` retinted, `borderRadius` scale rebuilt around the folio's 8/10/12/14/16px steps plus new named `pill` (999px) and `coin` (50%) tokens, `boxShadow.card`/`lift` added matching the folio's two-level elevation.
+- `Documentation/design/tokens/components.json` — no changes; it configures the shadcn CLI, not tokens themselves.
+- `Documentation/brand/brand-guide.md` — fully updated in place (§1 visual philosophy, §2 color/typography/radius/shadow tables, §5 anti-patterns, §7 inevitability test — old system's results kept for history, new system's results added, §8 token quick reference). No longer documents the retired teal/DM-Serif system as current.
+- `Documentation/design/COMPONENT_SHOWCASE.md` — new "D-016 Slice 5 — Mint/Treasury Motif Components" section added: VaultFrame, GuillocheMotif, ReededDivider, CoinFAB, Mintmark, LedgerTable, ReserveHatchSlice, ThemeToggle. Existing custom components (HealthTierCard, AllocationDonut, etc.) are unchanged in data contract/states — they render inside the new frame/motif components once retokened.
+
+**Negative-constraint check (Stage 2, item 3):** every new token/component above traces to the vault/currency metaphor (guilloche, reed, coin, ledger, hatch) or is a direct extraction from the folio's own CSS — no bare shadcn defaults introduced, no gradients, no glassmorphism, no decorative motion added.
+
+**Gate: Stage 4 pending Gaurav's review of the token/brand-guide changes above before Stage 5 (Spec Doc) begins.**
+
 **Superseded (2026-08-25):** the ASCII wireframes for Landing (2a) and Dashboard (2b) and the empty/error-state table that previously followed here were drawn against the wrong Stage 2 answers (generic "vault frame," no mint/brass, old typefaces) and have been removed. The concept folio's Landing and Dashboard plates are the Stage 3 artifact for those two screens now; see "Stage 3 — Wireframes, resolution" above.
