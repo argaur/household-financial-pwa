@@ -329,3 +329,33 @@ device, never anything the server could see. The `/privacy` leak list needs no c
 - **Revisit if:** this branch is promoted and the migration is applied — at that point verify the baseline-row exemption still holds against real production data (the "Current" row for the one existing household), not just against test fixtures.
 
 ---
+
+## D-021 — Explore "+ Add" deferred to a follow-on PR; the prefill flow it was told to reuse does not exist (2026-08-25)
+
+- **Date:** 2026-08-25
+- **Phase:** 4 Build, D-016 Slice 5 (full-platform mint/treasury redesign), Chunk 4
+- **Decision:** **Chunk 4 ships as a visual retint only. The "+ Add" entry point on Explore instrument cards, and its `explore_holding_added` telemetry, are deferred to their own follow-on PR.** This takes the split the Phase 3 plan already pre-authorized in Chunk 4's own scope flag ("ship the visual retint of Explore's cards now, defer the '+ Add' entry point (and its telemetry) to its own follow-on PR"), so it is a planned option being exercised, not a mid-slice descope.
+- **Why: the approved plan rested on a flow that was never built.** Chunk 4's dispatch step said to "confirm the existing add-holding form's prefill mechanism (used by instrument-detail today) and reuse it verbatim — no new form, no new endpoint." Read directly from source, that mechanism does not exist:
+  - `src/pages/InstrumentDetail.tsx` has no "Record this in my plan" CTA. The string appears only in `COPY_DECK.md`, `SPEC.md` and `WIREFRAMES.md` — specced in v1, never implemented.
+  - `src/components/holding-form.tsx` exposed only `initialHolding?: Holding` (whole-holding **edit** mode). There was no instrument-only prefill prop.
+  - `HoldingForm` renders from exactly two places, both authenticated: `OnboardingStep3.tsx` and `Portfolio.tsx`. There is no path from a public `/explore` route into it.
+  - This corroborates `app/CLAUDE.md`'s public-showcase backlog item (4), "One-click add-from-instrument-library", still listed as pending/not started.
+  Building that mechanism is materially more scope than the approved "no new form", on the one chunk the plan had already flagged as carrying new interactive behaviour. Per the standing rule, it routes back rather than being absorbed silently.
+- **Note on the Phase 3 gate review, for future gate discipline:** the gate scored Chunk 4 "PASS, after one correction" and tagged the interaction shape `[P] — read directly`, having verified the shape of the interaction against the folio's Plate III copy and against `holdingPayloadSchema`. It never checked that the flow it instructed the chunk to *reuse* existed. **A `[P]` tag on "what this should do" is not a `[P]` tag on "the thing it builds on is there."** Verifying a reuse target's existence belongs in the gate's boundary-contract check.
+- **Rejected alternative(s):** (a) Build the missing prefill mechanism inside Chunk 4 and merge it — rejected as unapproved scope expansion on an already-flagged chunk. Working code for this path exists and is preserved, unmerged, at commit `cc32697` on branch `d016-slice5-chunk4-quarantine` (a new `initialInstrumentId` prop on `HoldingForm` plus a new `AddHoldingSheet` component, signed-out handled via Clerk `<SignedIn>`); Gaurav directed it be left orphaned as-is, neither rebased nor deleted. It branched off Chunk 1 only, so it predates Chunks 2/3/5 and would need a rebase if ever revived. (b) Amend the Phase 3 plan in place to legitimise the extra scope — rejected as re-planning during execution.
+- **Consequence, accepted:** `explore_holding_added` is defined in `METRICS_PLAN.md` but fires nowhere in source. That is a known, deliberate gap until the follow-on PR lands, not a wiring bug.
+- **Revisit if:** the follow-on PR is picked up — at that point the real decision to make first is whether the instrument-detail "Record this in my plan" CTA (specced in v1, never built) should be built as the primary path, with Explore's "+ Add" as the second entry point the plan always described it as, rather than Explore's being built first against no existing path.
+
+---
+
+## D-022 — D-016 Slice 5 Chunk 6 (390px browser verification) not run; branch not promotable (2026-08-25)
+
+- **Date:** 2026-08-25
+- **Phase:** 4 Build, D-016 Slice 5, Chunk 6
+- **Decision:** **Chunk 6 was not run and is NOT satisfied.** Neither the Chrome browser connection nor the throwaway Neon branch was provisioned this session, and Gaurav directed that no proxy be substituted for the real thing. Chunk 6 is recorded here as **outstanding**, explicitly not as done, skipped-but-verified, or waived.
+- **Why this matters more than usual:** the Phase 3 plan names Chunk 6 "mandatory gate, last, before merge — not optional, not deferrable to post-merge." The precedent is direct and recent: the D-016 ledger slice's own rehearsal found three real bugs that a fully green suite had missed, one of them a `sm:grid-cols-3` that fired at exactly 390px because this project redefines `sm` to that width. A green typecheck and a green suite are the exact evidence that failed to catch it last time, so they cannot stand in for it now.
+- **Rejected alternative(s):** Substituting a static class audit or a type-check for the browser pass and calling the gate met — rejected explicitly by Gaurav. `app/CLAUDE.md` already carries an identical open item from 2026-08-12 ("reading classes is not looking at the screen"), and adding a second unverified redesign on top of the first compounds the same debt rather than clearing it.
+- **Consequence:** branch `d016-slice5-mint` is **not promotable to `main`**. Since `main` auto-deploys, promoting it would put four retinted screens into production having never been rendered at the project's own primary phone width.
+- **Revisit if:** the Chrome extension is connected and a throwaway Neon branch is provisioned — then run Chunk 6's four dispatch steps as written, in both light and dark mode, before any promotion.
+
+---
