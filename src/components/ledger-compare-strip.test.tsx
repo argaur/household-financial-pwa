@@ -117,6 +117,19 @@ describe('LedgerCompareStrip', () => {
     expectNoCallCarriesPortfolioShape(track)
   })
 
+  it('goes 3-across at the tablet breakpoint, not the phone one', async () => {
+    // tailwind.config.ts redefines `sm` to 390px -- this project's own primary
+    // phone width, per Documentation/design -- so `sm:grid-cols-3` collapses
+    // the three-column layout onto exactly the narrowest screen this app
+    // targets instead of the widest phone. `md` (768px, tablet) is correct.
+    const { container } = render(
+      <LedgerCompareStrip ledger={copiedLedger} ledgerHoldings={ledgerHoldings} baselineHoldings={baselineHoldings} />,
+    )
+    const grid = container.querySelector('dl')
+    expect(grid?.className).toContain('md:grid-cols-3')
+    expect(grid?.className).not.toMatch(/(?<!m)sm:grid-cols-3/)
+  })
+
   it('has zero axe violations', async () => {
     const { container } = render(
       <LedgerCompareStrip ledger={copiedLedger} ledgerHoldings={ledgerHoldings} baselineHoldings={baselineHoldings} />,

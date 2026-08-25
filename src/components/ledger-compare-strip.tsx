@@ -63,7 +63,7 @@ export function LedgerCompareStrip({ ledger, ledgerHoldings, baselineHoldings }:
         Compared to Current
       </h2>
 
-      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <dl className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div>
           <dt className="text-caption text-muted-foreground">Current value (₹)</dt>
           <dd className="text-body font-medium">₹{currency.format(totals.totalValue)}</dd>

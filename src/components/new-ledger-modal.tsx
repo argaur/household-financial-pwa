@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import { useOnline, OFFLINE_WRITE_MESSAGE } from '@/lib/use-online'
 import { Button } from '@/components/ui/button'
@@ -48,6 +48,20 @@ export function NewLedgerModal({ open, onOpenChange, sourceHoldings, unreadableC
   const [source, setSource] = useState<LedgerSource>(() => defaultSource(unreadableCount))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // The dialog stays mounted between opens (Radix hides it via CSS, doesn't
+  // unmount), so without this a reopened modal shows the previous ledger's
+  // name and error state. Reset only on the open transition itself — not on
+  // every unreadableCount change while already open, which would blow away
+  // whatever the user is mid-typing whenever holdings refetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (open) {
+      setName('')
+      setSource(defaultSource(unreadableCount))
+      setError(null)
+    }
+  }, [open])
 
   const trimmed = name.trim()
   const nameValid = trimmed.length > 0 && trimmed.length <= MAX_LEDGER_NAME_CHARS

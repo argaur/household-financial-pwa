@@ -209,6 +209,36 @@ describe('NewLedgerModal', () => {
     expect(createLedgerFromCurrent).not.toHaveBeenCalled()
   })
 
+  it('clears the name field on reopen — the dialog stays mounted, not remounted, between opens', () => {
+    const { rerender } = render(
+      <NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />,
+    )
+    fireEvent.change(screen.getByLabelText(/ledger name/i), { target: { value: 'Aggressive growth' } })
+    expect(screen.getByLabelText(/ledger name/i)).toHaveValue('Aggressive growth')
+
+    rerender(
+      <NewLedgerModal open={false} onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />,
+    )
+    rerender(
+      <NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />,
+    )
+
+    expect(screen.getByLabelText(/ledger name/i)).toHaveValue('')
+  })
+
+  it('does not reset the name mid-session when unreadableCount changes while the modal stays open', () => {
+    const { rerender } = render(
+      <NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />,
+    )
+    fireEvent.change(screen.getByLabelText(/ledger name/i), { target: { value: 'Mid-flight' } })
+
+    rerender(
+      <NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={2} onCreated={vi.fn()} />,
+    )
+
+    expect(screen.getByLabelText(/ledger name/i)).toHaveValue('Mid-flight')
+  })
+
   it('submits with source "blank" when unreadableCount > 0 forced the default', async () => {
     createBlankLedger.mockResolvedValue(ledger)
     render(<NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={3} onCreated={vi.fn()} />)
