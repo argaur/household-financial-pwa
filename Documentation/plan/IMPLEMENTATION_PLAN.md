@@ -311,3 +311,150 @@ Each chunk is one commit, vertical (capability + tests + analytics events + `HOW
 - **Full-platform mint/treasury redesign** (D-016 item 4, D-017 §7 reopening the landing page) — a visual-language pass across every screen, orthogonal to the ledger schema work; deliberately not bundled into a plan whose Section 3 is a live-table migration, so a redesign PR never has to wait on a schema PR's review cycle or vice versa.
 
 None of the above is scope creep into this plan — each is a named, already-decided (D-016/D-017/D-018) piece of scope, or a piece withdrawn by the gate itself, deliberately sequenced into a later plan rather than silently dropped.
+
+---
+
+# D-016 Slice 5 — Full-Platform Mint/Treasury Redesign (Phase 3 Plan, 2026-08-25)
+
+**Status:** draft — pending "Plan approved"
+**Build arc:** `extends-existing` — a token/typography/motif retint of already-shipped screens, not a new feature (one chunk, Chunk 4, is a genuine exception — see its own scope flag).
+**Pattern source:** the live `tailwind.config.ts` (repo root) and `src/styles/globals.css` (the v1 teal/DM-Serif system being replaced); the already-approved token files at `Documentation/design/tokens/tailwind.config.ts` / `globals.css` (Phase 2 Stage 4 output, this plan's real source of truth for values); the concept folio at `Documentation/design/concept/vittam-mint-folio.html`.
+**Inputs:** `Documentation/design/SPEC.md`'s "D-016 Slice 5" section (§S1–S10), `Documentation/design/WIREFRAMES.md`'s "D-016 Slice 5" section (all 6 Design stages, gated), `Documentation/brand/brand-guide.md` (rewritten 2026-08-25), `Documentation/design/COMPONENT_SHOWCASE.md`'s motif-component section, `Documentation/solution/METRICS_PLAN.md`'s `explore_holding_added` event.
+**Scope of this plan:** retint the 4 already-shipped flagship screens that exist in live code today — Landing, Dashboard, Explore, Portfolio — using the tokens already drafted and gated in `Documentation/design/tokens/`. **Goal planner is explicitly out of this plan**, even though the folio mocks it: that screen does not exist yet, blocked on D-016 slices 2–4 (still unbuilt per `app/CLAUDE.md`'s public-showcase backlog item 2). Onboarding, Profile, and instrument detail are out of this plan by Gaurav's own direction (2026-08-25) — they inherit this system when wireframed in their own future slices, not retrofitted here.
+
+## T1. Summary & Guiding Principle
+
+**Guiding principle: copy never changes, only its frame.** Every screen in scope keeps its exact existing text content (Stage 2 item 8, visual-only) — this plan changes CSS custom properties, Tailwind config, component class lists, and adds a small number of new motif components (VaultFrame, ReededDivider, CoinFAB, hatched donut fill). It does not touch API routes, the schema, or any data contract. The one deliberate exception is Chunk 4's Explore toggle, flagged as new interactive scope below rather than folded silently into "just a retint."
+
+**Confirmed scope decisions:**
+
+| In scope | Out of scope (this plan) |
+|---|---|
+| Cut over `tailwind.config.ts` / `src/styles/globals.css` / `index.html` font `<link>` to the mint/brass/Playfair-Jost-JetBrains system | Goal planner screen (feature doesn't exist yet — D-016 slices 2–4) |
+| Retint Landing (vault-frame hero, guilloche motif) | Onboarding, Profile, instrument detail (Gaurav's direction — future slices) |
+| Retint Dashboard (vault-frame cards, hatched emergency-fund donut segment; ledger tab strip retokened only, not restructured) | Instrument drift / bulk import / AI counsel / projections (already Out of Plan in the D-016 ledger plan above, unchanged) |
+| Retint Explore (section/instrument cards) **+ build the "+ Add" entry point** (Chunk 4 — new interaction, not just visual; opens the existing add-holding form, no new backend) | Side-by-side multi-ledger view (unrelated, already deferred) |
+| Retint Portfolio (LedgerTable component for ledger-scoped views; HoldingRow unchanged for the baseline/Current view) | — |
+| 390px real-browser verification on a throwaway Neon branch before merge (mandatory gate, Chunk 5) | — |
+
+Any scope creep during build routes back to Solution Stage and gets logged in `DECISIONS_LOG.md`, never absorbed silently — same standing rule as the ledger plan above.
+
+## T2. The one structural decision
+
+**None load-bearing at the data/schema level — this plan's real risk is a wholesale, all-screens-at-once token cutover landing in one chunk (Chunk 1) that every other chunk then depends on.** `[P]` — confirmed by reading the live `tailwind.config.ts`/`src/styles/globals.css`: today's file is the single source every component's Tailwind classes resolve against, so there is no way to retint one screen at a time without either (a) cutting the whole token file over first and accepting every unretouched screen looks subtly wrong until its own chunk lands, or (b) running two token systems side by side, which this project's Tailwind setup does not support without a second config (rejected — real added complexity for a design-only slice). **Resolution: (a), same shape as the ledger plan's Chunk-1-first ordering — cut the tokens over first, in Chunk 1, then retint each screen in its own chunk.** Between Chunk 1 and the last content chunk (4), the app is visually inconsistent (some screens still render the old class names against new token values, which may look wrong but will not break functionally — Tailwind classes reference CSS custom properties, not literal colors, so nothing errors, it just looks unfinished). This window should be a single working session, not spread across days, to keep that inconsistency from being seen live.
+
+This is also the project-killer candidate for this plan (see Chunk Ordering Rationale) — same risk from the structural and the build-sequencing angle, matching the ledger plan's own pattern.
+
+## T3. Data Model & Schema
+
+None. `Documentation/design/DATA_MODEL.md`'s Stage 0 section for this slice already confirms no schema delta — this plan does not revisit that.
+
+## T4. Chunk Map & Boundary Contracts
+
+**Chunk ordering rationale — token cutover first, verification last, everything else in between is independently orderable.** Chunk 1 (token cutover, T2) is the project-killer: every other chunk assumes the new CSS vars and Tailwind classes exist. Chunks 2–5 (Landing/Dashboard/Explore/Portfolio retints) are independent of each other — no chunk reads or writes another's component files — so they can run in any order or in parallel once Chunk 1 lands. Chunk 4 carries the one genuinely new piece of interactive scope (the Explore toggle) and is separable: if Gaurav wants a smaller first merge, Chunk 4's toggle-build half can be cut to its own follow-on PR without blocking Chunks 1/2/3/5. Chunk 6 (390px real-browser verification) is last and mandatory, not optional — per SPEC.md §S6/§S7 and the standing lesson from the ledger plan's own rehearsal (three real bugs found only by looking at the live app, not by the test suite).
+
+### Chunk 1 — Token system cutover
+- **Owns:** `tailwind.config.ts` (repo root), `src/styles/globals.css`, `index.html`'s Google Fonts `<link>`
+- **Reads but does not own:** `Documentation/design/tokens/tailwind.config.ts` / `globals.css` (the approved Phase 2 Stage 4 source of truth — this chunk copies from there, reconciling anything the live file has that the doc copy doesn't, e.g. any project-specific Tailwind plugin config not present in the doc copy)
+- **Endpoints:** none — config/CSS only
+- **Acceptance criteria:** `npm run typecheck` clean; full suite green with zero net-new failures; any test that hardcodes an old token/class name (e.g. `font-display`, a literal teal hex, `rounded-lg`/`rounded-xl` where the scale shifted) is updated to the new name, not skipped or deleted; Google Fonts `<link>` matches the exact snippet documented in `Documentation/design/tokens/tailwind.config.ts`'s Fonts comment
+- **Dispatch steps:**
+  - [ ] Diff the live `tailwind.config.ts`/`globals.css` against the `Documentation/design/tokens/` copies; reconcile any live-only config (plugins, content globs) that the doc copies don't carry `[model: sonnet]`
+  - [ ] Cut the live files over to the reconciled, doc-sourced content `[model: sonnet]`
+  - [ ] Update `index.html`'s font `<link>` to the documented snippet (Yatra One + Playfair Display + Jost + JetBrains Mono; DM Serif Display and Inter removed) `[model: sonnet]`
+  - [ ] Run `npm run typecheck` and the full suite; fix every test that breaks on a renamed token/class, without weakening the assertion `[model: sonnet]`
+
+### Chunk 2 — Landing retint
+- **Owns:** Landing page component(s), `SiteHeader`'s non-wordmark chrome (wordmark/Yatra One unchanged)
+- **Reads but does not own:** `src/lib/landing-content.ts` (copy — read, never edited, per T1's guiding principle)
+- **Endpoints:** none
+- **Acceptance criteria:** `Landing.test.tsx`'s existing claim-equality assertion still passes unmodified (proves copy wasn't touched); vault-frame hero (weighty border, deliberate inset) and guilloche motif render per the folio's Landing plate; trust-strip copy sits outside the frame
+- **Dispatch steps:**
+  - [ ] Build the VaultFrame wrapper component (or a shared utility class, per `COMPONENT_SHOWCASE.md`'s D-016 Slice 5 section) `[model: sonnet]`
+  - [ ] Apply VaultFrame to the Landing hero; add the GuillocheMotif (code-drawn SVG, per the folio's script block — port the generation logic, see SPEC.md §S7 cost flag; fall back to a precomputed static SVG if porting proves nontrivial) `[model: opus]`
+  - [ ] Retint remaining Landing chrome (buttons, trust-strip, section dividers) to the new tokens `[model: sonnet]`
+
+### Chunk 3 — Dashboard retint
+- **Owns:** Dashboard page component (`src/pages/Dashboard.tsx`), `HealthTierCard`, `AllocationDonut`, `NudgeCard` frame styling
+- **Reads but does not own:** nothing ledger-related. **Correction found during this plan's gate review (2026-08-25):** the folio's Dashboard plate shows a ledger-tab scenario switcher, and an earlier draft of this chunk assumed the live `LedgerTabStrip` component (`src/components/ledger-tab-strip.tsx`) rendered on this page. `[P]` — read directly: it renders only in `src/pages/Portfolio.tsx` (confirmed via grep — `Dashboard.tsx` has zero ledger references). The folio's screen labels do not map one-to-one onto this app's actual page split; its "Dashboard" plate shows ledger-switching content that in the live app belongs to Portfolio. **The ledger-tab-strip retint moves to Chunk 5 (Portfolio), where the component actually lives.** Anyone reading the folio's Dashboard plate against this plan should not expect a ledger tab strip on the real Dashboard page.
+- **Endpoints:** none
+- **Acceptance criteria:** every major card gets the VaultFrame treatment; `AllocationDonut`'s emergency-fund segment renders with a hatched fill pattern whenever `holdings` includes an emergency-fund-flagged item (SPEC.md §S6 — its own assertion, not folded into the existing 0-holdings ghost-state rule)
+- **Dispatch steps:**
+  - [ ] Apply VaultFrame to HealthTierCard, AllocationDonut's card, NudgeCard `[model: sonnet]`
+  - [ ] Add the SVG `<pattern>` def and per-segment `fill="url(#...)"` override for the emergency-fund donut slice (Recharts has no built-in hatch fill — SPEC.md §S7 cost flag); write the new assertion covering it `[model: opus]`
+
+### Chunk 4 — Explore retint + one-tap "+ Add" (contains new interactive scope)
+- **Owns:** Explore/LibrarySection components, a new "+ Add" affordance on instrument cards, `explore_holding_added` telemetry wiring
+- **Reads but does not own:** the existing instrument-detail "Record this in my plan" flow and the existing add/edit-holding form + `holdings-api.ts` (Chunk owner: pre-existing v1 Slice 4 code, unchanged) — this chunk is a second entry point into that same form, not a replacement
+- **Endpoints:** none new. **Corrected during this plan's gate review (2026-08-25):** the folio's own copy resolves what "toggle" means — its rail text states plainly, "Tapping opens the holding form prefilled with the instrument. Card flips to Added" (`vittam-mint-folio.html`, Plate III). `[P]` — read directly from the folio and cross-checked against `src/lib/holdings-api.ts`'s `holdingPayloadSchema`, which requires `investedAmount`/`currentValue` as non-nullable fields — an instant, form-less create/delete on tap was never the real design and would have violated the existing data contract (no amount ever entered). The card's "In ledger ✓" state is a **client-side derived check**, not a new query: Explore already needs the household's holdings list to compute this, and `listHoldings()` (`src/lib/holdings-api.ts:147`) already returns each holding's `instrumentId` — `[P]`, read directly — so membership is a client-side `.some()` check against data already fetched elsewhere in the app, not a new backend endpoint.
+- **Acceptance criteria:** tapping "+ Add" on an Explore instrument card opens the existing add-holding form, prefilled with that instrument (same prefill behavior the detail page's "Record this in my plan" CTA already has); on successful save, the card re-renders as "In ledger ✓" without a page navigation; `explore_holding_added` fires with `instrument_slug`/`section` on that successful save (not on tap — tapping only opens a form, nothing is added yet); the existing detail-page flow's own test file passes unmodified
+- **Dispatch steps:**
+  - [ ] Retint section/instrument cards to the new tokens `[model: sonnet]`
+  - [ ] Confirm the existing add-holding form's prefill mechanism (used by instrument-detail today) and reuse it verbatim from the Explore card's "+ Add" button — no new form, no new endpoint `[model: sonnet]`
+  - [ ] Add the client-side "already held" derivation (`listHoldings()` result, matched by `instrumentId`) and the "In ledger ✓" card state `[model: sonnet]`
+  - [ ] Wire `explore_holding_added` telemetry to fire on successful save, not on tap `[model: sonnet]`
+  - [ ] Write a test proving the existing detail-page "Record this in my plan" flow is unaffected, and a new test proving the Explore entry point produces an identical holding record to the detail-page path for the same instrument `[model: sonnet]`
+- **Scope flag for Gaurav:** this chunk is the one place in this plan that adds new interactive behavior (a second entry point into the existing add-holding form), not just a retint — though it needs no new backend surface, per the correction above. If a smaller first merge is preferred, split this chunk — ship the visual retint of Explore's cards now, defer the "+ Add" entry point (and its telemetry) to its own follow-on PR.
+
+### Chunk 5 — Portfolio retint
+- **Owns:** Portfolio page component (`src/pages/Portfolio.tsx`), new `LedgerTable` component (double-rule total row), the retint of `LedgerTabStrip` and `NewLedgerModal` (moved here from Chunk 3 — see that chunk's correction note; these components actually live in `src/components/ledger-tab-strip.tsx` / `new-ledger-modal.tsx`, both rendered from Portfolio, not Dashboard)
+- **Reads but does not own:** `HoldingRow` (unchanged for the baseline/Current view, per COMPONENT_SHOWCASE.md)
+- **Endpoints:** none
+- **Acceptance criteria:** ledger-scoped views (non-baseline ledgers) render via the new LedgerTable; the baseline/Current view keeps rendering via the existing HoldingRow list, unchanged; existing Portfolio test file's assertions on HoldingRow and `LedgerTabStrip` still pass — retokened only, no structural/interaction change to either
+- **Dispatch steps:**
+  - [ ] Retint `LedgerTabStrip` and `NewLedgerModal` classes only — no structural/interaction changes; run their existing test files unmodified to confirm `[model: sonnet]`
+  - [ ] Build the LedgerTable component per the folio's Portfolio plate (double-rule total row, mono tabular figures) `[model: sonnet]`
+  - [ ] Wire LedgerTable into non-baseline ledger views only; leave the Current/baseline path on HoldingRow `[model: sonnet]`
+  - [ ] Retint the bulk-import dashed-border zone chrome (visual only — the bulk-import feature itself remains Out of Plan, D-016 item 3) `[model: sonnet]`
+
+### Chunk 6 — 390px real-browser verification (mandatory gate, last)
+- **Owns:** nothing new — verification only
+- **Reads:** every screen touched in Chunks 1–5
+- **Endpoints:** none
+- **Acceptance criteria:** run against an isolated throwaway Neon branch (this project has no safe local write path — `.env.local` points at production, per `app/CLAUDE.md`), a fresh test account walks Landing, Dashboard, Explore, and Portfolio at exactly 390px in both light and dark mode via the Chrome extension; specific attention to the `sm:`-390px breakpoint trap (this exact bug class already shipped once on the ledger slice, caught only by this same rehearsal, not the test suite); any bug found is fixed before merge, not deferred
+- **Dispatch steps:**
+  - [ ] Create a throwaway Neon branch, matching the ledger plan's own rehearsal pattern `[model: sonnet]`
+  - [ ] Walk all 4 retinted screens at 390px, both themes, via the Chrome extension; screenshot each `[model: opus]`
+  - [ ] Fix any found visual/breakpoint bugs; re-verify the fixed screen before moving on `[model: sonnet or opus depending on the bug]`
+  - [ ] Confirm `explore_holding_added` fires correctly live (not just in the unit test) during the same rehearsal `[model: sonnet]`
+
+## T5. Open Decisions
+
+1. **Chunk ordering within 2–5 is not fixed.** Unlike the ledger plan (where Chunk 1→2→3 had a hard dependency chain), Chunks 2–5 here are mutually independent once Chunk 1 lands. Sequenced 2→3→4→5 above for a single-session narrative, but a parallel dispatch (per `superpowers:dispatching-parallel-agents` or `dev-manager`'s own worktree isolation) is equally valid and may be faster. Not a blocker for approval — noted so `dev-manager` doesn't need to ask.
+2. **Font-loading performance cost is not measured yet.** Loading 3 additional Google Font families (vs. the current 2) adds request/render weight to a PWA that also promises offline capability for the library/`/why` routes. Not resolved here — flagged for a quick Lighthouse/bundle-size spot-check during Chunk 1, not a redesign of the loading strategy itself.
+3. Resolved, not open: font risk (SPEC.md §S7/§S10), Explore-toggle scope (SPEC.md §S5), Title typography role (deferred by Gaurav's explicit decision, not this plan's to resolve) — none reopened here.
+
+## T6. Chunk Ordering / Build Sequence
+
+1. **Chunk 1 — Token system cutover** (project-killer, first, mandatory)
+2. Chunks 2–5 — Landing / Dashboard / Explore+"+ Add" / Portfolio retints (mutually independent, see Open Decision #1 — sequential order below is a default, not a requirement)
+3. **Chunk 6 — 390px real-browser verification** (mandatory gate, last, before merge — not optional, not deferrable to post-merge)
+
+Each chunk is one commit, vertical (visual change + tests + analytics events where applicable), matching the v1 slice contract and the ledger plan's own chunk contract above.
+
+## Gate Review (erd-gate discipline applied directly to this plan, no separate erd-template.md — this project has none; same precedent as the D-016 ledger plan above, "gated via erd-gate" per `app/CLAUDE.md`)
+
+Run 2026-08-25 against T1–T6 above.
+
+| Check | Result | Location | Note |
+|---|---|---|---|
+| 1. STAR structural decision (T2) | PASS | T2 | Present, resolved (not `[H]`), tagged `[P]` |
+| 2. No load-bearing `[H]` on the critical path | PASS, after one correction | Chunk 4 | An earlier draft assumed the Explore interaction was an instant, form-less add/remove toggle calling the existing API directly — untested against `holdings-api.ts`'s schema (which requires non-nullable `investedAmount`/`currentValue`) and against the folio's own text. **Withdrawn and corrected in place**, not shipped as an unresolved hypothesis: re-read the folio (Plate III rail copy: "Tapping opens the holding form prefilled with the instrument") and the live schema directly, confirmed the real interaction is a second entry point into the existing form, tagged `[P]`, and rewrote Chunk 4 plus the `explore_holding_added` event to match |
+| 3. Confidence-tag coverage | PASS | Chunks 3–4 | `[P]` tags added for the two claims verified by reading live code this session: `LedgerTabStrip`'s actual location (`src/components/ledger-tab-strip.tsx`, rendered only in `Portfolio.tsx`) and `listHoldings()`'s existing `instrumentId` field |
+| 4. Chunk boundary contracts complete | PASS, after one correction | Chunk 3 → Chunk 5 | An earlier draft assigned the ledger-tab-strip retint to Chunk 3 (Dashboard), following the folio's own screen labels. `[P]` — read `Dashboard.tsx` directly: zero ledger references. The component only renders from `Portfolio.tsx`. **Moved to Chunk 5** with an explicit correction note in Chunk 3 so a future reader isn't misled by the folio's screen labels, which don't map one-to-one onto this app's actual page split |
+| 5. Schema to source coverage (extends-existing) | PASS | T3, all chunks | No schema delta (T3). Every new frontend artifact (VaultFrame, GuillocheMotif, LedgerTable, hatched donut pattern, the "+ Add" entry point) is either a net-new component named in `COMPONENT_SHOWCASE.md`'s D-016 Slice 5 section or an explicit reuse of an existing, named component/API path — none invented without a stated source |
+| 6. Migration safety | N/A | — | No schema/migration in this plan |
+| 7. Out-of-scope stated | PASS | T1 scope table, Out of Plan | Goal planner, onboarding/Profile/instrument-detail, and the pre-existing D-016 bundle exclusions are all named explicitly |
+| 8. Auth/authz per endpoint | N/A | — | No new endpoints in this plan (Chunk 4 confirmed to reuse the existing, already-authorized holdings-write path, not add one) |
+| 9. Access-pattern / index hygiene | Advisory, no flag | — | No new queries; Chunk 4's "already held" check reuses an existing `listHoldings()` call already made elsewhere in the app, not a new one |
+
+**READY.** All hard checks pass; two real gaps (Chunk 4's interaction shape, Chunk 3/5's component ownership) were found and corrected in place during this review, not carried forward as unresolved `[H]`s — matching how the D-016 ledger plan's own gate review withdrew its Chunk 4 rather than shipping an unresolved hypothesis on the approved critical path.
+
+## Out of Plan (D-016 Slice 5)
+
+- **Goal planner screen** — mocked in the folio but the feature itself doesn't exist yet (D-016 slices 2–4, still unbuilt). Not planned here; will inherit this token system when its own Phase 0–3 pass happens.
+- **Onboarding, Profile, instrument detail** — explicitly deferred to their own future Phase 2 → Phase 3 passes, using this slice's tokens/motifs as reference, per Gaurav's direction 2026-08-25.
+- **Instrument drift detection / bulk-import Excel upload / AI counsel / projections** — already Out of Plan in the D-016 ledger plan above, unchanged by this slice.
+- **Chunk 4's toggle-build half** — separable on request (see Chunk 4's scope flag) if Gaurav wants a smaller first merge; not withdrawn by default, since SPEC.md already confirmed it as in-scope new interaction, not speculative.
+
+None of the above is scope creep into this plan — each is either already-decided elsewhere, blocked on an unbuilt dependency, or explicitly deferred by Gaurav, not silently dropped.
