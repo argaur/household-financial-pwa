@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { HoldingForm } from '@/components/holding-form'
 import { LedgerTabStrip } from '@/components/ledger-tab-strip'
 import { LedgerCompareStrip } from '@/components/ledger-compare-strip'
+import { LedgerTable } from '@/components/ledger-table'
 import { track } from '@/lib/analytics'
 import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
@@ -239,7 +240,7 @@ export function Portfolio() {
         )}
 
         {displayedReady && displayedHoldings.length === 0 && (
-          <div className="rounded-lg border border-dashed p-8 text-center space-y-4">
+          <div className="rounded-xl border border-dashed border-brass-soft bg-brass/5 p-8 text-center space-y-4 transition-colors hover:border-brass">
             <p className="text-body font-medium">Nothing recorded yet.</p>
             <p className="text-body text-muted-foreground">
               Add your investments, savings, insurance, and assets to see your complete household picture.
@@ -262,26 +263,40 @@ export function Portfolio() {
                       {memberHoldings.length} holding{memberHoldings.length === 1 ? '' : 's'} · {formatInr(String(memberTotal))}
                     </p>
                   </div>
-                  {/* Two columns from 768px (2026-08-05 rework) — a member's
-                      holdings read as a group of cards, not a tall list. */}
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {memberHoldings.map((holding) => {
-                      const instrument = instruments.find((i) => i.id === holding.instrumentId)
-                      return (
-                        <button
-                          key={holding.id}
-                          type="button"
-                          onClick={() => openEditSheet(holding)}
-                          className="w-full rounded-lg border bg-card p-4 text-left shadow-card transition-colors hover:bg-accent/50"
-                        >
-                          <p className="text-body font-medium">{instrument?.name ?? 'Holding'}</p>
-                          <p className="text-caption text-muted-foreground capitalize">
-                            {holding.assetClass} · {formatInr(holding.currentValue)} current
-                          </p>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  {isBaselineActive ? (
+                    // Current/baseline: the existing card-grid list, byte-identical
+                    // to before this chunk. Two columns from 768px (2026-08-05
+                    // rework) — a member's holdings read as a group of cards, not
+                    // a tall list.
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {memberHoldings.map((holding) => {
+                        const instrument = instruments.find((i) => i.id === holding.instrumentId)
+                        return (
+                          <button
+                            key={holding.id}
+                            type="button"
+                            onClick={() => openEditSheet(holding)}
+                            className="w-full rounded-lg border bg-card p-4 text-left shadow-card transition-colors hover:bg-accent/50"
+                          >
+                            <p className="text-body font-medium">{instrument?.name ?? 'Holding'}</p>
+                            <p className="text-caption text-muted-foreground capitalize">
+                              {holding.assetClass} · {formatInr(holding.currentValue)} current
+                            </p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    // Non-baseline ledger: the new LedgerTable (D-016 Slice 5,
+                    // COMPONENT_SHOWCASE.md's LedgerTable entry). Weighed against
+                    // the whole ledger's total, not just this member's slice.
+                    <LedgerTable
+                      holdings={memberHoldings}
+                      instruments={instruments}
+                      ledgerTotalValue={totalCurrentValue}
+                      onSelect={openEditSheet}
+                    />
+                  )}
                 </div>
               )
             })}

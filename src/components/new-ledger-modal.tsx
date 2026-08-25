@@ -137,7 +137,7 @@ export function NewLedgerModal({ open, onOpenChange, sourceHoldings, unreadableC
             <legend className="text-sm font-medium">Starting point</legend>
 
             <label
-              className={`flex items-start gap-3 rounded-md border p-3 ${copyDisabled ? 'opacity-50' : 'cursor-pointer'}`}
+              className={`flex items-start gap-3 rounded-lg border p-3 ${copyDisabled ? 'opacity-50' : 'cursor-pointer'}`}
             >
               <input
                 type="radio"
@@ -158,7 +158,7 @@ export function NewLedgerModal({ open, onOpenChange, sourceHoldings, unreadableC
               </span>
             </label>
 
-            <label className="flex items-start gap-3 rounded-md border p-3 cursor-pointer">
+            <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
               <input
                 type="radio"
                 name="ledger-source"

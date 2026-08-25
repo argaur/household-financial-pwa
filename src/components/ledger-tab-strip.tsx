@@ -108,7 +108,7 @@ export function LedgerTabStrip({
             type="button"
             variant="outline"
             size="sm"
-            className={cn('shrink-0', atCap && 'opacity-50')}
+            className={cn('shrink-0 rounded-pill', atCap && 'opacity-50')}
             aria-disabled={atCap}
             title={atCap ? `You've reached the ${MAX_NON_BASELINE_LEDGERS}-ledger limit for this household.` : undefined}
             onClick={handleNewClick}
@@ -126,7 +126,7 @@ export function LedgerTabStrip({
       {deleteError && <p className="text-caption text-destructive">{deleteError}</p>}
 
       {confirming && (
-        <div className="space-y-2 rounded-md border p-3">
+        <div className="space-y-2 rounded-lg border p-3">
           <p className="text-caption text-muted-foreground">
             Delete "{confirming.name ?? 'Untitled ledger'}"? This can't be undone.
           </p>
@@ -185,7 +185,7 @@ function Tab({ ledger, active, onSelect, canDelete, deleting, onDelete }: TabPro
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center gap-1 rounded-full border pl-1 pr-1',
+        'flex shrink-0 items-center gap-1 rounded-pill border pl-1 pr-1',
         active ? 'border-primary bg-primary/10' : 'border-input bg-background',
       )}
     >
@@ -195,7 +195,7 @@ function Tab({ ledger, active, onSelect, canDelete, deleting, onDelete }: TabPro
         aria-selected={active}
         onClick={() => onSelect(ledger.id)}
         className={cn(
-          'h-11 min-w-11 rounded-full px-4 text-sm font-medium transition-colors',
+          'h-11 min-w-11 rounded-pill px-4 text-sm font-medium transition-colors',
           active ? 'text-primary' : 'text-foreground hover:bg-accent hover:text-accent-foreground',
         )}
       >
@@ -210,7 +210,7 @@ function Tab({ ledger, active, onSelect, canDelete, deleting, onDelete }: TabPro
             e.stopPropagation()
             onDelete?.(ledger.id)
           }}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-destructive disabled:opacity-50"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-muted-foreground hover:bg-accent hover:text-destructive disabled:opacity-50"
         >
           {deleting ? '…' : '×'}
         </button>
