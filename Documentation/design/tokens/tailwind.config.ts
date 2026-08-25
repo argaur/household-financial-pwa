@@ -107,21 +107,17 @@ const config: Config = {
         /* ── Asset class palette ──────────────────────────────
            Used ONLY in the allocation donut chart segments and
            their matching legend dots. Never for UI chrome.
-           Values are per-theme native (dark is not light dimmed) —
-           set these as CSS custom properties per theme, same
-           pattern as --primary above, rather than fixed hex, since
-           the folio itself defines them per-theme (see globals.css
-           if/when this table moves to CSS vars). Fixed here to the
-           folio's LIGHT values as the source of truth; Stage 4
-           follow-up should promote these to --c-* CSS vars mirroring
-           the dark-mode set in the folio before implementation.      */
+           Native per-theme CSS vars (dark is not light dimmed),
+           mirroring --primary — promoted from fixed hex 2026-08-25
+           (was flagged as a Phase-4 gap; fixed at Stage 4 instead
+           of deferred, per Gaurav). Source values in globals.css.   */
         asset: {
-          equity:  '#1E7A5A',   /* deep mint-green, distinct from --primary */
-          debt:    '#4E6B80',   /* slate-blue */
-          gold:    '#A07E2B',   /* warm brass-adjacent gold */
-          ef:      '#2E7D8C',   /* emergency fund — teal-cyan, hatched fill in the donut */
-          ssy:     '#7A5FA8',   /* muted purple */
-          alt:     '#A04A3A',   /* terracotta */
+          equity: 'hsl(var(--c-equity))',   /* deep mint-green, distinct from --primary */
+          debt:   'hsl(var(--c-debt))',     /* slate-blue */
+          gold:   'hsl(var(--c-gold))',     /* warm brass-adjacent gold */
+          ef:     'hsl(var(--c-ef))',       /* emergency fund — teal-cyan, hatched fill in the donut */
+          ssy:    'hsl(var(--c-ssy))',      /* muted purple */
+          alt:    'hsl(var(--c-alt))',      /* terracotta */
         },
 
         /* ── Tier status colors ───────────────────────────────

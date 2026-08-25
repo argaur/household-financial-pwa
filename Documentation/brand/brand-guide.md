@@ -44,18 +44,18 @@ Full CSS variables in `Documentation/design/tokens/globals.css`. Each color is d
 | On Track | `#186A4F` (mint, was teal `#1B6B6B`) | `#DEEBE2` | `#B7D8C6` |
 | Strong | `#166534` | `#DCFCE7` | `#86EFAC` |
 
-**Asset class palette** (allocation donut + legend, Explore card accent edges. Never generic UI chrome. Retinted this pass, values below are the folio's LIGHT set — dark-mode native values are documented in `tailwind.config.ts`'s `colors.asset` comment and should be promoted to CSS vars, mirroring `--primary`, before Phase 4 implementation):
+**Asset class palette** (allocation donut + legend, Explore card accent edges. Never generic UI chrome. Retinted this pass; each class is a native per-theme CSS var — `--c-equity`, `--c-debt`, `--c-gold`, `--c-ef`, `--c-ssy`, `--c-alt` in `globals.css`, mirroring `--primary` — dark is not the light value dimmed):
 
-| Class | Color | Hex (light) |
-|---|---|---|
-| Equity | Deep mint-green | `#1E7A5A` |
-| Debt | Slate-blue | `#4E6B80` |
-| Gold | Warm brass-adjacent gold | `#A07E2B` |
-| Emergency fund | Teal-cyan, **hatched fill in the donut** (new this pass — solves public-showcase backlog item 1, emergency fund invisibility) | `#2E7D8C` |
-| SSY / guaranteed | Muted purple | `#7A5FA8` |
-| Alternative | Terracotta | `#A04A3A` |
+| Class | Color | Hex (light) | Hex (dark) |
+|---|---|---|---|
+| Equity | Deep mint-green | `#1E7A5A` | `#57C795` |
+| Debt | Slate-blue | `#4E6B80` | `#8CA9BE` |
+| Gold | Warm brass-adjacent gold | `#A07E2B` | `#D3B36B` |
+| Emergency fund | Teal-cyan, **hatched fill in the donut** (new this pass — solves public-showcase backlog item 1, emergency fund invisibility) | `#2E7D8C` | `#63B7C6` |
+| SSY / guaranteed | Muted purple | `#7A5FA8` | `#A991D4` |
+| Alternative | Terracotta | `#A04A3A` | `#CE8A79` |
 
-The same hex serves both themes for most classes; every use is a decorative identity mark beside a text label (accent edge, legend dot, chart fill), never the only carrier of information.
+Every use is a decorative identity mark beside a text label (accent edge, legend dot, chart fill), never the only carrier of information.
 
 ### Typography Scale (2026-08-25 — Bodoni MT / Gill Sans Nova / Cascadia Mono, replaces DM Serif Display / Inter)
 

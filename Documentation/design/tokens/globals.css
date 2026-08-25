@@ -59,6 +59,19 @@
 
     /* ── Radius ──────────────────────────────────────────────── */
     --radius: 0.625rem;      /* 10px — folio's dominant card/field radius */
+
+    /* ── Asset class palette — native per-theme, promoted to CSS
+       vars 2026-08-25 to mirror --primary (was fixed hex in
+       tailwind.config.ts, flagged there as a Phase-4 gap; fixed now
+       instead of deferred, per Gaurav). Used ONLY in the allocation
+       donut chart segments and their matching legend dots — never
+       for UI chrome.                                               */
+    --c-equity: 159 61% 30%;   /* #1E7A5A */
+    --c-debt:   205 24% 40%;   /* #4E6B80 */
+    --c-gold:    43 58% 40%;   /* #A07E2B */
+    --c-ef:     190 51% 36%;   /* #2E7D8C — emergency fund, hatched fill in the donut */
+    --c-ssy:    262 30% 52%;   /* #7A5FA8 */
+    --c-alt:      9 47% 43%;   /* #A04A3A */
   }
 
   .dark {
@@ -102,6 +115,15 @@
     --border-soft: 140 14% 12%;   /* #1B241E */
     --input:       142 13% 17%;
     --ring:       154 51% 55%;
+
+    /* ── Asset class palette — native dark values, not the light
+       set dimmed. Same scoped-use rule as light.                  */
+    --c-equity: 153 50% 56%;   /* #57C795 */
+    --c-debt:   205 28% 65%;   /* #8CA9BE */
+    --c-gold:    42 54% 62%;   /* #D3B36B */
+    --c-ef:     189 46% 58%;   /* #63B7C6 */
+    --c-ssy:    261 44% 70%;   /* #A991D4 */
+    --c-alt:     12 46% 64%;   /* #CE8A79 */
   }
 }
 

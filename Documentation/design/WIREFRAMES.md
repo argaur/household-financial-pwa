@@ -930,6 +930,8 @@ Tokens extracted directly from the folio's CSS into the existing token files (up
 
 **Negative-constraint check (Stage 2, item 3):** every new token/component above traces to the vault/currency metaphor (guilloche, reed, coin, ledger, hatch) or is a direct extraction from the folio's own CSS — no bare shadcn defaults introduced, no gradients, no glassmorphism, no decorative motion added.
 
-**Gate: Stage 4 pending Gaurav's review of the token/brand-guide changes above before Stage 5 (Spec Doc) begins.**
+**Stage 4 follow-up (2026-08-25, resolved same day):** the asset-class donut colors were initially left as fixed hex in `tailwind.config.ts` with a note to promote them to CSS custom properties (mirroring `--primary`) before Phase 4. Gaurav directed fixing this now rather than deferring — done: `globals.css` gained native per-theme `--c-equity`/`--c-debt`/`--c-gold`/`--c-ef`/`--c-ssy`/`--c-alt` vars, `tailwind.config.ts`'s `colors.asset` now references `hsl(var(--c-*))`, and `brand-guide.md`'s asset-class table lists both light and dark hex. The "Title" role's serif-vs-sans ambiguity (app-bar name vs. card titles) is left unresolved by explicit decision — not pinned now, resolved when that screen is actually built.
+
+**Gate: Stage 4 approved by Gaurav 2026-08-25, including the asset-color follow-up. Proceeding to Stage 5 (Spec Doc) and Stage 6 (Handoff).**
 
 **Superseded (2026-08-25):** the ASCII wireframes for Landing (2a) and Dashboard (2b) and the empty/error-state table that previously followed here were drawn against the wrong Stage 2 answers (generic "vault frame," no mint/brass, old typefaces) and have been removed. The concept folio's Landing and Dashboard plates are the Stage 3 artifact for those two screens now; see "Stage 3 — Wireframes, resolution" above.
