@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { VaultFrame } from '@/components/vault-frame'
 import { track } from '@/lib/analytics'
 import { getSectionByUrlSlug } from '@/lib/library-sections'
 import type { Nudge, NudgeCheckId } from '@/lib/nudge'
@@ -79,21 +80,23 @@ interface NudgeCardProps {
 
 export function NudgeCard({ nudge }: NudgeCardProps) {
   return (
-    <section className="rounded-lg border p-4 md:p-6 space-y-2">
-      <h2 className="section-label">Next step</h2>
-      <p className="text-body">{bodyFor(nudge)}</p>
-      <Link
-        to={NUDGE_HREF[nudge.checkId]}
-        className="inline-flex min-h-[44px] items-center text-body underline"
-        onClick={() =>
-          track('learn_card_clicked', {
-            learn_card_slug: nudge.learnCardSlug,
-            target_type: nudge.targetType,
-          })
-        }
-      >
-        {ctaFor(nudge)}
-      </Link>
+    <section>
+      <VaultFrame className="p-4 md:p-6 space-y-2">
+        <h2 className="section-label">Next step</h2>
+        <p className="text-body">{bodyFor(nudge)}</p>
+        <Link
+          to={NUDGE_HREF[nudge.checkId]}
+          className="inline-flex min-h-[44px] items-center text-body underline"
+          onClick={() =>
+            track('learn_card_clicked', {
+              learn_card_slug: nudge.learnCardSlug,
+              target_type: nudge.targetType,
+            })
+          }
+        >
+          {ctaFor(nudge)}
+        </Link>
+      </VaultFrame>
     </section>
   )
 }

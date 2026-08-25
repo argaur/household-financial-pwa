@@ -74,6 +74,34 @@ describe('computeAllocation', () => {
     expect(result.allocation.map((a) => a.assetClass)).toEqual(['equity', 'gold'])
   })
 
+  // D-016 Slice 5 — emergency fund is a per-holding flag, so it is reported as
+  // a subset of each asset class rather than a class of its own.
+  it('reports the flagged part of a class as reserveValue, without changing value or percentage', () => {
+    const result = computeAllocation([
+      holding({ assetClass: 'debt', currentValue: '1800' }),
+      holding({ assetClass: 'debt', currentValue: '1200', isEmergencyFund: true }),
+      holding({ assetClass: 'equity', currentValue: '7000' }),
+    ])
+    expect(result.totalValue).toBe(10000)
+    expect(result.allocation).toEqual([
+      { assetClass: 'equity', value: 7000, percentage: 70 },
+      { assetClass: 'debt', value: 3000, percentage: 30, reserveValue: 1200 },
+    ])
+  })
+
+  it('tracks a reserve spread across more than one asset class', () => {
+    const result = computeAllocation([
+      holding({ assetClass: 'equity', currentValue: '500', isEmergencyFund: true }),
+      holding({ assetClass: 'debt', currentValue: '500', isEmergencyFund: true }),
+    ])
+    expect(result.allocation.map((a) => a.reserveValue)).toEqual([500, 500])
+  })
+
+  it('omits reserveValue entirely when nothing is flagged, rather than reporting zero', () => {
+    const result = computeAllocation([holding({ assetClass: 'equity', currentValue: '100', isEmergencyFund: false })])
+    expect(result.allocation[0]).not.toHaveProperty('reserveValue')
+  })
+
   it('omits asset classes with no holdings entirely, rather than a zero-value slice', () => {
     const result = computeAllocation([holding({ assetClass: 'equity', currentValue: '100' })])
     expect(result.allocation).toHaveLength(1)

@@ -1,3 +1,4 @@
+import { VaultFrame } from '@/components/vault-frame'
 import type { Completeness, CompletenessTier } from '@/lib/dashboard'
 
 // Copy: Documentation/design/COPY_DECK.md — "Household Health panel".
@@ -32,12 +33,14 @@ interface HealthTierCardProps {
 export function HealthTierCard({ completeness }: HealthTierCardProps) {
   const { tier, score } = completeness
   return (
-    <section className={`rounded-lg border p-4 md:p-6 space-y-2 ${TIER_CLASSES[tier]}`}>
-      <h2 className="section-label">Household health</h2>
-      <p className="font-serif text-display">{TIER_LABELS[tier]}</p>
-      <p className="text-body">{score} of 5 checks complete</p>
-      <hr className="border-current/20" />
-      <p className="text-caption">{TIER_CONTEXT[tier]}</p>
+    <section>
+      <VaultFrame className={`p-4 md:p-6 space-y-2 ${TIER_CLASSES[tier]}`}>
+        <h2 className="section-label">Household health</h2>
+        <p className="font-serif text-display">{TIER_LABELS[tier]}</p>
+        <p className="text-body">{score} of 5 checks complete</p>
+        <hr className="border-current/20" />
+        <p className="text-caption">{TIER_CONTEXT[tier]}</p>
+      </VaultFrame>
     </section>
   )
 }

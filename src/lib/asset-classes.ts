@@ -49,6 +49,25 @@ export const ASSET_HEX: Record<AssetClass, string> = {
   alternative: '#A04A3A',
 }
 
+/**
+ * The reserve (emergency fund) mark — `--c-ef` and `--card`, resolved to hex.
+ *
+ * Not an asset class, which is why it lives outside ASSET_HEX: emergency fund
+ * is a per-holding flag that cuts across classes (globals.css says the same
+ * thing at `--c-ef`). The donut paints the flagged part of a class with a
+ * hatch built from these two: teal ground, paper-coloured rules.
+ *
+ * Same LIGHT-theme-only limitation as ASSET_HEX above, and for the same
+ * reason: an SVG <pattern>'s fill is a literal, and a literal cannot follow
+ * `.dark`.
+ */
+export const RESERVE_HATCH = {
+  /** --c-ef, light. */
+  ground: '#2E7D8C',
+  /** --card, light — the rule between the stripes. */
+  rule: '#FAFCF8',
+} as const
+
 /** Legend/identity dot — the same mark the donut legend uses. */
 export const ASSET_DOT_CLASS: Record<AssetClass, string> = {
   equity: 'bg-asset-equity',

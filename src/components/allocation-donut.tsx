@@ -1,13 +1,51 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useMemo, useRef } from 'react'
 import { PieChart, Pie, Cell } from 'recharts'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { AllocationSlice } from '@/lib/allocation'
+import { VaultFrame } from '@/components/vault-frame'
+import type { AllocationSlice, AssetClass } from '@/lib/allocation'
 // Copy: Documentation/design/COPY_DECK.md — "Allocation donut section".
 // Labels and hex live in the shared asset-class identity module so the donut,
 // the Explore grid and the section pages stay one system.
-import { ASSET_LABELS, ASSET_HEX as ASSET_COLORS } from '@/lib/asset-classes'
+import { ASSET_LABELS, ASSET_HEX as ASSET_COLORS, RESERVE_HATCH } from '@/lib/asset-classes'
+
+/**
+ * One drawn arc. An asset class holding no reserve draws as a single arc, the
+ * way it always has. A class holding some emergency fund draws as two adjacent
+ * arcs — the open part in the class colour, then the reserve part hatched.
+ *
+ * Splitting inside the class rather than promoting the reserve to a slice of
+ * its own is the honest reading of the data: `isEmergencyFund` is a per-holding
+ * flag, so reserve money is *also* debt or equity money. Carving it out would
+ * make the legend's "Debt 30%" stop being true of the household's debt. See
+ * AllocationSlice.reserveValue in src/lib/allocation.ts.
+ */
+interface DonutSegment {
+  key: string
+  assetClass: AssetClass
+  value: number
+  reserve: boolean
+}
+
+export function toDonutSegments(allocation: AllocationSlice[]): DonutSegment[] {
+  return allocation.flatMap((slice) => {
+    // Clamp: reserveValue is a subset of value by construction, but a caller
+    // hand-building a slice could disagree, and a negative open arc would
+    // silently corrupt every angle after it.
+    const reserve = Math.min(Math.max(slice.reserveValue ?? 0, 0), slice.value)
+    if (reserve <= 0) {
+      return [{ key: slice.assetClass, assetClass: slice.assetClass, value: slice.value, reserve: false }]
+    }
+    const open = slice.value - reserve
+    const segments: DonutSegment[] = []
+    if (open > 0) {
+      segments.push({ key: `${slice.assetClass}-open`, assetClass: slice.assetClass, value: open, reserve: false })
+    }
+    segments.push({ key: `${slice.assetClass}-reserve`, assetClass: slice.assetClass, value: reserve, reserve: true })
+    return segments
+  })
+}
 
 const currency = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
 function formatInr(value: number): string {
@@ -32,8 +70,17 @@ export function AllocationDonut({ state, allocation, totalValue }: AllocationDon
     chartRef.current?.querySelectorAll('[tabindex]').forEach((el) => el.removeAttribute('tabindex'))
   }, [state, allocation])
 
+  // SVG ids are document-global and this card can mount more than once (the
+  // dashboard renders one, a future compare view could render two side by
+  // side). useId gives a per-instance value; React 18 formats it as ":r0:",
+  // and a colon inside url(#...) is not portable, so strip to [A-Za-z0-9].
+  const hatchId = `ef-hatch-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  const segments = useMemo(() => toDonutSegments(allocation), [allocation])
+  const hasReserve = segments.some((segment) => segment.reserve)
+
   return (
-    <section className="rounded-lg border p-4 md:p-6 space-y-4">
+    <section>
+      <VaultFrame className="p-4 md:p-6 space-y-4">
       <h2 className="section-label">Where your money lives</h2>
 
       {state === 'loading' && (
@@ -89,8 +136,25 @@ export function AllocationDonut({ state, allocation, totalValue }: AllocationDon
             */}
             <div aria-hidden="true" ref={chartRef}>
               <PieChart width={200} height={200}>
+                {/*
+                  Recharts has no hatch/texture fill of its own (SPEC.md §S7),
+                  so the reserve treatment is a hand-wired SVG <pattern> that
+                  Cells point at with fill="url(#…)" — the same escape hatch
+                  Recharts documents for gradients. Geometry is the concept
+                  folio's: a 5x5 tile rotated 45°, teal ground, one paper-
+                  coloured rule. Rendered only when something uses it, so a
+                  household with no emergency fund ships no dead def.
+                */}
+                {hasReserve && (
+                  <defs>
+                    <pattern id={hatchId} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                      <rect width="5" height="5" fill={RESERVE_HATCH.ground} />
+                      <line x1="0" y1="0" x2="0" y2="5" stroke={RESERVE_HATCH.rule} strokeWidth="2.2" />
+                    </pattern>
+                  </defs>
+                )}
                 <Pie
-                  data={allocation}
+                  data={segments}
                   dataKey="value"
                   nameKey="assetClass"
                   innerRadius={56}
@@ -99,8 +163,11 @@ export function AllocationDonut({ state, allocation, totalValue }: AllocationDon
                   stroke="none"
                   isAnimationActive={false}
                 >
-                  {allocation.map((slice) => (
-                    <Cell key={slice.assetClass} fill={ASSET_COLORS[slice.assetClass]} />
+                  {segments.map((segment) => (
+                    <Cell
+                      key={segment.key}
+                      fill={segment.reserve ? `url(#${hatchId})` : ASSET_COLORS[segment.assetClass]}
+                    />
                   ))}
                 </Pie>
               </PieChart>
@@ -127,6 +194,7 @@ export function AllocationDonut({ state, allocation, totalValue }: AllocationDon
           </div>
         </div>
       )}
+      </VaultFrame>
     </section>
   )
 }
