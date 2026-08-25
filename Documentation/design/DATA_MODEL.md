@@ -418,3 +418,11 @@ ledgers        N ──── 1  ledgers             (snapshot_of self-reference
 9. **The compare strip has exactly three numbers in slice 1** (total value, equity share, monthly SIP) — no side-by-side view, deferred behind the `ledger_switched` adoption signal (D-018, Revisit-if clause).
 10. **The instrument-drift banner is the one new UI surface with no existing precedent in this app** — v1 never showed a warning banner anywhere. Design should treat its visual weight (bold, red-toned per D-017 §6) as a first-class state, not a small inline note.
 11. **AI cap-exhausted is a soft, permanent-feeling state, not an error.** It should read as a product limitation with a future ("paid tier coming soon"), never as a failure — copy needs a different visual register than the toast-based error states elsewhere in this doc.
+
+---
+
+## Stage 0 — D-016 Slice 5 (Full-Platform Mint/Treasury Redesign, 2026-08-25)
+
+**No new entities, fields, relationships, or states.** Slice 5 is a visual restyle of screens against entities and states already fully specified above (households, family_members, holdings, protection, instruments, plus the ledger amendments). Every screen in scope — landing, dashboard, explore, `/why`, onboarding, Profile, instrument detail — already has its data shape and State Matrix row defined either in the original tables above or (for ledgers) in the amendments section. This slice changes how those states render, never what they are.
+
+**Gate: Stage 0 passes by inspection, not by new content.** No table to fill — confirming absence of a data-model delta is itself the Stage 0 output for a pure visual slice.

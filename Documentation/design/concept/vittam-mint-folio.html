@@ -1,0 +1,1509 @@
+<meta charset="utf-8">
+<title>The Vittam Mint</title>
+<style>
+  /* ============================================================
+     THE VITTAM MINT · design folio
+     Light = fresh currency paper. Dark = vault interior.
+     One engraved language, two native materials.
+     ============================================================ */
+
+  :root {
+    /* ---- light: currency paper ---- */
+    --bg: #F0F3EE;
+    --card: #FAFCF8;
+    --panel: #E9EEE5;
+    --ink: #17211A;
+    --muted: #5D6B60;
+    --line: #D4DBCF;
+    --line-soft: #E2E7DD;
+    --mint: #186A4F;
+    --mint-strong: #0F5540;
+    --on-mint: #F4FAF6;
+    --mint-tint: #DEEBE2;
+    --brass: #8F7326;
+    --brass-soft: #B49347;
+    --brass-tint: #F0E9D4;
+    --shadow: 0 1px 2px rgba(23,33,26,.06), 0 12px 32px -18px rgba(23,33,26,.25);
+    --shadow-lift: 0 2px 4px rgba(23,33,26,.07), 0 20px 44px -20px rgba(23,33,26,.32);
+    --emboss: 0 1px 0 rgba(255,255,255,.85);
+    --guilloche-opacity: .38;
+
+    /* asset classes */
+    --c-equity: #1E7A5A;
+    --c-gold: #A07E2B;
+    --c-debt: #4E6B80;
+    --c-ef: #2E7D8C;
+    --c-ssy: #7A5FA8;
+    --c-alt: #A04A3A;
+
+    /* type */
+    --serif: "Bodoni MT", Didot, "Playfair Display", "Times New Roman", serif;
+    --sans: "Gill Sans Nova", "Gill Sans", "Trebuchet MS", "Segoe UI", Candara, sans-serif;
+    --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0C110E;
+      --card: #131A15;
+      --panel: #0F1511;
+      --ink: #E7EDE6;
+      --muted: #8FA093;
+      --line: #26312A;
+      --line-soft: #1B241E;
+      --mint: #54C795;
+      --mint-strong: #7FDCB4;
+      --on-mint: #08130D;
+      --mint-tint: #16281F;
+      --brass: #CDAD62;
+      --brass-soft: #A98D4E;
+      --brass-tint: #241E10;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.7);
+      --shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 22px 46px -20px rgba(0,0,0,.8);
+      --emboss: 0 -1px 0 rgba(0,0,0,.6);
+      --guilloche-opacity: .35;
+
+      --c-equity: #57C795;
+      --c-gold: #D3B36B;
+      --c-debt: #8CA9BE;
+      --c-ef: #63B7C6;
+      --c-ssy: #A991D4;
+      --c-alt: #CE8A79;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0C110E;
+    --card: #131A15;
+    --panel: #0F1511;
+    --ink: #E7EDE6;
+    --muted: #8FA093;
+    --line: #26312A;
+    --line-soft: #1B241E;
+    --mint: #54C795;
+    --mint-strong: #7FDCB4;
+    --on-mint: #08130D;
+    --mint-tint: #16281F;
+    --brass: #CDAD62;
+    --brass-soft: #A98D4E;
+    --brass-tint: #241E10;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.7);
+    --shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 22px 46px -20px rgba(0,0,0,.8);
+    --emboss: 0 -1px 0 rgba(0,0,0,.6);
+    --guilloche-opacity: .35;
+
+    --c-equity: #57C795;
+    --c-gold: #D3B36B;
+    --c-debt: #8CA9BE;
+    --c-ef: #63B7C6;
+    --c-ssy: #A991D4;
+    --c-alt: #CE8A79;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--mint); color: var(--on-mint); }
+
+  a { color: var(--mint); }
+
+  button { font-family: inherit; cursor: pointer; }
+  button:focus-visible, a:focus-visible, input:focus-visible {
+    outline: 2px solid var(--mint);
+    outline-offset: 2px;
+  }
+
+  /* ---------- shared vocabulary ---------- */
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--brass);
+  }
+
+  .reed {
+    height: 10px;
+    background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 5px);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    opacity: .8;
+  }
+
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- folio header ---------- */
+
+  .folio-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px clamp(16px, 4vw, 40px);
+    background: color-mix(in srgb, var(--bg) 84%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .wordmark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--serif);
+    font-size: 19px;
+    letter-spacing: .02em;
+  }
+
+  .mintmark {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--brass);
+    display: grid;
+    place-items: center;
+    color: var(--brass);
+    position: relative;
+    flex: none;
+  }
+  .mintmark::before {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: repeating-conic-gradient(var(--brass) 0deg 2deg, transparent 2deg 7deg);
+    -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%);
+    mask: radial-gradient(circle, transparent 62%, #000 63%);
+    opacity: .7;
+  }
+  .mintmark svg { width: 14px; height: 14px; }
+
+  .wordmark small {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-left: 4px;
+  }
+
+  .theme-set {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--card);
+    padding: 3px;
+    gap: 2px;
+  }
+  .theme-set button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    min-height: 32px;
+    border-radius: 999px;
+  }
+  .theme-set button[aria-pressed="true"] {
+    background: var(--mint);
+    color: var(--on-mint);
+  }
+  @media (max-width: 480px) {
+    .folio-header { padding-left: 12px; padding-right: 12px; }
+    .wordmark small { display: none; }
+    .theme-set button { padding: 8px 10px; }
+  }
+
+  /* ---------- cover ---------- */
+
+  .cover {
+    position: relative;
+    overflow: hidden;
+    padding: clamp(56px, 9vw, 110px) clamp(20px, 5vw, 48px) clamp(48px, 7vw, 88px);
+    text-align: center;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .cover .guilloche {
+    position: absolute;
+    top: -300px;
+    left: 50%;
+    translate: -50% 0;
+    width: 720px;
+    height: 720px;
+    color: var(--brass);
+    opacity: var(--guilloche-opacity);
+    pointer-events: none;
+  }
+  .cover-inner { position: relative; max-width: 680px; margin: 0 auto; }
+
+  .cover h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(32px, 9vw, 72px);
+    line-height: 1.04;
+    margin: 18px 0 0;
+    text-wrap: balance;
+    text-shadow: var(--emboss);
+  }
+  .cover h1 em { font-style: italic; color: var(--mint); }
+
+  .cover .thesis {
+    max-width: 46ch;
+    margin: 22px auto 0;
+    color: var(--muted);
+    font-size: 17px;
+  }
+
+  .cover-note {
+    display: inline-block;
+    line-height: 1.8;
+    max-width: 100%;
+    margin-top: 26px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 16px;
+    background: var(--card);
+  }
+  .cover-note b { color: var(--mint); font-weight: 600; }
+
+  .specimen {
+    margin: 44px auto 0;
+    max-width: 760px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    text-align: left;
+  }
+  .spec-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .spec-card .eyebrow { display: block; margin-bottom: 10px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,.25);
+  }
+  .spec-type { font-size: 13px; color: var(--muted); }
+  .spec-type .big { font-family: var(--serif); font-size: 26px; color: var(--ink); display: block; }
+  .spec-type .mid { font-family: var(--sans); font-size: 14px; color: var(--ink); display: block; margin-top: 4px; }
+  .spec-type .small { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; display: block; margin-top: 6px; }
+
+  /* ---------- plates ---------- */
+
+  .plate {
+    padding: clamp(52px, 8vw, 96px) clamp(20px, 5vw, 48px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .plate-grid {
+    max-width: 1060px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) auto;
+    gap: clamp(28px, 5vw, 72px);
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .plate-grid { grid-template-columns: 1fr; }
+    .plate-grid .frame-col { justify-self: center; }
+  }
+
+  .rail { position: sticky; top: 84px; }
+  @media (max-width: 860px) { .rail { position: static; } }
+
+  .rail h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.1;
+    margin: 12px 0 0;
+    text-wrap: balance;
+  }
+  .rail .proves {
+    margin: 14px 0 0;
+    color: var(--muted);
+    max-width: 42ch;
+  }
+  .rail .proves b { color: var(--ink); font-weight: 600; }
+
+  .keyed { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 14px; }
+  .keyed li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; max-width: 46ch; }
+  .keyed .key {
+    width: 22px; height: 22px;
+    border: 1px solid var(--brass);
+    color: var(--brass);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    display: grid;
+    place-items: center;
+    margin-top: 2px;
+  }
+  .keyed p { margin: 0; font-size: 14.5px; color: var(--muted); }
+  .keyed p b { color: var(--ink); font-weight: 600; }
+
+  /* reveal */
+  .plate-grid > * { opacity: 0; transform: translateY(14px); transition: opacity .7s ease, transform .7s ease; }
+  .plate.in .plate-grid > * { opacity: 1; transform: none; }
+  .plate.in .plate-grid > *:nth-child(2) { transition-delay: .12s; }
+  @media (prefers-reduced-motion: reduce) {
+    .plate-grid > * { opacity: 1; transform: none; transition: none; }
+  }
+
+  /* ---------- phone frame ---------- */
+
+  .phone {
+    width: min(390px, 92vw);
+    border: 1px solid var(--line);
+    border-radius: 38px;
+    background: var(--bg);
+    box-shadow: var(--shadow-lift);
+    overflow: hidden;
+    position: relative;
+  }
+  .phone .screen {
+    padding: 18px 16px 0;
+    min-height: 640px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .app-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 2px 0;
+  }
+  .app-bar .who { flex: 1; min-width: 0; }
+  .app-bar .who .name { font-family: var(--serif); font-size: 17px; }
+  .app-bar .who .sub { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .avatar {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--mint-tint);
+    color: var(--mint);
+    display: grid; place-items: center;
+    font-family: var(--serif);
+    font-size: 14px;
+    border: 1px solid var(--line);
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .card-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .concept-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--brass);
+    border: 1px dashed var(--brass-soft);
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: var(--brass-tint);
+    white-space: nowrap;
+  }
+
+  /* scenario ledgers */
+  .ledger-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .ledger-row::-webkit-scrollbar { display: none; }
+  .ledger-tab {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 0 16px;
+    min-height: 44px;
+    font-size: 13.5px;
+    white-space: nowrap;
+    transition: background .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .ledger-tab[aria-pressed="true"] {
+    background: var(--mint);
+    border-color: var(--mint);
+    color: var(--on-mint);
+  }
+  .ledger-tab.ghost { border-style: dashed; }
+
+  .compare-strip {
+    font-size: 12.5px;
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 8px 12px;
+  }
+  .compare-strip b { color: var(--mint); font-weight: 600; }
+
+  /* net worth */
+  .networth { text-align: center; padding-top: 20px; padding-bottom: 20px; position: relative; overflow: hidden; }
+  .networth .guilloche {
+    position: absolute;
+    inset: -80px -40px auto;
+    height: 300px;
+    color: var(--brass);
+    opacity: calc(var(--guilloche-opacity) * .5);
+    pointer-events: none;
+  }
+  .networth .figure {
+    font-family: var(--serif);
+    font-size: 44px;
+    line-height: 1;
+    text-shadow: var(--emboss);
+    position: relative;
+    font-variant-numeric: tabular-nums;
+  }
+  .networth .delta {
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: var(--mint);
+    position: relative;
+  }
+  .networth .asof {
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    position: relative;
+  }
+
+  /* donut */
+  .alloc { display: grid; gap: 14px; }
+  .donut-wrap { display: grid; place-items: center; position: relative; }
+  .donut-wrap svg { width: 200px; height: 200px; }
+  .donut-center {
+    position: absolute;
+    text-align: center;
+  }
+  .donut-center .t { font-family: var(--serif); font-size: 22px; font-variant-numeric: tabular-nums; }
+  .donut-center .s { font-family: var(--mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .donut-slice { transition: stroke-width .2s ease; cursor: pointer; }
+  .donut-slice:hover { stroke-width: 30; }
+
+  .legend { display: grid; gap: 0; }
+  .legend-row {
+    display: grid;
+    grid-template-columns: 14px 1fr auto auto;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 2px;
+    border-top: 1px solid var(--line-soft);
+    font-size: 13px;
+  }
+  .legend-row:first-child { border-top: 0; }
+  .legend-row .dot { width: 10px; height: 10px; border-radius: 3px; }
+  .legend-row .dot.hatched {
+    background: repeating-linear-gradient(45deg, var(--c-ef) 0 2px, transparent 2px 4px);
+    border: 1px solid var(--c-ef);
+  }
+  .legend-row .pct { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend-row .val { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .tag-reserve {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--c-ef);
+    border: 1px solid color-mix(in srgb, var(--c-ef) 50%, transparent);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 6px;
+  }
+
+  /* counsel */
+  .counsel { display: grid; gap: 10px; }
+  .counsel-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--brass);
+    border-radius: 12px;
+    padding: 12px 14px;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .counsel-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+  .counsel-card p { margin: 0; font-size: 13.5px; }
+  .counsel-card .why { margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .counsel-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-quiet, .btn-mint, .btn-brass {
+    border-radius: 10px;
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 13.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: transform .15s ease, background .2s ease;
+  }
+  .btn-quiet { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  .btn-quiet:hover { border-color: var(--muted); color: var(--ink); }
+  .btn-mint { background: var(--mint); border: 1px solid var(--mint); color: var(--on-mint); font-weight: 600; }
+  .btn-mint:hover { transform: translateY(-1px); }
+  .btn-brass { background: transparent; border: 1px solid var(--brass-soft); color: var(--brass); }
+  .btn-sm { min-height: 36px; padding: 0 12px; font-size: 12.5px; border-radius: 8px; }
+  .counsel-note { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: .02em; }
+
+  /* tab bar */
+  .tabbar {
+    margin-top: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr 72px 1fr 1fr;
+    align-items: end;
+    border-top: 1px solid var(--line);
+    background: var(--card);
+    padding: 8px 6px calc(10px + 6px);
+    position: relative;
+  }
+  .tab {
+    border: 0;
+    background: transparent;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    border-radius: 10px;
+  }
+  .tab svg { width: 20px; height: 20px; }
+  .tab.active { color: var(--mint); }
+
+  .fab-slot { display: grid; place-items: center; }
+  .fab {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--mint);
+    color: var(--on-mint);
+    font-size: 26px;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    position: relative;
+    margin-top: -26px;
+    box-shadow: var(--shadow-lift);
+    transition: transform .15s ease;
+  }
+  .fab:hover { transform: translateY(-2px) rotate(90deg); }
+  .fab::before {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    background: repeating-conic-gradient(var(--brass) 0deg 2.5deg, transparent 2.5deg 6.5deg);
+    -webkit-mask: radial-gradient(circle, transparent 74%, #000 75%);
+    mask: radial-gradient(circle, transparent 74%, #000 75%);
+  }
+
+  /* explore */
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0 14px;
+    min-height: 46px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .chip-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+  .chip-row::-webkit-scrollbar { display: none; }
+  .filter-chip {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 0 14px;
+    min-height: 36px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+  .filter-chip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  .instrument {
+    display: grid;
+    grid-template-columns: 4px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 14px 12px 0;
+    overflow: hidden;
+  }
+  .instrument .edge { align-self: stretch; border-radius: 0 3px 3px 0; }
+  .instrument h4 { margin: 0; font-size: 14.5px; font-weight: 600; }
+  .instrument .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .instrument .meta .num { font-size: 11.5px; }
+  .add-btn {
+    min-width: 88px;
+    min-height: 44px;
+    border-radius: 10px;
+    border: 1px solid var(--mint);
+    background: transparent;
+    color: var(--mint);
+    font-size: 13px;
+    font-weight: 600;
+    transition: background .2s ease, color .2s ease, transform .15s ease;
+  }
+  .add-btn:hover { transform: translateY(-1px); }
+  .add-btn.added {
+    background: var(--mint-tint);
+    border-color: var(--mint-tint);
+    color: var(--mint);
+  }
+
+  /* portfolio */
+  .import-zone {
+    border: 1.5px dashed var(--brass-soft);
+    border-radius: 12px;
+    background: var(--brass-tint);
+    padding: 18px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    transition: border-color .2s ease;
+  }
+  .import-zone:hover { border-color: var(--brass); }
+  .import-zone .drop-title { color: var(--ink); font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+  .import-steps { display: flex; gap: 8px; margin-bottom: 10px; }
+  .import-steps .btn-brass { flex: 1; }
+  .import-preview {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .02em;
+  }
+  .import-preview b { color: var(--mint); font-weight: 600; }
+
+  .ledger-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ledger-table th {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    text-align: left;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .ledger-table td {
+    padding: 9px 4px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .ledger-table td.r, .ledger-table th.r { text-align: right; }
+  .ledger-table .num { font-size: 12px; }
+  .ledger-table .own { color: var(--muted); font-size: 12px; }
+  .ledger-table tr.total td {
+    border-top: 3px double var(--ink);
+    border-bottom: 0;
+    font-weight: 600;
+    padding-top: 10px;
+  }
+
+  /* goal planner */
+  .goal-form { display: grid; gap: 10px; }
+  .field { display: grid; gap: 4px; }
+  .field label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .field .input {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    border-radius: 10px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+  .field .input .num { font-size: 13px; }
+  .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .assump { font-size: 11px; font-family: var(--mono); color: var(--muted); letter-spacing: .02em; }
+
+  .proj svg { width: 100%; height: auto; display: block; }
+  .proj-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--mint);
+    margin-top: 6px;
+  }
+
+  .plan-rows { display: grid; }
+  .plan-row {
+    display: grid;
+    grid-template-columns: 10px 1fr auto auto;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 2px;
+    border-top: 1px solid var(--line-soft);
+    font-size: 13px;
+  }
+  .plan-row:first-child { border-top: 0; }
+  .plan-row .dot { width: 8px; height: 8px; border-radius: 2px; }
+
+  /* landing plate */
+  .landing-hero {
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    padding: 44px 20px 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .landing-hero .guilloche {
+    position: absolute;
+    top: -190px;
+    left: 50%;
+    translate: -50% 0;
+    width: 560px; height: 560px;
+    color: var(--brass);
+    opacity: var(--guilloche-opacity);
+    pointer-events: none;
+  }
+  .landing-hero h3 {
+    position: relative;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 30px;
+    line-height: 1.12;
+    margin: 20px 0 0;
+    text-wrap: balance;
+    text-shadow: var(--emboss);
+  }
+  .landing-hero .sub {
+    position: relative;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 34ch;
+    margin: 12px auto 0;
+  }
+  .landing-hero .cta { position: relative; margin-top: 20px; width: 100%; max-width: 260px; }
+  .trust-line {
+    position: relative;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .08em;
+    color: var(--muted);
+  }
+  .landing-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-top: 1px solid var(--line);
+    margin-top: 26px;
+    position: relative;
+    background: var(--card);
+  }
+  .landing-strip > div {
+    padding: 14px 10px;
+    border-left: 1px solid var(--line-soft);
+  }
+  .landing-strip > div:first-child { border-left: 0; }
+  .landing-strip .k { font-family: var(--serif); font-size: 18px; }
+  .landing-strip .v { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+
+  /* closing */
+  .closing {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: clamp(52px, 8vw, 96px) clamp(20px, 5vw, 48px) 96px;
+  }
+  .closing h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(26px, 4vw, 36px); margin: 12px 0 0; }
+  .closing ul { margin: 20px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .closing li {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-size: 14.5px;
+    color: var(--muted);
+  }
+  .closing li b { color: var(--ink); font-weight: 600; }
+</style>
+
+<header class="folio-header">
+  <div class="wordmark">
+    <span class="mintmark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 8l7-5 7 5M5 16l7 5 7-5"/></svg>
+    </span>
+    Vittam <small>Mint folio</small>
+  </div>
+  <div class="theme-set" role="group" aria-label="Theme">
+    <button type="button" data-set-theme="light" aria-pressed="false">Light</button>
+    <button type="button" data-set-theme="auto" aria-pressed="true">Auto</button>
+    <button type="button" data-set-theme="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<!-- ============ COVER ============ -->
+<section class="cover">
+  <div class="guilloche" data-guilloche="36"></div>
+  <div class="cover-inner">
+    <span class="eyebrow">Design concept · not implemented</span>
+    <h1>Where a household<br><em>mints</em> its plans</h1>
+    <p class="thesis">
+      Vittam is not a record of one plan. It is a treasury: every strategy is a ledger you can strike,
+      compare, and keep. The visual language borrows from the mint itself. Engraved linework, reeded
+      edges, ledger rules, and figures set like denominations.
+    </p>
+    <div class="cover-note">Light is <b>currency paper</b> · Dark is the <b>vault interior</b> · try the toggle above</div>
+
+    <div class="specimen">
+      <div class="spec-card">
+        <span class="eyebrow">Palette · this theme</span>
+        <div class="chips">
+          <span class="chip" style="background: var(--bg)" title="Ground"></span>
+          <span class="chip" style="background: var(--card)" title="Surface"></span>
+          <span class="chip" style="background: var(--ink)" title="Ink"></span>
+          <span class="chip" style="background: var(--mint)" title="Mint"></span>
+          <span class="chip" style="background: var(--brass)" title="Brass"></span>
+          <span class="chip" style="background: var(--c-ef)" title="Reserve"></span>
+        </div>
+        <p class="spec-type" style="margin: 10px 0 0">Neither theme is the other inverted. Paper carries deep viridian ink and muted brass. The vault carries spearmint and pale gold on green-black metal.</p>
+      </div>
+      <div class="spec-card">
+        <span class="eyebrow">Type</span>
+        <p class="spec-type" style="margin:0">
+          <span class="big">₹1,28,40,000</span>
+          <span class="mid">Engraved serif for figures. A humanist sans for reading.</span>
+          <span class="small">MONO FOR LEDGER LABELS + TABULAR COLUMNS</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PLATE I · LANDING ============ -->
+<section class="plate" id="plate-landing">
+  <div class="plate-grid">
+    <div class="rail">
+      <span class="eyebrow">Plate I · Front door</span>
+      <h2>The landing page earns trust before sign-in</h2>
+      <p class="proves">Today the landing reads as unfinished. This one must prove one thing:
+        <b>your money is handled with the care of a mint</b>. Engraving where marketing sites put stock photos.</p>
+      <ul class="keyed">
+        <li><span class="key">a</span><p><b>Guilloché hero.</b> The banknote rosette is the brand image. Drawn in code, so it costs no bytes and holds in both themes.</p></li>
+        <li><span class="key">b</span><p><b>One claim, one action.</b> No feature grid. The encryption line stays because it is true and rare.</p></li>
+        <li><span class="key">c</span><p><b>Proof strip.</b> Three engraved figures instead of testimonials.</p></li>
+      </ul>
+    </div>
+    <div class="frame-col">
+      <div class="phone">
+        <div class="screen" style="padding: 0;">
+          <div class="landing-hero">
+            <div class="guilloche" data-guilloche="30"></div>
+            <span class="mintmark" style="position: relative; width: 34px; height: 34px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 8l7-5 7 5M5 16l7 5 7-5"/></svg>
+            </span>
+            <h3>A treasury for<br>your household</h3>
+            <p class="sub">Plan every rupee across the family. Compare strategies before you commit one.</p>
+            <button class="btn-mint cta" type="button">Open your ledger</button>
+            <p class="trust-line">Encrypted in your browser. We store only ciphertext.</p>
+          </div>
+          <div class="landing-strip">
+            <div><div class="k num">3</div><div class="v">Strategies, side by side</div></div>
+            <div><div class="k num">28</div><div class="v">Instruments explained</div></div>
+            <div><div class="k">₹0</div><div class="v">Free while in beta</div></div>
+          </div>
+          <div class="reed" style="margin-top: auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PLATE II · DASHBOARD ============ -->
+<section class="plate" id="plate-dashboard">
+  <div class="plate-grid">
+    <div class="rail">
+      <span class="eyebrow">Plate II · Dashboard</span>
+      <h2>Strategies are ledgers, not settings</h2>
+      <p class="proves">The product's real job is what-if planning. So the strategy switcher sits
+        <b>above the numbers, not behind a menu</b>. Every figure below re-strikes when you switch.
+        Try it: the tabs work.</p>
+      <ul class="keyed">
+        <li><span class="key">a</span><p><b>Ledger tabs.</b> Current is the baseline. Each alternate ledger shows its delta against it in the strip below.</p></li>
+        <li><span class="key">b</span><p><b>Emergency fund on the donut.</b> A hatched slice with a Reserve tag. Held apart, but never invisible again.</p></li>
+        <li><span class="key">c</span><p><b>Counsel cards.</b> The AI layer as brass-edged suggestions with Apply and Dismiss. Concept only, honestly labeled.</p></li>
+        <li><span class="key">d</span><p><b>The coin FAB.</b> Reeded edge, mint face. The one place metal is literal.</p></li>
+      </ul>
+    </div>
+    <div class="frame-col">
+      <div class="phone">
+        <div class="screen">
+          <div class="app-bar">
+            <span class="mintmark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 8l7-5 7 5M5 16l7 5 7-5"/></svg></span>
+            <div class="who">
+              <div class="name">Gupta Household</div>
+              <div class="sub">3 members · 12 holdings</div>
+            </div>
+            <span class="avatar">G</span>
+          </div>
+
+          <div>
+            <p class="card-label" style="margin-bottom:8px;">Strategy ledgers</p>
+            <div class="ledger-row" role="group" aria-label="Strategy ledgers">
+              <button class="ledger-tab" data-scenario="current" aria-pressed="true" type="button">Current</button>
+              <button class="ledger-tab" data-scenario="scaleup" aria-pressed="false" type="button">SIP scale-up</button>
+              <button class="ledger-tab" data-scenario="early" aria-pressed="false" type="button">Early retirement</button>
+              <button class="ledger-tab ghost" type="button">+ New</button>
+            </div>
+            <p class="compare-strip" id="compare-strip" style="margin: 8px 0 0;">This is your baseline. Other ledgers compare against it.</p>
+          </div>
+
+          <div class="card networth">
+            <div class="guilloche" data-guilloche="26"></div>
+            <div class="figure num" id="nw-figure">₹1.28 Cr</div>
+            <div class="delta" id="nw-delta">SIP ₹23,500 / month</div>
+            <div class="asof" id="nw-asof">Projected ₹2.1 Cr by 2040</div>
+          </div>
+
+          <div class="card alloc">
+            <p class="card-label">Allocation<span class="num" style="letter-spacing:0">17 Aug 2026</span></p>
+            <div class="donut-wrap">
+              <svg viewBox="0 0 200 200" id="donut" role="img" aria-label="Allocation donut chart"></svg>
+              <div class="donut-center">
+                <div class="t">100%</div>
+                <div class="s">Deployed</div>
+              </div>
+            </div>
+            <div class="legend" id="legend"></div>
+          </div>
+
+          <div class="card counsel">
+            <p class="card-label">Counsel <span class="concept-badge">Concept preview</span></p>
+            <div class="counsel-card">
+              <p>Gold is 24% of holdings, above your 20% band.</p>
+              <p class="why">Routing the next ₹6,000 of SIP to equity restores the band in 5 months.</p>
+              <div class="counsel-actions">
+                <button class="btn-mint btn-sm" type="button">Apply to a draft ledger</button>
+                <button class="btn-quiet btn-sm" type="button">Dismiss</button>
+              </div>
+            </div>
+            <div class="counsel-card">
+              <p>Emergency fund covers 14 months of expenses.</p>
+              <p class="why">You could cap it at 12 and redirect ₹5,000 / month without breaking the pre-condition.</p>
+              <div class="counsel-actions">
+                <button class="btn-mint btn-sm" type="button">Apply to a draft ledger</button>
+                <button class="btn-quiet btn-sm" type="button">Dismiss</button>
+              </div>
+            </div>
+            <p class="counsel-note">Illustrative suggestions. Not wired to a model yet.</p>
+          </div>
+
+          <nav class="tabbar" aria-label="Main">
+            <button class="tab active" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></svg>Home</button>
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Explore</button>
+            <span class="fab-slot"><button class="fab" type="button" aria-label="Add holding">+</button></span>
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5m6 14V9m6 10v-7"/><path d="M2 19h20"/></svg>Portfolio</button>
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>Profile</button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PLATE III · EXPLORE ============ -->
+<section class="plate" id="plate-explore">
+  <div class="plate-grid">
+    <div class="rail">
+      <span class="eyebrow">Plate III · Explore</span>
+      <h2>Reading about an instrument should end in one tap</h2>
+      <p class="proves">The library already explains instruments well. What it lacks is a bridge:
+        <b>Add should live on the card itself</b>, prefilled, so browsing flows straight into the ledger.
+        The buttons here respond. Tap one.</p>
+      <ul class="keyed">
+        <li><span class="key">a</span><p><b>Class edge.</b> The asset-class color stays a thin engraved edge, as in the current app, but on the new palette.</p></li>
+        <li><span class="key">b</span><p><b>One-tap Add.</b> 44px target. Tapping opens the holding form prefilled with the instrument. Card flips to Added.</p></li>
+        <li><span class="key">c</span><p><b>Rates carry dates.</b> Any quoted rate shows when it was last verified, honoring the re-verify rule.</p></li>
+      </ul>
+    </div>
+    <div class="frame-col">
+      <div class="phone">
+        <div class="screen">
+          <div class="app-bar">
+            <div class="who">
+              <div class="name">Explore</div>
+              <div class="sub">28 instruments · India</div>
+            </div>
+            <span class="avatar">G</span>
+          </div>
+
+          <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Search funds, schemes, metals</div>
+
+          <div class="chip-row">
+            <button class="filter-chip active" type="button">All</button>
+            <button class="filter-chip" type="button">Equity</button>
+            <button class="filter-chip" type="button">Debt</button>
+            <button class="filter-chip" type="button">Gold</button>
+            <button class="filter-chip" type="button">Govt schemes</button>
+          </div>
+
+          <div class="card instrument">
+            <span class="edge" style="background: var(--c-equity)"></span>
+            <div>
+              <h4>Parag Parikh Flexi Cap</h4>
+              <div class="meta">Equity · flexi cap · <span class="num">0.62% expense</span></div>
+            </div>
+            <button class="add-btn" type="button" data-add>+ Add</button>
+          </div>
+          <div class="card instrument">
+            <span class="edge" style="background: var(--c-equity)"></span>
+            <div>
+              <h4>UTI Nifty 50 Index</h4>
+              <div class="meta">Equity · index · <span class="num">0.21% expense</span></div>
+            </div>
+            <button class="add-btn" type="button" data-add>+ Add</button>
+          </div>
+          <div class="card instrument">
+            <span class="edge" style="background: var(--c-ssy)"></span>
+            <div>
+              <h4>Sukanya Samriddhi Yojana</h4>
+              <div class="meta">Govt scheme · <span class="num">8.2%</span> · verified <span class="num">Jul 2026</span></div>
+            </div>
+            <button class="add-btn" type="button" data-add>+ Add</button>
+          </div>
+          <div class="card instrument">
+            <span class="edge" style="background: var(--c-gold)"></span>
+            <div>
+              <h4>Gold ETF</h4>
+              <div class="meta">Gold · exchange traded · <span class="num">0.5% expense</span></div>
+            </div>
+            <button class="add-btn added" type="button" data-add>In ledger ✓</button>
+          </div>
+          <div class="card instrument">
+            <span class="edge" style="background: var(--c-debt)"></span>
+            <div>
+              <h4>Public Provident Fund</h4>
+              <div class="meta">Debt · govt backed · <span class="num">7.1%</span> · verified <span class="num">Jul 2026</span></div>
+            </div>
+            <button class="add-btn" type="button" data-add>+ Add</button>
+          </div>
+
+          <nav class="tabbar" aria-label="Main">
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></svg>Home</button>
+            <button class="tab active" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Explore</button>
+            <span class="fab-slot"><button class="fab" type="button" aria-label="Add holding">+</button></span>
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5m6 14V9m6 10v-7"/><path d="M2 19h20"/></svg>Portfolio</button>
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>Profile</button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PLATE IV · PORTFOLIO ============ -->
+<section class="plate" id="plate-portfolio">
+  <div class="plate-grid">
+    <div class="rail">
+      <span class="eyebrow">Plate IV · Portfolio</span>
+      <h2>Twelve holdings should take one upload, not twelve forms</h2>
+      <p class="proves">The ledger is where the mint metaphor is native: <b>tabular figures, hairline
+        rules, a double-rule total</b>. Above it, bulk entry: download the template, fill it, drop it back.</p>
+      <ul class="keyed">
+        <li><span class="key">a</span><p><b>Template first.</b> The sheet ships with the household's members and asset classes prefilled, so the columns match on return.</p></li>
+        <li><span class="key">b</span><p><b>Preview before commit.</b> The upload shows clean rows and flagged rows. Nothing lands in the ledger unreviewed.</p></li>
+        <li><span class="key">c</span><p><b>Accounting rules.</b> The total closes with a double rule, the oldest mark of a settled ledger.</p></li>
+      </ul>
+    </div>
+    <div class="frame-col">
+      <div class="phone">
+        <div class="screen">
+          <div class="app-bar">
+            <div class="who">
+              <div class="name">Holdings ledger</div>
+              <div class="sub">Current strategy · 12 entries</div>
+            </div>
+            <span class="avatar">G</span>
+          </div>
+
+          <div class="card">
+            <p class="card-label">Bulk entry</p>
+            <div class="import-steps">
+              <button class="btn-brass btn-sm" type="button">↓ Template (.xlsx)</button>
+            </div>
+            <div class="import-zone">
+              <div class="drop-title">Drop your filled sheet here</div>
+              or tap to browse
+              <div class="import-preview">Last upload · <b>12 rows</b> · 11 clean · <span style="color: var(--c-alt)">1 needs review</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <p class="card-label">Entries</p>
+            <table class="ledger-table">
+              <thead>
+                <tr><th>Instrument</th><th>Owner</th><th class="r">Value</th><th class="r">Wt</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Flexi cap fund</td><td class="own">Gaurav</td><td class="r num">₹18.4 L</td><td class="r num">21%</td></tr>
+                <tr><td>Index fund</td><td class="own">Gaurav</td><td class="r num">₹12.1 L</td><td class="r num">14%</td></tr>
+                <tr><td>Gold, physical</td><td class="own">Family</td><td class="r num">₹21.0 L</td><td class="r num">24%</td></tr>
+                <tr><td>Emergency fund</td><td class="own">Family</td><td class="r num">₹7.9 L</td><td class="r num">9%</td></tr>
+                <tr><td>SSY</td><td class="own">Siya</td><td class="r num">₹7.0 L</td><td class="r num">8%</td></tr>
+                <tr><td>PPF + EPF</td><td class="own">Rinku</td><td class="r num">₹10.5 L</td><td class="r num">12%</td></tr>
+                <tr><td>Other</td><td class="own">Family</td><td class="r num">₹10.6 L</td><td class="r num">12%</td></tr>
+                <tr class="total"><td>Total</td><td></td><td class="r num">₹87.5 L</td><td class="r num">100%</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <nav class="tabbar" aria-label="Main">
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></svg>Home</button>
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Explore</button>
+            <span class="fab-slot"><button class="fab" type="button" aria-label="Add holding">+</button></span>
+            <button class="tab active" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5m6 14V9m6 10v-7"/><path d="M2 19h20"/></svg>Portfolio</button>
+            <button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>Profile</button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PLATE V · GOAL PLANNER ============ -->
+<section class="plate" id="plate-goal">
+  <div class="plate-grid">
+    <div class="rail">
+      <span class="eyebrow">Plate V · Goal planner</span>
+      <h2>Name a goal, and the mint proposes a portfolio</h2>
+      <p class="proves">This is the counsel layer with a purpose: state a target, and it drafts an
+        allocation with real rate assumptions shown, never hidden. <b>Adopting the draft creates a new
+        strategy ledger</b>, which ties the planner back to the dashboard's tabs.</p>
+      <ul class="keyed">
+        <li><span class="key">a</span><p><b>Assumptions in ink.</b> Equity 12%, debt 7.1%, inflation 6%. Editable, dated, on the surface.</p></li>
+        <li><span class="key">b</span><p><b>Projection with a verdict.</b> The chart says when you arrive, not just that a line goes up.</p></li>
+        <li><span class="key">c</span><p><b>Draft, not command.</b> The AI proposes a ledger. Nothing changes until the household adopts it.</p></li>
+      </ul>
+    </div>
+    <div class="frame-col">
+      <div class="phone">
+        <div class="screen">
+          <div class="app-bar">
+            <div class="who">
+              <div class="name">Goal planner</div>
+              <div class="sub">New goal</div>
+            </div>
+            <span class="concept-badge">Concept preview</span>
+          </div>
+
+          <div class="card goal-form">
+            <div class="field">
+              <label>Goal</label>
+              <div class="input">Siya, undergraduate fund <span class="num" style="color: var(--muted)">2043</span></div>
+            </div>
+            <div class="field-pair">
+              <div class="field">
+                <label>Target</label>
+                <div class="input num">₹1.2 Cr</div>
+              </div>
+              <div class="field">
+                <label>Horizon</label>
+                <div class="input num">17 yr</div>
+              </div>
+            </div>
+            <p class="assump" style="margin:0">Assumes equity 12.0% · debt 7.1% · inflation 6.0% · edit rates</p>
+          </div>
+
+          <div class="card proj">
+            <p class="card-label">Projection</p>
+            <svg viewBox="0 0 320 140" role="img" aria-label="Projection of corpus against goal">
+              <defs>
+                <linearGradient id="projFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="var(--mint)" stop-opacity=".28"/>
+                  <stop offset="1" stop-color="var(--mint)" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <g stroke="var(--line-soft)" stroke-width="1">
+                <line x1="0" y1="35" x2="320" y2="35"/>
+                <line x1="0" y1="70" x2="320" y2="70"/>
+                <line x1="0" y1="105" x2="320" y2="105"/>
+              </g>
+              <line x1="0" y1="30" x2="320" y2="30" stroke="var(--brass)" stroke-width="1" stroke-dasharray="5 4"/>
+              <text x="4" y="24" font-size="9" fill="var(--brass)" font-family="Cascadia Mono, Consolas, monospace">GOAL ₹1.2 Cr</text>
+              <path d="M0 132 C 80 128, 150 110, 210 80 S 290 38, 316 26 L 316 140 L 0 140 Z" fill="url(#projFill)"/>
+              <path d="M0 132 C 80 128, 150 110, 210 80 S 290 38, 316 26" fill="none" stroke="var(--mint)" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="284" cy="33" r="4" fill="var(--mint)"/>
+              <text x="212" y="52" font-size="9" fill="var(--mint)" font-family="Cascadia Mono, Consolas, monospace">2041</text>
+              <text x="4" y="136" font-size="8" fill="var(--muted)" font-family="Cascadia Mono, Consolas, monospace">2026</text>
+              <text x="292" y="136" font-size="8" fill="var(--muted)" font-family="Cascadia Mono, Consolas, monospace">2043</text>
+            </svg>
+            <span class="proj-flag">◈ On track two years early, with the draft below</span>
+          </div>
+
+          <div class="card">
+            <p class="card-label">Proposed ledger · ₹9,500 / month</p>
+            <div class="plan-rows">
+              <div class="plan-row"><span class="dot" style="background: var(--c-equity)"></span>Flexi cap fund<span class="num" style="color:var(--muted)">40%</span><span class="num">₹3,800</span></div>
+              <div class="plan-row"><span class="dot" style="background: var(--c-equity)"></span>Index fund<span class="num" style="color:var(--muted)">30%</span><span class="num">₹2,850</span></div>
+              <div class="plan-row"><span class="dot" style="background: var(--c-ssy)"></span>SSY top-up<span class="num" style="color:var(--muted)">20%</span><span class="num">₹1,900</span></div>
+              <div class="plan-row"><span class="dot" style="background: var(--c-debt)"></span>Debt fund<span class="num" style="color:var(--muted)">10%</span><span class="num">₹950</span></div>
+            </div>
+            <div class="counsel-actions" style="margin-top: 14px;">
+              <button class="btn-mint" type="button" style="flex:1">Adopt as a draft ledger</button>
+              <button class="btn-quiet" type="button">Tune</button>
+            </div>
+            <p class="counsel-note" style="margin: 10px 0 0">Illustrative math. The model behind this is not built yet.</p>
+          </div>
+
+          <div class="reed" style="margin-top: auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLOSING ============ -->
+<section class="closing">
+  <span class="eyebrow">Before Phase 0</span>
+  <h2>What this folio decides, and what it leaves open</h2>
+  <ul>
+    <li><b>Decided here, pending your veto:</b> the mint and treasury language, paper and vault as the two themes, strategies as first-class ledgers on the dashboard, and the emergency fund as a hatched Reserve slice.</li>
+    <li><b>Open:</b> whether Current stays a protected baseline that alternate ledgers cannot edit, or any ledger can be promoted to Current.</li>
+    <li><b>Open:</b> the AI counsel budget. Everything marked Concept preview here renders with no model behind it, so the visual ships regardless.</li>
+    <li><b>Open:</b> whether the bulk-import template carries member names, which means personal data inside a downloaded file.</li>
+    <li><b>Not in this folio:</b> onboarding, Profile, and instrument detail. They inherit the same tokens once the language is approved.</li>
+  </ul>
+</section>
+
+<script>
+  (function () {
+    "use strict";
+
+    /* ---- theme toggle: light / auto / dark ---- */
+    var buttons = document.querySelectorAll("[data-set-theme]");
+    function setTheme(mode) {
+      if (mode === "auto") delete document.documentElement.dataset.theme;
+      else document.documentElement.dataset.theme = mode;
+      buttons.forEach(function (b) {
+        b.setAttribute("aria-pressed", String(b.dataset.setTheme === mode));
+      });
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () { setTheme(b.dataset.setTheme); });
+    });
+    if (location.hash === "#light" || location.hash === "#dark") {
+      setTheme(location.hash.slice(1));
+    }
+
+    /* ---- guilloché rosettes ---- */
+    document.querySelectorAll("[data-guilloche]").forEach(function (host) {
+      var n = parseInt(host.dataset.guilloche, 10) || 30;
+      var svgNS = "http://www.w3.org/2000/svg";
+      var svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("viewBox", "0 0 200 200");
+      svg.setAttribute("width", "100%");
+      svg.setAttribute("height", "100%");
+      svg.setAttribute("aria-hidden", "true");
+      for (var i = 0; i < n; i++) {
+        var e = document.createElementNS(svgNS, "ellipse");
+        e.setAttribute("cx", "100");
+        e.setAttribute("cy", "100");
+        e.setAttribute("rx", "92");
+        e.setAttribute("ry", "34");
+        e.setAttribute("fill", "none");
+        e.setAttribute("stroke", "currentColor");
+        e.setAttribute("stroke-width", "0.45");
+        e.setAttribute("transform", "rotate(" + (i * 180 / n) + " 100 100)");
+        svg.appendChild(e);
+      }
+      var ring = document.createElementNS(svgNS, "circle");
+      ring.setAttribute("cx", "100"); ring.setAttribute("cy", "100");
+      ring.setAttribute("r", "97");
+      ring.setAttribute("fill", "none");
+      ring.setAttribute("stroke", "currentColor");
+      ring.setAttribute("stroke-width", "0.6");
+      svg.appendChild(ring);
+      host.appendChild(svg);
+    });
+
+    /* ---- allocation donut + legend, one data source ---- */
+    var alloc = [
+      { label: "Equity", pct: 35, val: "₹30.5 L", varName: "--c-equity" },
+      { label: "Gold", pct: 24, val: "₹21.0 L", varName: "--c-gold" },
+      { label: "Debt + PPF", pct: 12, val: "₹10.5 L", varName: "--c-debt" },
+      { label: "Emergency fund", pct: 9, val: "₹7.9 L", varName: "--c-ef", reserve: true },
+      { label: "SSY", pct: 8, val: "₹7.0 L", varName: "--c-ssy" },
+      { label: "Other + crypto", pct: 12, val: "₹10.6 L", varName: "--c-alt" }
+    ];
+    var donut = document.getElementById("donut");
+    var legend = document.getElementById("legend");
+    if (donut && legend) {
+      var svgNS2 = "http://www.w3.org/2000/svg";
+      var defs = document.createElementNS(svgNS2, "defs");
+      var pat = document.createElementNS(svgNS2, "pattern");
+      pat.setAttribute("id", "efHatch");
+      pat.setAttribute("width", "5");
+      pat.setAttribute("height", "5");
+      pat.setAttribute("patternUnits", "userSpaceOnUse");
+      pat.setAttribute("patternTransform", "rotate(45)");
+      var pr = document.createElementNS(svgNS2, "rect");
+      pr.setAttribute("width", "5"); pr.setAttribute("height", "5");
+      pr.setAttribute("fill", "var(--c-ef)");
+      var pl = document.createElementNS(svgNS2, "line");
+      pl.setAttribute("x1", "0"); pl.setAttribute("y1", "0");
+      pl.setAttribute("x2", "0"); pl.setAttribute("y2", "5");
+      pl.setAttribute("stroke", "var(--card)");
+      pl.setAttribute("stroke-width", "2.2");
+      pat.appendChild(pr); pat.appendChild(pl);
+      defs.appendChild(pat);
+      donut.appendChild(defs);
+
+      var start = 0;
+      alloc.forEach(function (d) {
+        var c = document.createElementNS(svgNS2, "circle");
+        c.setAttribute("class", "donut-slice");
+        c.setAttribute("cx", "100"); c.setAttribute("cy", "100");
+        c.setAttribute("r", "72");
+        c.setAttribute("fill", "none");
+        c.setAttribute("pathLength", "100");
+        c.setAttribute("stroke", d.reserve ? "url(#efHatch)" : "var(" + d.varName + ")");
+        c.setAttribute("stroke-width", "26");
+        c.setAttribute("stroke-dasharray", (d.pct - 0.7) + " " + (100 - d.pct + 0.7));
+        c.setAttribute("stroke-dashoffset", String(25 - start));
+        var t = document.createElementNS(svgNS2, "title");
+        t.textContent = d.label + " " + d.pct + "% · " + d.val;
+        c.appendChild(t);
+        donut.appendChild(c);
+        start += d.pct;
+
+        var row = document.createElement("div");
+        row.className = "legend-row";
+        row.innerHTML =
+          '<span class="dot' + (d.reserve ? " hatched" : "") + '"' +
+          (d.reserve ? "" : ' style="background: var(' + d.varName + ')"') + '></span>' +
+          "<span>" + d.label + (d.reserve ? '<span class="tag-reserve">Reserve</span>' : "") + "</span>" +
+          '<span class="pct">' + d.pct + "%</span>" +
+          '<span class="val">' + d.val + "</span>";
+        legend.appendChild(row);
+      });
+    }
+
+    /* ---- scenario ledger switcher ---- */
+    var scenarios = {
+      current: {
+        figure: "₹1.28 Cr",
+        delta: "SIP ₹23,500 / month",
+        asof: "Projected ₹2.1 Cr by 2040",
+        strip: "This is your baseline. Other ledgers compare against it."
+      },
+      scaleup: {
+        figure: "₹1.28 Cr",
+        delta: "SIP ₹47,000 / month",
+        asof: "Projected ₹3.4 Cr by 2040",
+        strip: "vs Current: <b>+₹1.3 Cr by 2040</b> · needs +₹23,500 / month from Oct 2026"
+      },
+      early: {
+        figure: "₹1.28 Cr",
+        delta: "SIP ₹62,000 / month",
+        asof: "Work optional by 2044",
+        strip: "vs Current: <b>retire 5 years earlier</b> · assumes Rinku confirmed post-probation"
+      }
+    };
+    var tabs = document.querySelectorAll("[data-scenario]");
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        tabs.forEach(function (t) { t.setAttribute("aria-pressed", "false"); });
+        tab.setAttribute("aria-pressed", "true");
+        var s = scenarios[tab.dataset.scenario];
+        document.getElementById("nw-figure").textContent = s.figure;
+        document.getElementById("nw-delta").textContent = s.delta;
+        document.getElementById("nw-asof").textContent = s.asof;
+        document.getElementById("compare-strip").innerHTML = s.strip;
+      });
+    });
+
+    /* ---- add-to-holdings micro-interaction ---- */
+    document.querySelectorAll("[data-add]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var added = btn.classList.toggle("added");
+        btn.textContent = added ? "In ledger ✓" : "+ Add";
+      });
+    });
+
+    /* ---- plate reveal ---- */
+    if ("IntersectionObserver" in window &&
+        !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+        });
+      }, { threshold: 0.12 });
+      document.querySelectorAll(".plate").forEach(function (p) { io.observe(p); });
+    } else {
+      document.querySelectorAll(".plate").forEach(function (p) { p.classList.add("in"); });
+    }
+  })();
+
+</script>
