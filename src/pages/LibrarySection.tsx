@@ -72,7 +72,7 @@ export function LibrarySection() {
               className={cn('h-2.5 w-2.5 shrink-0 rounded-full', ASSET_DOT_CLASS[section.assetClass])}
               aria-hidden="true"
             />
-            <h1 className="font-display text-display">{section.title}</h1>
+            <h1 className="font-serif text-display">{section.title}</h1>
           </div>
           <p className="text-body text-muted-foreground">{section.subLabel}</p>
         </header>

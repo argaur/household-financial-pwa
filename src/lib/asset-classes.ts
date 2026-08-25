@@ -28,13 +28,25 @@ export const ASSET_LABELS: Record<AssetClass, string> = {
   alternative: 'Alternative',
 }
 
+/**
+ * Light-theme values of the `asset` palette, resolved to hex.
+ *
+ * These are the LIGHT values only — the CSS vars behind them
+ * (--c-equity … --c-alt in globals.css) are native per-theme, and a hex
+ * literal cannot follow `.dark`. Recharts is the only consumer, so the
+ * dark-mode donut currently paints the light hexes; making it theme-aware
+ * means reading the computed custom properties at render time, which is a
+ * component change and not this pass's job.
+ *
+ * Updated 2026-08-25 from the retired v1 teal-era hexes to the mint palette.
+ */
 export const ASSET_HEX: Record<AssetClass, string> = {
-  equity: '#2D6A6A',
-  debt: '#475569',
-  gold: '#B45309',
-  hybrid: '#6D28D9',
-  'real-estate': '#15803D',
-  alternative: '#9F3939',
+  equity: '#1E7A5A',
+  debt: '#4E6B80',
+  gold: '#A07E2B',
+  hybrid: '#924578',
+  'real-estate': '#566F39',
+  alternative: '#A04A3A',
 }
 
 /** Legend/identity dot — the same mark the donut legend uses. */

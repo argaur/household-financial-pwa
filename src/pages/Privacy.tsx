@@ -30,7 +30,7 @@ export function Privacy() {
       <div className="container max-w-lg md:max-w-2xl lg:max-w-3xl py-12 md:py-16 space-y-10">
         <header className="space-y-2">
           <p className="section-label">Privacy</p>
-          <h1 className="font-display text-display">{PRIVACY_CLAIM.headline}</h1>
+          <h1 className="font-serif text-display">{PRIVACY_CLAIM.headline}</h1>
           <p className="text-body text-muted-foreground">{PRIVACY_CLAIM.body}</p>
         </header>
 
@@ -49,7 +49,7 @@ export function Privacy() {
             <p className="section-label" id="privacy-learns">
               What we can still see
             </p>
-            <h2 className="font-display text-heading">The complete list</h2>
+            <h2 className="font-serif text-heading">The complete list</h2>
             <p className="text-caption text-muted-foreground">
               Not a summary. If something is missing from this list, that is a mistake we want to hear about.
             </p>
@@ -66,7 +66,7 @@ export function Privacy() {
             <p className="section-label" id="privacy-not-leaked">
               What we cannot see
             </p>
-            <h2 className="font-display text-heading">Things that would otherwise leak, and do not</h2>
+            <h2 className="font-serif text-heading">Things that would otherwise leak, and do not</h2>
           </div>
           <ul className="space-y-2 text-body text-muted-foreground list-disc pl-5">
             {WHAT_IS_NOT_LEAKED.map((item) => (
@@ -78,14 +78,14 @@ export function Privacy() {
         <Separator />
 
         <section className="space-y-2" aria-labelledby="privacy-xss">
-          <h2 className="font-display text-heading" id="privacy-xss">
+          <h2 className="font-serif text-heading" id="privacy-xss">
             {XSS_LIMIT.heading}
           </h2>
           <p className="text-body text-muted-foreground">{XSS_LIMIT.body}</p>
         </section>
 
         <section className="space-y-2" aria-labelledby="privacy-lost">
-          <h2 className="font-display text-heading" id="privacy-lost">
+          <h2 className="font-serif text-heading" id="privacy-lost">
             {LOST_PASSPHRASE.heading}
           </h2>
           <p className="text-body text-muted-foreground">{LOST_PASSPHRASE.body}</p>

@@ -100,7 +100,7 @@ export function InstrumentDetail() {
                 />
                 {section.title.toUpperCase()}
               </p>
-              <h1 className="font-display text-display">{instrument.name}</h1>
+              <h1 className="font-serif text-display">{instrument.name}</h1>
               <p className="text-body-lg text-muted-foreground">{instrument.summary}</p>
             </header>
 

@@ -141,7 +141,7 @@ export function KeySetup({ onReady }: KeySetupProps) {
           <p className="text-caption text-muted-foreground">Setting up your key, step 2 of 2</p>
 
           <header className="space-y-2">
-            <h1 className="font-display text-display">Your way back in.</h1>
+            <h1 className="font-serif text-display">Your way back in.</h1>
             <p className="text-body text-muted-foreground">
               Write this down before you go on. It is shown once, here, and never again. Not in your account, not to
               us. If you forget your passphrase, this code is the only thing that opens your household. Lose both and
@@ -209,7 +209,7 @@ export function KeySetup({ onReady }: KeySetupProps) {
         <p className="text-caption text-muted-foreground">Setting up your key, step 1 of 2</p>
 
         <header className="space-y-2">
-          <h1 className="font-display text-display">Only you can open this.</h1>
+          <h1 className="font-serif text-display">Only you can open this.</h1>
           <p className="text-body text-muted-foreground">
             Every number you record here is encrypted on this device before it leaves it. The key that opens it is made
             from a passphrase you choose now, and that passphrase never reaches our servers. That is exactly why what

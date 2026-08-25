@@ -28,7 +28,7 @@ export function AuthGate() {
     <main className="min-h-screen bg-background text-foreground font-sans flex flex-col items-center justify-center gap-6 px-4 py-12">
       <header className="text-center space-y-1">
         <p className="section-label">Household Financial Planning</p>
-        <h1 className="font-display text-display">{view === 'sign-in' ? 'Welcome back.' : 'Create your account.'}</h1>
+        <h1 className="font-serif text-display">{view === 'sign-in' ? 'Welcome back.' : 'Create your account.'}</h1>
       </header>
 
       {view === 'sign-in' ? (

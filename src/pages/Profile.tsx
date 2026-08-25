@@ -310,7 +310,7 @@ export function Profile() {
     <main className="min-h-screen bg-background text-foreground font-sans">
       <div className="container max-w-lg md:max-w-2xl py-12 md:py-16 space-y-6 pb-28">
         <header className="space-y-1">
-          <h1 className="font-display text-display">Your account</h1>
+          <h1 className="font-serif text-display">Your account</h1>
         </header>
 
         {/* Household card — Slice 9 */}

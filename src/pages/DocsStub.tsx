@@ -7,7 +7,7 @@ export function DocsStub() {
   return (
     <main className="min-h-screen bg-background text-foreground font-sans">
       <div className="container max-w-lg py-12 space-y-4">
-        <h1 className="font-display text-heading">Docs</h1>
+        <h1 className="font-serif text-heading">Docs</h1>
         <p className="text-body text-muted-foreground">
           API and architecture docs land here as slices ship. See{' '}
           <code className="text-caption">Documentation/plan/IMPLEMENTATION_PLAN.md</code> in the repo for the

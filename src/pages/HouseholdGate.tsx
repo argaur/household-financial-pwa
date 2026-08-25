@@ -207,7 +207,7 @@ export function HouseholdGate() {
     return (
       <main className="min-h-screen bg-background text-foreground font-sans">
         <div className="container max-w-lg py-12 space-y-4">
-          <h1 className="font-display text-display">This household can't be opened.</h1>
+          <h1 className="font-serif text-display">This household can't be opened.</h1>
           <p className="text-body text-muted-foreground">
             Your household was created, but the encrypted key that opens it was never saved. The setup was interrupted
             before that last step, and the only copy lived in a browser that no longer has it. We are not able to read
@@ -232,7 +232,7 @@ export function HouseholdGate() {
     return (
       <main className="min-h-screen bg-background text-foreground font-sans">
         <div className="container max-w-lg py-12 space-y-4">
-          <h1 className="font-display text-display">This household came before encryption.</h1>
+          <h1 className="font-serif text-display">This household came before encryption.</h1>
           <p className="text-body text-muted-foreground">
             It was created before your data was encrypted, so there is nothing sealed here to open. Your information is
             stored exactly as it was. Nothing has been changed, and nothing has been lost.
@@ -249,7 +249,7 @@ export function HouseholdGate() {
     return (
       <main className="min-h-screen bg-background text-foreground font-sans">
         <div className="container max-w-lg py-12 space-y-4">
-          <h1 className="font-display text-display">We couldn't read your household.</h1>
+          <h1 className="font-serif text-display">We couldn't read your household.</h1>
           <p className="text-body text-muted-foreground">
             The key in this browser doesn't match the data stored for this household. Nothing has been changed. Unlock
             again with your passphrase or your recovery code. If the right one opens it, your data is intact.
@@ -264,7 +264,7 @@ export function HouseholdGate() {
     return (
       <main className="min-h-screen bg-background text-foreground font-sans">
         <div className="container max-w-lg py-12 space-y-4">
-          <h1 className="font-display text-display">Your household needs its name again.</h1>
+          <h1 className="font-serif text-display">Your household needs its name again.</h1>
           <p className="text-body text-muted-foreground">
             This household was created before your data was encrypted, so its name was never sealed with your key.
             Nothing else is affected. Set the name again from your profile and everything reconnects.

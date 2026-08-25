@@ -25,7 +25,7 @@ export function Explore() {
       <div className="container max-w-lg md:max-w-3xl lg:max-w-5xl py-12 md:py-16 space-y-6">
         <header className="space-y-1">
           <p className="section-label">Explore</p>
-          <h1 className="font-display text-display">What can you invest in?</h1>
+          <h1 className="font-serif text-display">What can you invest in?</h1>
           <p className="text-body text-muted-foreground">
             Every rupee an Indian household holds falls into one of these six groups. 30 instruments in all,
             explained plainly, with no jargon left unexplained.

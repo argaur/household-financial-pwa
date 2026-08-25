@@ -51,12 +51,12 @@ const FADE_UP_STYLE = `
  * in a printed-document left gutter; the title carries the existing
  * section-label style. Used by sections 01, 03 and 04 (section 02, the
  * privacy band, is the page's one full-bleed inversion and sets its own
- * numeral inline against the teal).
+ * numeral inline against the mint).
  */
 function NumberedHeader({ number, title, id }: { number: string; title: string; id: string }) {
   return (
     <div className="flex items-baseline gap-2 border-b border-border pb-3">
-      <span className="font-display text-title text-muted-foreground tabular" aria-hidden="true">
+      <span className="font-mono text-title text-muted-foreground tabular" aria-hidden="true">
         {number}
       </span>
       <span className="text-muted-foreground" aria-hidden="true">
@@ -97,7 +97,7 @@ export function Landing() {
                 </p>
               </div>
               <p className="section-label">{LANDING_HERO.label}</p>
-              <h1 className="font-display text-hero lg:max-w-[16ch]">
+              <h1 className="font-serif text-hero lg:max-w-[16ch]">
                 {LANDING_HERO.headlineBefore}
                 <span className="text-primary">{LANDING_HERO.headlineEmphasis}</span>
                 {LANDING_HERO.headlineAfter}
@@ -165,7 +165,7 @@ export function Landing() {
         <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border rounded-lg border border-border">
           {LANDING_FIGURES.map((figure) => (
             <div key={figure.label} className="p-4 md:p-6 text-center space-y-1">
-              <p className="font-display text-display tabular">{figure.value}</p>
+              <p className="font-serif text-display tabular">{figure.value}</p>
               <p className="text-caption text-muted-foreground">{figure.label}</p>
             </div>
           ))}
@@ -180,7 +180,7 @@ export function Landing() {
         <div className="grid gap-5 md:grid-cols-3 md:gap-6">
           {HOW_IT_WORKS.map((step) => (
             <div key={step.heading} className="flex gap-3">
-              <span className="w-8 shrink-0 font-display text-title text-muted-foreground tabular" aria-hidden="true">
+              <span className="w-8 shrink-0 font-mono text-title text-muted-foreground tabular" aria-hidden="true">
                 {step.step.replace('Step ', '0')}
               </span>
               <div className="space-y-1.5">
@@ -196,11 +196,11 @@ export function Landing() {
       <section className="bg-primary text-primary-foreground" aria-labelledby="landing-privacy">
         <div className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-10 md:py-14 space-y-4">
           <div className="flex items-baseline gap-2 border-b border-primary-foreground/40 pb-3" aria-hidden="true">
-            <span className="font-display text-title tabular">02</span>
+            <span className="font-mono text-title tabular">02</span>
             <span>/</span>
             <span className="section-label text-primary-foreground">Privacy</span>
           </div>
-          <h2 className="font-display text-heading" id="landing-privacy">
+          <h2 className="font-serif text-heading" id="landing-privacy">
             {LANDING_PRIVACY.headline}
           </h2>
           <p className="text-body-lg">{LANDING_PRIVACY.body}</p>

@@ -12,7 +12,7 @@ import { useTheme } from '@/lib/theme'
  * page fragment, not a product.
  *
  * Design language: a document's running head, not an app bar. Paper
- * background, a hairline rule, quiet text links with the teal reserved for
+ * background, a hairline rule, quiet text links with the mint reserved for
  * the active section. No icons in the nav, no elevation.
  *
  * The product is named Vittam, set in Yatra One: a Devanagari/Latin

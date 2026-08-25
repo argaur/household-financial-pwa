@@ -83,7 +83,7 @@ export function Unlock({ keys, onUnlocked }: UnlockProps) {
     <main className="min-h-screen bg-background text-foreground font-sans">
       <div className="container max-w-lg py-12 space-y-6">
         <header className="space-y-2">
-          <h1 className="font-display text-display">Unlock your household.</h1>
+          <h1 className="font-serif text-display">Unlock your household.</h1>
           <p className="text-body text-muted-foreground">
             Your data is encrypted with a key that only your passphrase or your recovery code opens. This browser
             doesn't have that key yet. That happens on a new device, or when storage has been cleared. Nothing has been lost; it just

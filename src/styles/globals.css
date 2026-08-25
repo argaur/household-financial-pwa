@@ -3,87 +3,145 @@
 @tailwind utilities;
 
 /*
-  Design system — Household Financial Planning PWA
-  Voice: CFP one-pager on a vertical canvas. Warm editorial × calm minimal.
-  All values in HSL so Tailwind CSS variable bridge works correctly.
+  Design system — Vittam (Household Financial Planning PWA)
+  Voice: engraved currency / vault. "Light = fresh currency paper.
+  Dark = vault interior. One engraved language, two native materials."
+  Extracted from the approved concept folio (D-016 Slice 5, 2026-08-25):
+  Documentation/design/concept/vittam-mint-folio.html
+  All values in HSL so the Tailwind CSS-variable bridge works correctly.
+
+  Font families live in tailwind.config.ts's fontFamily, not here. As of
+  2026-08-25: Playfair Display / Jost / JetBrains Mono are loaded via the
+  Google Fonts stylesheet (see that file's Fonts comment for the exact
+  <link> tags) as the guaranteed fallback behind the folio's named,
+  non-web-safe fonts (Bodoni MT / Gill Sans Nova / Cascadia Mono).
 */
 
 @layer base {
   :root {
-    /* ── Backgrounds ─────────────────────────────────────────── */
-    --background:     40 20% 97%;   /* #F7F5F1  warm off-white — the "paper" */
-    --card:           40 15% 99%;   /* #FDFCFA  card surface, barely warmer than white */
-    --popover:        40 15% 99%;
+    /* ── Backgrounds — currency paper ────────────────────────── */
+    --background:     96 17% 94%;   /* #F0F3EE  paper background */
+    --card:            90 40% 98%;   /* #FAFCF8  card surface */
+    --popover:         90 40% 98%;
+    --panel:           93 21% 92%;   /* #E9EEE5  recessed panel, e.g. ledger table head */
 
     /* ── Foregrounds ─────────────────────────────────────────── */
-    --foreground:          30 10% 10%;   /* #1A1814  near-black with warmth */
-    --card-foreground:     30 10% 10%;
-    --popover-foreground:  30 10% 10%;
+    --foreground:          138 18% 11%;   /* #17211A  near-black with green cast */
+    --card-foreground:     138 18% 11%;
+    --popover-foreground:  138 18% 11%;
 
-    /* ── Primary — deep teal ─────────────────────────────────── */
-    --primary:            180 60% 26%;   /* #1B6B6B */
-    --primary-foreground:  40 20% 97%;   /* warm white on teal */
+    /* ── Primary — mint (replaces teal, D-016 Slice 5) ──────── */
+    --primary:            160 63% 25%;   /* #186A4F */
+    --primary-strong:     162 70% 20%;   /* #0F5540  hover/active */
+    --primary-foreground: 140 37% 97%;   /* #F4FAF6  on-mint text */
 
     /* ── Secondary / Muted ───────────────────────────────────── */
-    --secondary:            30  8% 93%;   /* #EDEBE6  warm light gray */
-    --secondary-foreground: 30 10% 20%;
-    --muted:                30  8% 93%;
-    --muted-foreground:     30  7% 40%;   /* #6B655E  secondary text — WCAG AA ≥4.5:1 on card/bg (was 45%/4.4:1) */
+    --secondary:            93 21% 92%;   /* #E9EEE5  panel */
+    --secondary-foreground: 138 18% 11%;
+    --muted:                93 21% 92%;
+    --muted-foreground:     133  7% 39%;   /* #5D6B60 */
 
-    /* ── Accent — teal tint (subtle highlight bg) ────────────── */
-    --accent:            180 40% 93%;   /* #E8F3F2 */
-    --accent-foreground: 180 60% 26%;
+    /* ── Accent — mint tint (subtle highlight bg) ────────────── */
+    --accent:            138 25% 90%;   /* #DEEBE2 */
+    --accent-foreground: 160 63% 25%;
+
+    /* ── Brass — second accent, both themes (D-016 Slice 5) ──
+       Never generic UI chrome. Scoped uses only: eyebrow/mono
+       ALL-CAPS labels, guilloche motif, coin-mark rims, dashed
+       import-zone borders, ledger-table accents.               */
+    --brass:              44 58% 35%;   /* #8F7326 */
+    --brass-soft:         42 43% 49%;   /* #B49347 */
+    --brass-foreground:   45 48% 89%;   /* #F0E9D4  brass tint, for on-brass text/bg */
 
     /* ── Destructive ─────────────────────────────────────────── */
     --destructive:            0 70% 35%;   /* #991B1B */
-    --destructive-foreground: 40 20% 97%;
+    --destructive-foreground: 140 37% 97%;
 
     /* ── Borders / Inputs / Ring ─────────────────────────────── */
-    --border: 35 12% 88%;   /* #E8E5E0  warm light border */
-    --input:  35 12% 88%;
-    --ring:  180 60% 26%;   /* teal focus ring */
+    --border:      95 14% 84%;   /* #D4DBCF */
+    --border-soft: 90 17% 89%;   /* #E2E7DD  divider weight, one step lighter */
+    --input:       95 14% 84%;
+    --ring:       160 63% 25%;   /* mint focus ring */
 
     /* ── Radius ──────────────────────────────────────────────── */
-    --radius: 0.5rem;       /* 8px — restrained, not bubbly */
+    --radius: 0.625rem;      /* 10px — folio's dominant card/field radius */
+
+    /* ── Asset class palette — native per-theme, promoted to CSS
+       vars 2026-08-25 to mirror --primary (was fixed hex in
+       tailwind.config.ts, flagged there as a Phase-4 gap; fixed now
+       instead of deferred, per Gaurav). Used ONLY in the allocation
+       donut chart segments and their matching legend dots — never
+       for UI chrome.
+
+       The first six map 1:1 onto ASSET_CLASS_ORDER (src/lib/allocation.ts).
+       --c-hybrid and --c-real-estate have no counterpart in the folio's
+       donut legend (it used an invented taxonomy) and were derived here to
+       fill the two hue gaps the mint palette leaves open: plum ~320 between
+       ssy's purple and alt's terracotta, moss ~88 between gold and equity.
+       --c-ef and --c-ssy are NOT asset classes: ef backs the per-holding
+       `isEmergencyFund` hatch, ssy the Sukanya Samriddhi treatment.     */
+    --c-equity:       159 61% 30%;   /* #1E7A5A */
+    --c-debt:         205 24% 40%;   /* #4E6B80 */
+    --c-gold:          43 58% 40%;   /* #A07E2B */
+    --c-hybrid:       320 36% 42%;   /* #924578 — plum */
+    --c-real-estate:   88 32% 33%;   /* #566F39 — moss */
+    --c-alt:            9 47% 43%;   /* #A04A3A */
+    --c-ef:           190 51% 36%;   /* #2E7D8C — emergency fund, hatched fill in the donut */
+    --c-ssy:          262 30% 52%;   /* #7A5FA8 */
   }
 
   .dark {
-    /* ── Backgrounds ─────────────────────────────────────────── */
-    --background:  30 15%  8%;   /* #141210  warm near-black */
-    --card:        30 12% 11%;   /* #1E1C19 */
-    --popover:     30 12% 11%;
+    /* ── Backgrounds — vault interior ────────────────────────── */
+    --background:  144 17%  6%;   /* #0C110E */
+    --card:        137 16%  9%;   /* #131A15 */
+    --popover:     137 16%  9%;
+    --panel:       140 17%  7%;   /* #0F1511 */
 
     /* ── Foregrounds ─────────────────────────────────────────── */
-    --foreground:          40 20% 97%;
-    --card-foreground:     40 20% 97%;
-    --popover-foreground:  40 20% 97%;
+    --foreground:          111 16% 92%;   /* #E7EDE6 */
+    --card-foreground:     111 16% 92%;
+    --popover-foreground:  111 16% 92%;
 
-    /* ── Primary — lighter teal on dark ─────────────────────── */
-    --primary:            180 50% 42%;   /* #3D9B9B */
-    --primary-foreground:  30 15%  8%;
+    /* ── Primary — mint, native dark value (not a dimmed light one) */
+    --primary:            154 51% 55%;   /* #54C795 */
+    --primary-strong:     154 57% 68%;   /* #7FDCB4  hover/active — lighter, not darker, on dark */
+    --primary-foreground: 147 41%  5%;   /* #08130D  on-mint text */
 
     /* ── Secondary / Muted ───────────────────────────────────── */
-    --secondary:            30 10% 16%;   /* #2C2925 */
-    --secondary-foreground: 40 15% 80%;
-    --muted:                30 10% 16%;
-    --muted-foreground:     30  8% 60%;   /* #A09A94 */
+    --secondary:            140 17%  7%;   /* #0F1511  panel */
+    --secondary-foreground: 111 16% 92%;
+    --muted:                140 17%  7%;
+    --muted-foreground:     134  8% 59%;   /* #8FA093 */
 
     /* ── Accent ──────────────────────────────────────────────── */
-    --accent:            180 30% 18%;
-    --accent-foreground: 180 50% 70%;
+    --accent:            150 29% 12%;   /* #16281F */
+    --accent-foreground: 154 51% 55%;
 
-    /* ── Destructive ─────────────────────────────────────────────
-       Lightened 2026-08-05: the original 0 62% 50% measured 3.67:1 as
-       text on the dark background — below AA. 0 72% 63% measures 5.39:1
-       on --background and 4.90:1 on --card. The foreground flips to
-       near-black because warm white on this lighter red would fail. */
-    --destructive:            0 72% 63%;
-    --destructive-foreground: 30 15% 8%;
+    /* ── Brass — native dark value, same scoped-use rule as light */
+    --brass:              42 52% 59%;   /* #CDAD62 */
+    --brass-soft:         42 37% 48%;   /* #A98D4E */
+    --brass-foreground:   42 38% 10%;   /* #241E10  brass tint */
+
+    /* ── Destructive ─────────────────────────────────────────── */
+    --destructive:            0 65% 61%;
+    --destructive-foreground: 147 41%  5%;
 
     /* ── Borders / Inputs / Ring ─────────────────────────────── */
-    --border: 30 10% 18%;   /* #2C2A26 */
-    --input:  30 10% 18%;
-    --ring:  180 50% 42%;
+    --border:      142 13% 17%;   /* #26312A */
+    --border-soft: 140 14% 12%;   /* #1B241E */
+    --input:       142 13% 17%;
+    --ring:       154 51% 55%;
+
+    /* ── Asset class palette — native dark values, not the light
+       set dimmed. Same scoped-use rule as light.                  */
+    --c-equity:       153 50% 56%;   /* #57C795 */
+    --c-debt:         205 28% 65%;   /* #8CA9BE */
+    --c-gold:          42 54% 62%;   /* #D3B36B */
+    --c-hybrid:       320 45% 66%;   /* #CF81B5 — plum, lifted well clear of alt's salmon */
+    --c-real-estate:   88 38% 60%;   /* #9CC072 — moss */
+    --c-alt:           12 46% 64%;   /* #CE8A79 */
+    --c-ef:           189 46% 58%;   /* #63B7C6 */
+    --c-ssy:          261 44% 70%;   /* #A991D4 */
   }
 }
 
@@ -96,40 +154,46 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  /* Tabular figures for all monetary displays */
+  /* Tabular figures for all monetary displays — mono, per folio */
   .tabular {
+    font-family: theme('fontFamily.mono');
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
   }
 
-  /* Section label — the CFP document section header pattern */
+  /* Section label — mono ALL-CAPS eyebrow, the folio's signature label style */
   .section-label {
-    @apply text-xs font-semibold tracking-widest uppercase text-muted-foreground;
+    @apply text-xs font-mono tracking-[.22em] uppercase text-brass;
   }
 
-  /* Paper grain: a faint noise overlay on --background, evolved CFP
-     one-pager language (paper texture, not a flat digital screen).
-     Inline feTurbulence SVG as a data URI, zero network requests.
-     ::before is decorative only: empty content, pointer-events: none,
-     and an empty-content pseudo-element carries no accessible text, so
-     screen readers get nothing extra from it.
+  /* Reeded-edge divider — repeating-linear-gradient, folio's .reed */
+  .reed {
+    height: 10px;
+    background: repeating-linear-gradient(90deg, hsl(var(--border)) 0 1px, transparent 1px 5px);
+    border-top: 1px solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
+    opacity: .8;
+  }
 
-     Light only, and the opacity is measured rather than guessed.
-     The texture's own luminance range is 167 of 255. Multiply that by the
-     overlay opacity to get the swing this actually paints on the page:
-     at 0.025 the standard deviation is 0.59 levels, which is under the
-     8-bit quantization floor, so it renders as nothing at all. 0.05 puts
-     the swing at about 8 levels peak to peak (sd 1.2), which is visible
-     as tooth on the warm off-white without reading as dirt.
+  /* Paper grain: a faint noise overlay on --background. Preserved live-only —
+     the doc token source omits it, but src/pages/Landing.tsx still applies
+     the class, and this chunk does not touch component files. Hue-agnostic
+     overlay, so it still reads correctly against the new mint/vault
+     background values without modification.
 
-     Dark mode is off on purpose. The same absolute swing sits on a near
-     black background (#141210), where it is a far larger relative change
-     and reads as compression noise rather than paper. Checked as rendered
-     at 390, 768 and 1280 in both themes, not asserted.
+     Inline feTurbulence SVG as a data URI, zero network requests. ::before
+     is decorative only: empty content, pointer-events: none, and an
+     empty-content pseudo-element carries no accessible text, so screen
+     readers get nothing extra from it.
 
-     isolation + z-index keeps the grain behind the page content. Without
-     a stacking context here, an absolutely positioned ::before paints
-     above non-positioned text and hazes it. */
+     Light only, and the opacity is measured rather than guessed — see the
+     v1 globals.css history for the luminance-swing derivation. Dark mode is
+     off on purpose: the same absolute swing on a near-black background is a
+     far larger relative change and reads as compression noise, not paper.
+
+     isolation + z-index keeps the grain behind the page content. Without a
+     stacking context here, an absolutely positioned ::before paints above
+     non-positioned text and hazes it. */
   .paper-grain {
     position: relative;
     isolation: isolate;
@@ -149,7 +213,9 @@
 
   /* Focus ring on bare anchors — shadcn Button/inputs style their own
      focus-visible, but plain <a>/<Link> navigation needs a visible ring too
-     (SPEC.md §6: visible ring on every interactive element). */
+     (SPEC.md §6: visible ring on every interactive element). Preserved
+     live-only: the doc token source omits it, but the accessibility
+     requirement it satisfies is unrelated to the token cutover. */
   a:focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background rounded-sm;
   }
@@ -157,7 +223,9 @@
 
 /* SPEC.md §6: prefers-reduced-motion disables all shimmer/transition/animation.
    Covers the dashboard skeleton shimmer, card hover transitions, and any
-   Radix/Recharts motion, without touching layout. */
+   Radix/Recharts motion, without touching layout. Preserved live-only: the
+   doc token source omits it, but the accessibility requirement it satisfies
+   is unrelated to the token cutover. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

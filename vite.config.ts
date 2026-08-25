@@ -13,8 +13,8 @@ export default defineConfig({
         name: 'Vittam',
         short_name: 'Vittam',
         description: 'See what your household holds, and how complete your plan is.',
-        theme_color: '#1B6B6B',
-        background_color: '#F7F5F1',
+        theme_color: '#186A4F',
+        background_color: '#F0F3EE',
         display: 'standalone',
         start_url: '/',
         icons: [

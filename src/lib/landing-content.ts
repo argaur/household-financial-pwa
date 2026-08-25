@@ -27,7 +27,7 @@ export const LANDING_HERO = {
   brandRelevance: 'A name for everything your household owns. Not just what sits in one investing app.',
   label: 'For Indian households',
   // Split into three parts so the middle clause can be set in the primary
-  // teal color for emphasis (DM Serif Display has one weight, so emphasis is
+  // mint color for emphasis (the display serif has one weight, so emphasis is
   // color, never faked bold). headlineBefore + headlineEmphasis + headlineAfter
   // must concatenate to exactly headline.
   headlineBefore: 'See your ',

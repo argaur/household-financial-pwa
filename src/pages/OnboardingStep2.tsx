@@ -81,7 +81,7 @@ export function OnboardingStep2({ onContinue }: OnboardingStep2Props) {
         <p className="text-caption text-muted-foreground">Step 2 of 3</p>
 
         <header className="space-y-2">
-          <h1 className="font-display text-display">Who are we planning for?</h1>
+          <h1 className="font-serif text-display">Who are we planning for?</h1>
           <p className="text-body text-muted-foreground">Add everyone whose financial future you want to track.</p>
         </header>
 

@@ -1,8 +1,10 @@
 import type { Config } from 'tailwindcss'
 
 /*
-  Tailwind config — Household Financial Planning PWA
-  Design system: warm editorial × calm minimal (CFP one-pager)
+  Tailwind config — Vittam (Household Financial Planning PWA)
+  Design system: engraved currency / vault (D-016 Slice 5, 2026-08-25)
+  "Light = fresh currency paper. Dark = vault interior."
+  Extracted from Documentation/design/concept/vittam-mint-folio.html.
   Mobile-first: 390px primary, 768px tablet, 1280px desktop
 */
 
@@ -16,7 +18,9 @@ const config: Config = {
   theme: {
     /* ── Breakpoints ─────────────────────────────────────────── */
     screens: {
-      sm:  '390px',    /* primary — iPhone 14 Pro */
+      sm:  '390px',    /* primary — iPhone 14 Pro. NOT the Tailwind default 640px —
+                           this project redefines it deliberately (see app/CLAUDE.md
+                           past-mistakes: the sm:-390px breakpoint trap, 2026-08-25) */
       md:  '768px',    /* tablet */
       lg: '1280px',    /* desktop */
     },
@@ -28,28 +32,59 @@ const config: Config = {
 
     extend: {
       /* ── Fonts ───────────────────────────────────────────────
-         display  → DM Serif Display — editorial headings, tier names, page titles
-                    (warm, trustworthy; CFP document header quality)
-         sans     → Inter — all UI text, labels, body, forms
-                    (clean, accessible, already in shadcn baseline)
+         Font-availability risk (SPEC.md §S7/§S10) RESOLVED 2026-08-25:
+         the folio's named fonts (Bodoni MT, Gill Sans Nova, Cascadia
+         Mono) are not open/web-safe and were not guaranteed to render
+         on most visitors' devices. Gaurav picked free Google Fonts
+         matches and directed loading them via the Google Fonts
+         stylesheet (Phase 4 implementation note below) — the original
+         named fonts stay FIRST in each stack so a device that does
+         have them still uses them; the Google Font is the guaranteed
+         fallback, not the primary choice.
 
-         Usage rule: display only for text ≥ 20px. Everything else: sans.
-         Never use display at small sizes — the serif gets muddy.        */
+         serif → Bodoni MT / Didot, then Playfair Display (Google Font,
+                 loaded; already the folio's own 3rd-choice fallback,
+                 genuinely close high-contrast serif match) — headlines,
+                 tier names, page titles, figures with weight (hero numbers)
+         sans  → Gill Sans Nova / Gill Sans / Trebuchet MS / Segoe UI /
+                 Candara, then Jost (Google Font, loaded; geometric
+                 humanist in Gill Sans's proportions, weights 400/500/600) —
+                 all UI text, labels, body, forms
+         mono  → Cascadia Mono / Consolas / SF Mono / Menlo, then
+                 JetBrains Mono (Google Font, loaded; closest modern
+                 match to Cascadia's proportions and x-height) — ledger
+                 labels, tabular figures, ALL-CAPS eyebrows/section labels
+
+         Phase 4 implementation note — index.html <link> (mirrors the
+         existing Yatra One/DM Serif Display/Inter pattern already in
+         index.html; DM Serif Display and Inter are retired, Yatra One
+         is unchanged — wordmark only):
+           <link rel="preconnect" href="https://fonts.googleapis.com" />
+           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+           <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yatra+One&family=Playfair+Display:ital,wght@0,400;1,400&family=Jost:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+         (Playfair Display loads the italic weight too — the folio's
+         `.cover h1 em` uses `font-style: italic` for the mint-colored
+         emphasis word in the landing hero.)
+
+         Usage rule: serif only for text ≥ 18px (headlines, tier names,
+         donut-center totals). Mono only for eyebrows, mono labels, and
+         `.tabular`/`.num` numeric displays — never for prose. Everything
+         else: sans. DM Serif Display + Inter are retired by this pass.  */
       fontFamily: {
-        display: ['"DM Serif Display"', 'Georgia', 'serif'],
-        sans:    ['Inter', 'system-ui', 'sans-serif'],
-        /* wordmark → Yatra One, a Devanagari/Latin companion typeface with
-           brush-terminal letterforms that nod to the product's Sanskrit name
-           without setting the name in Devanagari script itself. Logo use
-           only: the "Vittam" wordmark in SiteHeader and the landing hero's
-           name line. Never for headings, body, or anything else — one
-           display weight, easy to overuse into a gimmick. */
+        serif: ['"Bodoni MT"', 'Didot', '"Playfair Display"', '"Times New Roman"', 'serif'],
+        sans:  ['"Gill Sans Nova"', '"Gill Sans"', '"Trebuchet MS"', '"Segoe UI"', 'Candara', 'Jost', 'sans-serif'],
+        mono:  ['"Cascadia Mono"', 'Consolas', '"SF Mono"', 'Menlo', '"JetBrains Mono"', 'monospace'],
+        /* wordmark → Yatra One, unchanged by this cutover (still loaded via
+           the Google Fonts <link> in index.html). Preserved live-only: the
+           doc token source omits it, but it is still consumed by the
+           "Vittam" wordmark in SiteHeader and the landing hero name line —
+           logo use only, never for headings, body, or anything else. */
         wordmark: ['"Yatra One"', 'cursive'],
       },
 
       /* ── Colors ──────────────────────────────────────────────
          Shadcn CSS-variable bridge (all semantic slots)
-         + project-specific tokens (asset classes, tier statuses) */
+         + project-specific tokens (brass accent, asset classes, tier statuses) */
       colors: {
         /* shadcn semantic bridge */
         background:  'hsl(var(--background))',
@@ -62,8 +97,10 @@ const config: Config = {
           DEFAULT:    'hsl(var(--popover))',
           foreground: 'hsl(var(--popover-foreground))',
         },
+        panel: 'hsl(var(--panel))',   /* recessed surface — ledger table head, inset zones */
         primary: {
           DEFAULT:    'hsl(var(--primary))',
+          strong:     'hsl(var(--primary-strong))',
           foreground: 'hsl(var(--primary-foreground))',
         },
         secondary: {
@@ -82,93 +119,156 @@ const config: Config = {
           DEFAULT:    'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
-        border: 'hsl(var(--border))',
-        input:  'hsl(var(--input))',
-        ring:   'hsl(var(--ring))',
+        border:      'hsl(var(--border))',
+        'border-soft': 'hsl(var(--border-soft))',
+        input:       'hsl(var(--input))',
+        ring:        'hsl(var(--ring))',
+
+        /* ── Brass — second accent, present in BOTH light and dark ──
+           (corrected 2026-08-25: an earlier pass scoped brass to dark
+           mode only; the real folio uses it natively in both themes).
+           Scoped uses only, mirroring the asset/tier discipline below:
+           mono eyebrows, guilloche motif, coin-mark rims, dashed
+           import-zone borders. Never generic UI chrome or a second
+           primary button color.                                        */
+        brass: {
+          DEFAULT:    'hsl(var(--brass))',
+          soft:       'hsl(var(--brass-soft))',
+          foreground: 'hsl(var(--brass-foreground))',
+        },
 
         /* ── Asset class palette ──────────────────────────────
            Used ONLY in the allocation donut chart segments and
            their matching legend dots. Never for UI chrome.
-           Muted, sophisticated — annual report palette.          */
+           Native per-theme CSS vars (dark is not light dimmed),
+           mirroring --primary — promoted from fixed hex 2026-08-25
+           (was flagged as a Phase-4 gap; fixed at Stage 4 instead
+           of deferred, per Gaurav). Source values in globals.css.
+
+           Taxonomy note (2026-08-25, Chunk 1 step 4): the folio mockup's
+           donut legend used an invented set (Equity/Debt/Gold/Emergency
+           fund/SSY/Other) that is NOT this app's taxonomy. The live one is
+           ASSET_CLASS_ORDER in src/lib/allocation.ts — equity, debt, gold,
+           hybrid, real-estate, alternative — and it mirrors the database
+           enum, so it is a data contract and cannot be bent to the mockup.
+           Reconciled by keeping all six live classes colored (`alternative`
+           reads the folio's `--c-alt`; `hybrid` and `real-estate` are new
+           mint-palette values with no folio counterpart) and keeping `ef`
+           and `ssy` alongside them:
+             ef  — `isEmergencyFund` is a real per-holding boolean, orthogonal
+                   to assetClass, and Chunk 3 hatches the donut with it.
+             ssy — reserved for the Sukanya Samriddhi treatment.
+           Neither `ef` nor `ssy` is an AssetClass; do not add them to one. */
         asset: {
-          equity:       '#2D6A6A',   /* deep teal       */
-          debt:         '#475569',   /* slate            */
-          gold:         '#B45309',   /* warm amber       */
-          hybrid:       '#6D28D9',   /* muted purple     */
-          'real-estate':'#15803D',   /* forest green     */
-          alternative:  '#9F3939',   /* terracotta       */
+          equity:        'hsl(var(--c-equity))',       /* deep mint-green, distinct from --primary */
+          debt:          'hsl(var(--c-debt))',         /* slate-blue */
+          gold:          'hsl(var(--c-gold))',         /* warm brass-adjacent gold */
+          hybrid:        'hsl(var(--c-hybrid))',       /* plum — equity+debt blend, no folio counterpart */
+          'real-estate': 'hsl(var(--c-real-estate))',  /* moss/olive — land, no folio counterpart */
+          alternative:   'hsl(var(--c-alt))',          /* terracotta */
+          ef:            'hsl(var(--c-ef))',           /* emergency fund — teal-cyan, hatched fill in the donut */
+          ssy:           'hsl(var(--c-ssy))',          /* muted purple */
         },
 
         /* ── Tier status colors ───────────────────────────────
            Used for: tier badge bg, tier badge text, tier border.
            Never used as generic status colors elsewhere.
-           Always use as a pair: text on bg. The dark-* trio is the
-           same identity inverted for the dark theme (light text on a
-           deep tint) — apply via dark: variants, always as a full set. */
+           Always use as a pair: text on bg. Retained from v1 —
+           the folio does not redesign the tier system, only its frame.
+
+           The `dark`/`dark-bg`/`dark-border` triple is consumed as
+           `dark:` variants by health-tier-card.tsx and HomeShell.tsx.
+           An earlier pass of this cutover dropped it while keeping the
+           light triple, which silently un-styled every tier badge in
+           dark mode (Tailwind drops unresolvable classes without error).
+           Restored 2026-08-25, with on-track re-cut from teal to the
+           vault-mint values so it matches --primary's dark value.      */
         tier: {
           'getting-started': {
-            DEFAULT: '#92400E',   /* amber-800  — text */
-            bg:      '#FEF3C7',   /* amber-100  — background */
-            border:  '#FDE68A',   /* amber-200  — border */
-            dark:          '#FDE68A',   /* amber-200 — text on dark */
-            'dark-bg':     '#451A03',   /* amber-950 — background */
-            'dark-border': '#92400E',   /* amber-800 — border */
+            DEFAULT: '#92400E',
+            bg:      '#FEF3C7',
+            border:  '#FDE68A',
+            dark:          '#FDE68A',
+            'dark-bg':     '#451A03',
+            'dark-border': '#92400E',
           },
           'on-track': {
-            DEFAULT: '#1B6B6B',   /* teal       — text */
-            bg:      '#E8F3F2',   /* teal tint  — background */
-            border:  '#B2DFDB',   /* teal-200   — border */
-            dark:          '#8FD6D6',   /* light teal — text on dark */
-            'dark-bg':     '#0E2B2B',   /* deep teal  — background */
-            'dark-border': '#1B6B6B',   /* teal       — border */
+            DEFAULT: '#186A4F',   /* now mint, was teal */
+            bg:      '#DEEBE2',
+            border:  '#B7D8C6',
+            dark:          '#7FDCB4',   /* now mint, was light teal — matches --primary-strong dark */
+            'dark-bg':     '#0F2018',   /* vault mint-shadow, was deep teal #0E2B2B */
+            'dark-border': '#1F5B44',   /* mint, was teal #1B6B6B */
           },
           strong: {
-            DEFAULT: '#166534',   /* green-800  — text */
-            bg:      '#DCFCE7',   /* green-100  — background */
-            border:  '#86EFAC',   /* green-300  — border */
-            dark:          '#86EFAC',   /* green-300 — text on dark */
-            'dark-bg':     '#052E16',   /* green-950 — background */
-            'dark-border': '#166534',   /* green-800 — border */
+            DEFAULT: '#166534',
+            bg:      '#DCFCE7',
+            border:  '#86EFAC',
+            dark:          '#86EFAC',
+            'dark-bg':     '#052E16',
+            'dark-border': '#166534',
           },
         },
       },
 
       /* ── Border radius ───────────────────────────────────────
-         Restrained rounding — not bubbly fintech, not sharp SaaS.
-         Everything derives from --radius (0.5rem / 8px).         */
+         Folio's dominant scale: 10px fields/panels, 12px cards,
+         14–16px larger cards, 38px the outer app-frame (desktop
+         showcase chrome only, not a mobile screen radius), 999px
+         pills/badges/theme-toggle, 50% circles (coin FAB, avatar,
+         mintmark).                                                */
       borderRadius: {
-        lg:  'var(--radius)',                        /* 8px  — cards */
-        md:  'calc(var(--radius) - 2px)',            /* 6px  — buttons, inputs */
-        sm:  'calc(var(--radius) - 4px)',            /* 4px  — badges, small elements */
-        xl:  'calc(var(--radius) + 4px)',            /* 12px — bottom sheets only */
-        '2xl': 'calc(var(--radius) + 8px)',          /* 16px — modals only */
+        sm:  '0.25rem',                     /* 4px  — small badges, legend dots */
+        DEFAULT: 'calc(var(--radius) - 2px)', /* 8px  — buttons, small elements */
+        md:  'var(--radius)',               /* 10px — inputs, fields, panels */
+        lg:  'calc(var(--radius) + 2px)',   /* 12px — standard cards */
+        xl:  'calc(var(--radius) + 4px)',   /* 14px — larger cards, spec cards */
+        '2xl': 'calc(var(--radius) + 6px)', /* 16px — app-bar cards, bottom sheets */
+        pill: '999px',                       /* theme toggle, badges, ledger tabs */
+        coin: '50%',                         /* FAB, avatar, mintmark */
       },
 
       /* ── Typography scale ────────────────────────────────────
-         Named for their role, not their pixel size.
-         Use these via Tailwind text-* classes.                   */
-      fontSize: {
-        /* hero — DM Serif Display only. Public landing page and /why only,
-           never app screens (see brand-guide.md §2 Typography Scale Rules). */
-        'hero':      ['clamp(2.25rem, 6vw, 3.5rem)', { lineHeight: '1.05', letterSpacing: '-0.02em' }],  /* 36px–56px */
-        'display':   ['2rem',  { lineHeight: '1.2', letterSpacing: '-0.01em' }],  /* 32px — tier name, hero number */
-        'heading':   ['1.5rem',{ lineHeight: '1.3', letterSpacing: '-0.01em' }],  /* 24px — page titles */
-        'title':     ['1.125rem',{ lineHeight: '1.4' }],                          /* 18px — card titles, section heads */
-        'body-lg':   ['1rem',  { lineHeight: '1.6' }],                            /* 16px — nudge copy, descriptions */
-        'body':      ['0.875rem',{ lineHeight: '1.5' }],                          /* 14px — standard UI text */
-        'caption':   ['0.75rem', { lineHeight: '1.4' }],                          /* 12px — helper text, metadata */
-      },
+         Named for their role, not their pixel size. Folio uses
+         clamp() for hero/display sizes (responsive across the
+         folio's desktop showcase width) — fixed rem values here
+         since the app itself is mobile-first single-breakpoint,
+         not a fluid desktop layout; use the folio's clamp() only
+         if a future desktop-width screen needs it.                */
+        fontSize: {
+          'hero':      ['2.5rem', { lineHeight: '1.04', letterSpacing: '-0.01em' }],  /* 40px — landing hero, mobile-fit clamp(32,9vw,72) floor+ */
+          'display':   ['1.875rem', { lineHeight: '1.15' }],                          /* 30px — closing/section headlines, tier name */
+          'heading':   ['1.5rem',{ lineHeight: '1.3' }],                              /* 24px — page titles */
+          'title':     ['1.125rem',{ lineHeight: '1.4' }],                            /* 18px — card titles, app-bar name (serif) */
+          'body-lg':   ['1rem',  { lineHeight: '1.55' }],                             /* 16px — body copy, thesis */
+          'body':      ['0.875rem',{ lineHeight: '1.5' }],                            /* 14px — standard UI text, ledger rows */
+          'caption':   ['0.8125rem', { lineHeight: '1.4' }],                          /* 13px — compare-strip, counsel cards */
+          'label':     ['0.75rem', { lineHeight: '1.4' }],                            /* 12px — helper text, legend pct/val */
+          'eyebrow':   ['0.6875rem', { lineHeight: '1.4', letterSpacing: '.22em' }],  /* 11px — mono ALL-CAPS section labels */
+        },
 
       /* ── Shadows ─────────────────────────────────────────────
-         Minimal. Cards use border, not shadows, as the primary
-         separation mechanism. Shadow used only for elevation.    */
+         Folio defines two elevation levels plus an "emboss" inset
+         highlight used on serif headlines (a subtle engraved-plate
+         effect) — not a drop shadow, applied via text-shadow, not
+         box-shadow; kept here as documentation, applied via a
+         `.emboss` utility in globals.css rather than a Tailwind
+         boxShadow key since it targets text-shadow.               */
       boxShadow: {
-        card:   '0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04)',
-        sheet:  '0 -4px 24px -4px rgb(0 0 0 / 0.10)',   /* bottom sheets */
-        modal:  '0 8px 32px -4px rgb(0 0 0 / 0.16)',    /* modals / consent */
+        card:  '0 1px 2px rgba(23,33,26,.06), 0 12px 32px -18px rgba(23,33,26,.25)',
+        lift:  '0 2px 4px rgba(23,33,26,.07), 0 20px 44px -20px rgba(23,33,26,.32)',
+        /* dark-mode values are set as CSS vars (--shadow / --shadow-lift in
+           globals.css) since box-shadow color needs per-theme opacity, not
+           just per-theme hue — apply via `shadow-[var(--shadow)]` in dark
+           contexts, or promote to a CSS-var-backed utility if this pattern
+           recurs across more than the card/lift pair.                     */
       },
 
-      /* ── Animation ───────────────────────────────────────────*/
+      /* ── Animation ───────────────────────────────────────────
+         Folio's own explicit rule (Stage 2 negative constraint):
+         motion is utility-only, communicates state change, never
+         decorative. No gradients, no blur (except the folio-header's
+         sticky backdrop-blur, which is chrome, not content motion). */
       keyframes: {
         'accordion-down': {
           from: { height: '0' },

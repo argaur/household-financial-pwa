@@ -34,7 +34,7 @@ export function HealthTierCard({ completeness }: HealthTierCardProps) {
   return (
     <section className={`rounded-lg border p-4 md:p-6 space-y-2 ${TIER_CLASSES[tier]}`}>
       <h2 className="section-label">Household health</h2>
-      <p className="font-display text-display">{TIER_LABELS[tier]}</p>
+      <p className="font-serif text-display">{TIER_LABELS[tier]}</p>
       <p className="text-body">{score} of 5 checks complete</p>
       <hr className="border-current/20" />
       <p className="text-caption">{TIER_CONTEXT[tier]}</p>

@@ -187,7 +187,7 @@ export function Portfolio() {
     <main className="min-h-screen bg-background text-foreground font-sans">
       <div className="container max-w-lg md:max-w-2xl lg:max-w-4xl py-12 md:py-16 space-y-6 pb-28">
         <header className="space-y-1">
-          <h1 className="font-display text-display">Your holdings</h1>
+          <h1 className="font-serif text-display">Your holdings</h1>
           {displayedReady && displayedHoldings.length > 0 && (
             <p className="text-caption text-muted-foreground">
               {displayedHoldings.length} holding{displayedHoldings.length === 1 ? '' : 's'} ·{' '}

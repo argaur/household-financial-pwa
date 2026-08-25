@@ -14,7 +14,7 @@ import { WHY_SECTIONS, WHY_REPO_URL, type WhyDecision } from '@/lib/why-decision
 function NumberedHeader({ number, title, id }: { number: string; title: string; id: string }) {
   return (
     <div className="flex items-baseline gap-2 border-b border-border pb-3">
-      <span className="font-display text-title text-muted-foreground tabular" aria-hidden="true">
+      <span className="font-mono text-title text-muted-foreground tabular" aria-hidden="true">
         {number}
       </span>
       <span className="text-muted-foreground" aria-hidden="true">
@@ -43,7 +43,7 @@ export function Why() {
       <div className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-12 md:py-16 space-y-10">
         <header className="space-y-3">
           <p className="section-label">Why these choices?</p>
-          <h1 className="font-display text-hero">A household finance app, and the thinking behind it</h1>
+          <h1 className="font-serif text-hero">A household finance app, and the thinking behind it</h1>
           <p className="text-body-lg text-muted-foreground max-w-2xl">
             This is a portfolio piece. Below are the product and engineering calls worth explaining, each one against
             the alternative it beat.
@@ -54,7 +54,7 @@ export function Why() {
           <section key={section.id} className="space-y-6" aria-labelledby={`why-${section.id}`}>
             <NumberedHeader number={String(index + 1).padStart(2, '0')} title={section.label} id={`why-${section.id}`} />
             <div className="space-y-1">
-              <h2 className="font-display text-heading">{section.title}</h2>
+              <h2 className="font-serif text-heading">{section.title}</h2>
               <p className="text-caption text-muted-foreground">{section.blurb}</p>
             </div>
 

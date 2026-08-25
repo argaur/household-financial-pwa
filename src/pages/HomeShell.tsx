@@ -38,7 +38,7 @@ export function HomeShell() {
       <div className="container max-w-lg py-12 space-y-8">
         <header className="space-y-1">
           <p className="section-label">Household Financial Planning</p>
-          <h1 className="font-display text-display">Walking Skeleton</h1>
+          <h1 className="font-serif text-display">Walking Skeleton</h1>
           <p className="text-body text-muted-foreground">
             Slice 0. Proves the deploy pipeline. No feature code yet.
           </p>

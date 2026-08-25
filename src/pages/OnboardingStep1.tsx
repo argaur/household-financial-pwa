@@ -52,7 +52,7 @@ export function OnboardingStep1({ onHouseholdCreated }: OnboardingStep1Props) {
         <p className="text-caption text-muted-foreground">Step 1 of 3</p>
 
         <header className="space-y-2">
-          <h1 className="font-display text-display">Let's start with your family.</h1>
+          <h1 className="font-serif text-display">Let's start with your family.</h1>
           <p className="text-body text-muted-foreground">
             Before we can plan, we need to know who we're planning for.
           </p>

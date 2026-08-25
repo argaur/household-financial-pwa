@@ -52,7 +52,7 @@ export function OnboardingStep3({ members, onContinue }: OnboardingStep3Props) {
         <p className="text-caption text-muted-foreground">Step 3 of 3</p>
 
         <header className="space-y-2">
-          <h1 className="font-display text-display">What do you currently hold?</h1>
+          <h1 className="font-serif text-display">What do you currently hold?</h1>
           <p className="text-body text-muted-foreground">
             Record your first investment or asset. You can add everything else after.
           </p>
