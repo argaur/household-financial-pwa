@@ -32,12 +32,39 @@ const config: Config = {
 
     extend: {
       /* ── Fonts ───────────────────────────────────────────────
-         serif → Bodoni MT (fallback Didot, Playfair Display) — headlines,
+         Font-availability risk (SPEC.md §S7/§S10) RESOLVED 2026-08-25:
+         the folio's named fonts (Bodoni MT, Gill Sans Nova, Cascadia
+         Mono) are not open/web-safe and were not guaranteed to render
+         on most visitors' devices. Gaurav picked free Google Fonts
+         matches and directed loading them via the Google Fonts
+         stylesheet (Phase 4 implementation note below) — the original
+         named fonts stay FIRST in each stack so a device that does
+         have them still uses them; the Google Font is the guaranteed
+         fallback, not the primary choice.
+
+         serif → Bodoni MT / Didot, then Playfair Display (Google Font,
+                 loaded; already the folio's own 3rd-choice fallback,
+                 genuinely close high-contrast serif match) — headlines,
                  tier names, page titles, figures with weight (hero numbers)
-         sans  → Gill Sans Nova (fallback Gill Sans, Trebuchet MS) — all
-                 UI text, labels, body, forms
-         mono  → Cascadia Mono (fallback Consolas, SF Mono) — ledger labels,
-                 tabular figures, ALL-CAPS eyebrows/section labels
+         sans  → Gill Sans Nova / Gill Sans / Trebuchet MS / Segoe UI /
+                 Candara, then Jost (Google Font, loaded; geometric
+                 humanist in Gill Sans's proportions, weights 400/500/600) —
+                 all UI text, labels, body, forms
+         mono  → Cascadia Mono / Consolas / SF Mono / Menlo, then
+                 JetBrains Mono (Google Font, loaded; closest modern
+                 match to Cascadia's proportions and x-height) — ledger
+                 labels, tabular figures, ALL-CAPS eyebrows/section labels
+
+         Phase 4 implementation note — index.html <link> (mirrors the
+         existing Yatra One/DM Serif Display/Inter pattern already in
+         index.html; DM Serif Display and Inter are retired, Yatra One
+         is unchanged — wordmark only):
+           <link rel="preconnect" href="https://fonts.googleapis.com" />
+           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+           <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yatra+One&family=Playfair+Display:ital,wght@0,400;1,400&family=Jost:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+         (Playfair Display loads the italic weight too — the folio's
+         `.cover h1 em` uses `font-style: italic` for the mint-colored
+         emphasis word in the landing hero.)
 
          Usage rule: serif only for text ≥ 18px (headlines, tier names,
          donut-center totals). Mono only for eyebrows, mono labels, and
@@ -45,8 +72,8 @@ const config: Config = {
          else: sans. DM Serif Display + Inter are retired by this pass.  */
       fontFamily: {
         serif: ['"Bodoni MT"', 'Didot', '"Playfair Display"', '"Times New Roman"', 'serif'],
-        sans:  ['"Gill Sans Nova"', '"Gill Sans"', '"Trebuchet MS"', '"Segoe UI"', 'Candara', 'sans-serif'],
-        mono:  ['"Cascadia Mono"', 'Consolas', '"SF Mono"', 'Menlo', 'monospace'],
+        sans:  ['"Gill Sans Nova"', '"Gill Sans"', '"Trebuchet MS"', '"Segoe UI"', 'Candara', 'Jost', 'sans-serif'],
+        mono:  ['"Cascadia Mono"', 'Consolas', '"SF Mono"', 'Menlo', '"JetBrains Mono"', 'monospace'],
       },
 
       /* ── Colors ──────────────────────────────────────────────

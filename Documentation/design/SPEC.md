@@ -144,7 +144,7 @@ New motif primitives, all documented in `Documentation/design/COMPONENT_SHOWCASE
 
 ## S5. Analytics Surface
 
-**No new events.** This is a visual-only pass (Stage 2 item 8); every interaction already fires the event it fired in v1. One flag: the Explore screen's "working add-to-holdings toggle," shown live in the folio, is not in v1 `SPEC.md` §4/§5 as an Explore-screen interaction (v1 only has "Record this in my plan" from the *detail* page, §4 row "Instrument detail"). If this toggle ships as a new list-level interaction (not just the existing detail-page flow re-skinned), it needs a `feature_used` event (`feature_name: "explore_add_to_holdings"`) before it ships — escalated to Phase 3 (Plan), not resolved here, since it may be an artifact of the folio's own demo interactivity rather than an intended new interaction pattern.
+**One new event, everything else unchanged.** This is a visual-only pass (Stage 2 item 8); every existing interaction keeps the event it fired in v1. The Explore screen's "add-to-holdings toggle," shown live in the folio, is not in v1 `SPEC.md` §4/§5 as an Explore-screen interaction (v1 only has "Record this in my plan" from the *detail* page, §4 row "Instrument detail") — **confirmed 2026-08-25 as real new scope**, a list-level add/remove interaction, not the existing detail-page flow re-skinned. It gets its own event, `explore_holding_toggled` (`action`: added / removed, `instrument_slug`, `section`), added to `METRICS_PLAN.md`'s New Events table following the existing `ledger_created`/`ledger_switched` naming pattern (object_verb-past-tense, key properties column, feature reference, fire condition).
 
 ## S6. Constraints Contract (testable assertions — Phase 5 verifies these)
 
@@ -154,17 +154,19 @@ New motif primitives, all documented in `Documentation/design/COMPONENT_SHOWCASE
 - No gradients, no glassmorphism/blur on any card or content surface (the folio-header's sticky nav blur is chrome, not content, and is exempt — brand-guide §2 Animation)
 - `sm:` breakpoint remains 390px, not the Tailwind default 640px — re-verify at implementation; this exact class of bug (a `sm:`-scoped rule silently firing at the wrong width) already shipped once and was caught only by live rehearsal, not the test suite (`app/CLAUDE.md`, 2026-08-25 ledgers entry)
 - Mint/brass contrast: re-verify WCAG AA (4.5:1 body / 3:1 large text) for `--brass` on `--card` in both themes at implementation — brass was not contrast-checked during token extraction, only visually matched to the folio
-- Font fallback chains actually render acceptably when Bodoni MT / Gill Sans Nova / Cascadia Mono are unavailable — see §S7, this is a real risk, not a formality
+- Playfair Display / Jost / JetBrains Mono load correctly via the Google Fonts stylesheet (§S7 — RESOLVED 2026-08-25) and render as the guaranteed fallback whenever Bodoni MT / Gill Sans Nova / Cascadia Mono are unavailable on the visitor's device
+- The Explore `explore_holding_toggled` event (§S5, `METRICS_PLAN.md`) fires with correct `instrument_slug`/`action` properties whenever the add-to-holdings toggle is used
+- The 390px real-browser verification on a throwaway Neon branch (§S6, §S7) is run and passes before this slice merges — a Phase 4 build-time requirement, not closable at Design time; see `IMPLEMENTATION_PLAN.md`'s D-016 Slice 5 section once written (Phase 3)
 
 ## S7. Implementation Cost Flags
 
 | Element | Why non-trivial | Simpler fallback |
 |---|---|---|
-| **Font availability — none of the 3 new typefaces are open/web-safe** | Bodoni MT and Cascadia Mono are Microsoft-licensed, not bundled on macOS/Linux/mobile; Gill Sans Nova is a commercial Monotype face. The fallback chains (`Didot, "Playfair Display", "Times New Roman"` / `"Gill Sans", "Trebuchet MS", "Segoe UI", Candara` / `Consolas, "SF Mono", Menlo`) are not guaranteed on a public PWA's actual device mix — most visitors will render the *fallback*, not the named font, and the fallback quality varies a lot across OS. This was true in the folio (a demo artifact meant for Gaurav's own review) and is a real gap for a shipped public product | Load `Playfair Display` (serif) and a Google-hosted geometric sans as explicit `@font-face`/Google Fonts declarations so the *intended* look is guaranteed rather than hoped-for via OS-dependent fallback — decide in Phase 3 whether this is worth the added font-load weight against the PWA's offline/performance goals, or whether the fallback-chain gamble is accepted deliberately |
+| **Font availability — RESOLVED 2026-08-25** — none of the 3 new typefaces are open/web-safe | Bodoni MT and Cascadia Mono are Microsoft-licensed, not bundled on macOS/Linux/mobile; Gill Sans Nova is a commercial Monotype face. Most visitors would have rendered an OS-dependent fallback, not the named font, with quality varying a lot across OS | **Resolved, not deferred.** Gaurav picked free Google Fonts matches — Playfair Display (serif), Jost (sans, weights 400/500/600), JetBrains Mono (mono, weights 400/500) — loaded via the Google Fonts stylesheet, appended after the original named fonts in each fallback stack so a device that does have Bodoni MT/Gill Sans Nova/Cascadia Mono still uses them, and every other device gets the close free match instead of a generic system font. Exact `<link>` tags documented in `tailwind.config.ts`'s Fonts comment for Phase 4 to copy into `index.html` verbatim |
 | Guilloche rosette (code-drawn SVG, generated via the folio's script block) | Not a static asset — it's algorithmically generated at runtime in the folio; porting it means porting the generation logic, not just copying markup | Ship it as a precomputed static SVG (accept it as a fixed asset, not runtime-generated) if the generation logic proves nontrivial to port |
 | Hatched ReserveHatchSlice donut fill | Recharts (this project's donut library) has no built-in hatch/pattern fill for a pie segment — needs an SVG `<pattern>` def and a per-segment `fill="url(#...)"` override, more involved than a solid-color segment | Use a distinct solid color + a small pattern-icon in the legend instead of an in-chart hatch, if the SVG pattern proves awkward inside Recharts' rendering |
-| Regression risk against 1156 passing tests | A wholesale token/typography swap touches every screen's rendered class list; the test suite asserts behavior and copy, not visual tokens, so it will stay green through changes that are visually wrong (exactly the class of bug the `sm:`-390px trap already demonstrated) | None acceptable as a substitute for real-browser verification at 390px on a throwaway Neon branch (this project has no safe local dev path, `.env.local` points at production) — flagged again in §S6, not simplified away |
-| Explore add-to-holdings toggle (§S5) | May be a new interaction pattern, not just a retokened existing one — needs a Phase 3 decision, not a Phase 2 one | Treat it as visual-only and route any real new interaction back through Phase 1 if Phase 3 determines it's new scope |
+| Regression risk against 1156 passing tests | A wholesale token/typography swap touches every screen's rendered class list; the test suite asserts behavior and copy, not visual tokens, so it will stay green through changes that are visually wrong (exactly the class of bug the `sm:`-390px trap already demonstrated) | None acceptable as a substitute for real-browser verification at 390px on a throwaway Neon branch (this project has no safe local dev path, `.env.local` points at production). Not resolved at Design time by decision — this is a Phase 4 build-time step, recorded as a required task in `IMPLEMENTATION_PLAN.md`'s D-016 Slice 5 section (Phase 3, next) so it cannot be silently dropped |
+| Explore add-to-holdings toggle (§S5) — **RESOLVED 2026-08-25** | It is new scope: a list-level add/remove interaction not present in v1 | Given its own event, `explore_holding_toggled` (`METRICS_PLAN.md`, new events table) — no Phase 1 re-pass needed since it is a small, contained addition to an already-approved screen, not a new feature area |
 
 ## S8. Design Risk Resolution (the 3 risks named in Stage 1)
 
@@ -180,9 +182,9 @@ New motif primitives, all documented in `Documentation/design/COMPONENT_SHOWCASE
 |---|---|---|
 | Primary color | Deep teal `#1B6B6B` / `#3D9B9B` dark | Mint `#186A4F` / `#54C795` dark |
 | Second accent | None | Brass `#8F7326` / `#CDAD62` dark, both themes |
-| Serif typeface | DM Serif Display | Bodoni MT (fallback chain, see §S7) |
-| Sans typeface | Inter | Gill Sans Nova (fallback chain, see §S7) |
-| Mono typeface | None (no mono role existed) | Cascadia Mono (fallback chain, see §S7) — new role: eyebrows, tabular figures |
+| Serif typeface | DM Serif Display | Bodoni MT, guaranteed fallback Playfair Display (Google Fonts, loaded — §S7) |
+| Sans typeface | Inter | Gill Sans Nova, guaranteed fallback Jost (Google Fonts, loaded — §S7) |
+| Mono typeface | None (no mono role existed) | Cascadia Mono, guaranteed fallback JetBrains Mono (Google Fonts, loaded — §S7) — new role: eyebrows, tabular figures |
 | Card radius | 8px | 10-16px stepped scale (folio's own steps) |
 | Shadow levels | 1 (`shadow-card`) | 2 (`shadow-card`, `shadow-lift`) + text-only `.emboss` |
 | Section label style | Sans, muted-foreground, semibold | Mono, brass, `.22em` tracking |
@@ -192,10 +194,11 @@ New motif primitives, all documented in `Documentation/design/COMPONENT_SHOWCASE
 
 ## S10. Open Questions
 
-1. **Font-loading strategy** (§S7) — escalated to Phase 3: rely on OS fallback chains as designed in the folio, or explicitly load Google-Fonts-hosted approximations (Playfair Display is available; a comparable geometric sans and mono would need selection) to guarantee the intended look. Not a blocker for Stage 5/6 — it's an implementation decision, not a design one.
-2. **Explore add-to-holdings toggle** (§S5) — is it new scope needing its own analytics event and possibly a Phase 1 pass, or a retokened existing flow? Escalated to Phase 3.
+1. ~~Font-loading strategy~~ — **RESOLVED 2026-08-25.** Gaurav picked Playfair Display / Jost / JetBrains Mono, loaded via the Google Fonts stylesheet, appended after the folio's named fonts in each fallback stack. See §S7.
+2. ~~Explore add-to-holdings toggle~~ — **RESOLVED 2026-08-25.** Confirmed new scope; given its own event (`explore_holding_toggled`, `METRICS_PLAN.md`). See §S5.
 3. **"Title" typography role** (app-bar name vs. card titles, serif vs. sans) — explicitly left unresolved by Gaurav's decision, 2026-08-25. Not a blocker; resolve when that screen is actually built.
 4. Onboarding, Profile, and instrument-detail visual treatment — explicitly deferred to their own future Phase 2 passes, using this system as reference (Gaurav's direction, 2026-08-25). Not an open question so much as a confirmed non-scope for this pass.
+5. **390px real-browser verification on a throwaway Neon branch** — not an open design question, a confirmed Phase 4 requirement (§S6/§S7). Recorded here only so it is traceable; the binding record is the task itself in `IMPLEMENTATION_PLAN.md`'s D-016 Slice 5 section (Phase 3, next), matching how the D-016 ledger slice recorded and ran the same check before its own merge.
 
 ---
 

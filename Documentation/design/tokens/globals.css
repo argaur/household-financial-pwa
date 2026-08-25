@@ -9,6 +9,12 @@
   Extracted from the approved concept folio (D-016 Slice 5, 2026-08-25):
   Documentation/design/concept/vittam-mint-folio.html
   All values in HSL so the Tailwind CSS-variable bridge works correctly.
+
+  Font families live in tailwind.config.ts's fontFamily, not here. As of
+  2026-08-25: Playfair Display / Jost / JetBrains Mono are loaded via the
+  Google Fonts stylesheet (see that file's Fonts comment for the exact
+  <link> tags) as the guaranteed fallback behind the folio's named,
+  non-web-safe fonts (Bodoni MT / Gill Sans Nova / Cascadia Mono).
 */
 
 @layer base {

@@ -59,7 +59,12 @@ Every use is a decorative identity mark beside a text label (accent edge, legend
 
 ### Typography Scale (2026-08-25 — Bodoni MT / Gill Sans Nova / Cascadia Mono, replaces DM Serif Display / Inter)
 
-**Fonts:** `Bodoni MT` (serif, fallback Didot/Playfair Display) + `Gill Sans Nova` (sans, fallback Gill Sans/Trebuchet MS) + `Cascadia Mono` (mono, fallback Consolas/SF Mono). System/web-safe fallback stacks throughout — none of these three are Google Fonts, so the fallback chain is load-bearing, not decorative. `Yatra One` (wordmark) is retained unchanged; the folio does not redesign the wordmark.
+**Fonts:** `Bodoni MT` (serif, fallback Didot/Playfair Display) + `Gill Sans Nova` (sans, fallback Gill Sans/Trebuchet MS/Segoe UI/Candara) + `Cascadia Mono` (mono, fallback Consolas/SF Mono/Menlo). None of these three are Google Fonts or otherwise guaranteed present — **resolved 2026-08-25**: the free Google Fonts matches Gaurav picked are loaded via the Google Fonts stylesheet and sit at the end of each fallback stack, so a device without the named font renders a genuinely close match instead of falling through to a generic system serif/sans/mono:
+  - Serif → **Playfair Display** (already the folio's own 3rd-choice fallback; a genuinely close high-contrast serif match to Bodoni/Didot)
+  - Sans → **Jost** (geometric humanist in Gill Sans's proportions, the common free substitute for it; weights 400/500/600 loaded)
+  - Mono → **JetBrains Mono** (closest modern match to Cascadia's proportions and x-height; weights 400/500 loaded)
+
+  Exact `<link>` tags for Phase 4 (mirrors the existing Yatra One/DM Serif Display/Inter pattern in `index.html`; DM Serif Display and Inter are retired by this pass, Yatra One is unchanged) are documented in `tailwind.config.ts`'s Fonts comment. `Yatra One` (wordmark) is retained unchanged; the folio does not redesign the wordmark.
 
 | Role | Size | Font | Class name |
 |---|---|---|---|
