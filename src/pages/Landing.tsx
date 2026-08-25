@@ -2,8 +2,9 @@ import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUpRight, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { SampleOnePager } from '@/components/sample-one-pager'
+import { VaultFrame } from '@/components/vault-frame'
+import { GuillocheMotif } from '@/components/guilloche-motif'
 import { track } from '@/lib/analytics'
 import {
   LANDING_HERO,
@@ -83,53 +84,70 @@ export function Landing() {
 
       {/* Hero + trust strip */}
       <section className="container max-w-lg md:max-w-2xl lg:max-w-5xl pt-12 pb-8 md:pt-16 md:pb-10">
-        {/* items-center, not items-start: the sample card is roughly twice
+        {/* The hero is plated: a vault frame (D-016 Slice 5's shared card
+            primitive) with a weighted border and a deliberate inset, so the
+            front door reads as an engraved certificate rather than as flat
+            page copy. The guilloché rosette sits behind it, bleeding off the
+            top edge exactly as in the folio's landing plate. Everything
+            inside is the same copy in the same order — only its frame moved.
+
+            `border-2` over the primitive's default hairline is the "weighty
+            border" the plate calls for; the padding is the inset. */}
+        <VaultFrame className="relative overflow-hidden border-2 bg-card px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-14">
+          <GuillocheMotif
+            rings={30}
+            className="absolute left-1/2 -top-[150px] h-[420px] w-[420px] max-w-none -translate-x-1/2 md:-top-[190px] md:h-[560px] md:w-[560px]"
+          />
+          {/* items-center, not items-start: the sample card is roughly twice
             the height of the left column, and top-aligning the two left a
             large dead area under the audience line at lg. Seen in the
             rendered capture at 1280, not predicted from the markup. */}
-        <div className="lg:grid lg:grid-cols-12 lg:gap-10 lg:items-center">
-          <div className="lg:col-span-7 space-y-4">
-            <div className="landing-fade-up space-y-3" style={{ animationDelay: '0ms' }}>
-              <div className="space-y-1">
-                <p className="font-wordmark text-heading text-primary">{LANDING_HERO.brandName}</p>
-                <p className="text-body text-muted-foreground max-w-md">
-                  {LANDING_HERO.brandMeaning} {LANDING_HERO.brandRelevance}
-                </p>
+          <div className="relative lg:grid lg:grid-cols-12 lg:gap-10 lg:items-center">
+            <div className="lg:col-span-7 space-y-4">
+              <div className="landing-fade-up space-y-3" style={{ animationDelay: '0ms' }}>
+                <div className="space-y-1">
+                  <p className="font-wordmark text-heading text-primary">{LANDING_HERO.brandName}</p>
+                  <p className="text-body text-muted-foreground max-w-md">
+                    {LANDING_HERO.brandMeaning} {LANDING_HERO.brandRelevance}
+                  </p>
+                </div>
+                <p className="section-label">{LANDING_HERO.label}</p>
+                <h1 className="font-serif text-hero lg:max-w-[16ch]">
+                  {LANDING_HERO.headlineBefore}
+                  <span className="text-primary">{LANDING_HERO.headlineEmphasis}</span>
+                  {LANDING_HERO.headlineAfter}
+                </h1>
               </div>
-              <p className="section-label">{LANDING_HERO.label}</p>
-              <h1 className="font-serif text-hero lg:max-w-[16ch]">
-                {LANDING_HERO.headlineBefore}
-                <span className="text-primary">{LANDING_HERO.headlineEmphasis}</span>
-                {LANDING_HERO.headlineAfter}
-              </h1>
+              <p className="landing-fade-up text-body-lg text-foreground" style={{ animationDelay: '150ms' }}>
+                {LANDING_HERO.body}
+              </p>
+              <div className="landing-fade-up flex flex-col sm:flex-row gap-3 pt-2" style={{ animationDelay: '300ms' }}>
+                <Button asChild className="min-h-11">
+                  <Link to="/sign-in?authView=sign-up" onClick={cta('create_your_plan', '/sign-in?authView=sign-up')}>
+                    {LANDING_HERO.primaryCta}
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link to="/sign-in" onClick={cta('sign_in', '/sign-in')}>
+                    {LANDING_HERO.secondaryCta}
+                  </Link>
+                </Button>
+              </div>
+              <p className="landing-fade-up text-body text-muted-foreground" style={{ animationDelay: '450ms' }}>
+                {LANDING_HERO.audience}
+              </p>
             </div>
-            <p className="landing-fade-up text-body-lg text-foreground" style={{ animationDelay: '150ms' }}>
-              {LANDING_HERO.body}
-            </p>
-            <div className="landing-fade-up flex flex-col sm:flex-row gap-3 pt-2" style={{ animationDelay: '300ms' }}>
-              <Button asChild className="min-h-11">
-                <Link to="/sign-in?authView=sign-up" onClick={cta('create_your_plan', '/sign-in?authView=sign-up')}>
-                  {LANDING_HERO.primaryCta}
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="min-h-11">
-                <Link to="/sign-in" onClick={cta('sign_in', '/sign-in')}>
-                  {LANDING_HERO.secondaryCta}
-                </Link>
-              </Button>
+
+            {/* Right column: a live sample one-pager, real components, synthetic data */}
+            <div className="mt-8 lg:mt-0 lg:col-span-5">
+              <SampleOnePager />
             </div>
-            <p className="landing-fade-up text-body text-muted-foreground" style={{ animationDelay: '450ms' }}>
-              {LANDING_HERO.audience}
-            </p>
           </div>
+        </VaultFrame>
 
-          {/* Right column: a live sample one-pager, real components, synthetic data */}
-          <div className="mt-8 lg:mt-0 lg:col-span-5">
-            <SampleOnePager />
-          </div>
-        </div>
-
-        {/* Trust strip */}
+        {/* Trust strip — deliberately OUTSIDE the vault frame. It is a footing
+            note about the product, not part of the plate's engraved field, and
+            the folio prints it below the frame edge for the same reason. */}
         <div className="mt-8 md:mt-10 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-4">
           {LANDING_TRUST.items.map((item, index) => (
             <span key={item} className="contents">
@@ -144,7 +162,7 @@ export function Landing() {
         </div>
       </section>
 
-      <Separator />
+      <div className="reed" aria-hidden="true" />
 
       {/* Problem — the diagnosis, before the figures that back it */}
       <section className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-10 md:py-12" aria-label="The problem this solves">
@@ -158,7 +176,7 @@ export function Landing() {
         </div>
       </section>
 
-      <Separator />
+      <div className="reed" aria-hidden="true" />
 
       {/* Figures row */}
       <section className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-10 md:py-12" aria-label="The product in numbers">
@@ -172,7 +190,7 @@ export function Landing() {
         </div>
       </section>
 
-      <Separator />
+      <div className="reed" aria-hidden="true" />
 
       {/* 01 / How it works */}
       <section className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-10 md:py-12 space-y-6" aria-labelledby="landing-how">
@@ -217,7 +235,7 @@ export function Landing() {
         </div>
       </section>
 
-      <Separator />
+      <div className="reed" aria-hidden="true" />
 
       {/* 03 / See it first */}
       <section className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-10 md:py-12 space-y-6" aria-labelledby="landing-see-first">
@@ -241,7 +259,7 @@ export function Landing() {
         </div>
       </section>
 
-      <Separator />
+      <div className="reed" aria-hidden="true" />
 
       {/* 04 / How it was built */}
       <section className="container max-w-lg md:max-w-2xl lg:max-w-5xl py-10 md:py-12 space-y-6" aria-labelledby="landing-built">

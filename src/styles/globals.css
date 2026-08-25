@@ -53,6 +53,11 @@
     --brass-soft:         42 43% 49%;   /* #B49347 */
     --brass-foreground:   45 48% 89%;   /* #F0E9D4  brass tint, for on-brass text/bg */
 
+    /* Guilloché rosette opacity (src/components/guilloche-motif.tsx). Carried
+       over from the concept folio, which tunes it per theme so the engraving
+       stays a texture and never becomes a graphic. */
+    --guilloche-opacity:  .38;
+
     /* ── Destructive ─────────────────────────────────────────── */
     --destructive:            0 70% 35%;   /* #991B1B */
     --destructive-foreground: 140 37% 97%;
@@ -121,6 +126,9 @@
     --brass:              42 52% 59%;   /* #CDAD62 */
     --brass-soft:         42 37% 48%;   /* #A98D4E */
     --brass-foreground:   42 38% 10%;   /* #241E10  brass tint */
+
+    /* Guilloché rosette opacity — see the :root note above. */
+    --guilloche-opacity:  .35;
 
     /* ── Destructive ─────────────────────────────────────────── */
     --destructive:            0 65% 61%;
