@@ -1,7 +1,7 @@
 # Component Showcase — Vittam (Household Financial Planning PWA)
 
 **Stage:** Design Stage 6 (Handoff)
-**Status:** final for Phase 2 v1. **D-016 Slice 5 (2026-08-25) adds new motif components below** — Stage 4 for that slice, not yet through its own Stage 6 handoff.
+**Status:** final for Phase 2 v1. **D-016 Slice 5 (2026-08-25) adds new motif components below — Stage 6 (Handoff) for that slice as of this update, approved by Gaurav.**
 **Purpose:** Reference for Phase 4 build fidelity — every component that will exist in the app, its states, its governing tokens, and where it appears. Not implementation code; the contract implementation must match.
 
 ---

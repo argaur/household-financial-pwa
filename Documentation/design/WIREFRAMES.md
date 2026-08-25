@@ -934,4 +934,18 @@ Tokens extracted directly from the folio's CSS into the existing token files (up
 
 **Gate: Stage 4 approved by Gaurav 2026-08-25, including the asset-color follow-up. Proceeding to Stage 5 (Spec Doc) and Stage 6 (Handoff).**
 
+### Stage 5 — Spec Doc (2026-08-25)
+
+Full spec written as a new "D-016 Slice 5" section appended to `Documentation/design/SPEC.md` (not a separate file — mirrors how this slice's Stage 0/2/3/4 output was appended to the existing `DATA_MODEL.md`/`WIREFRAMES.md` rather than forked into new documents). Covers per-panel decisions for the 5 flagship screens, a constraints contract, implementation cost flags (font-availability risk for the 3 new non-web-safe typefaces is the most consequential one — Bodoni MT/Gill Sans Nova/Cascadia Mono are not guaranteed on most visitors' devices), and 4 open questions escalated to Phase 3.
+
+**Gate: Stage 5 ready for review.**
+
+### Stage 6 — Handoff (2026-08-25)
+
+`Documentation/design/COMPONENT_SHOWCASE.md`'s D-016 Slice 5 section is the handoff artifact, same pattern as v1. Phase 2 (Design) for this slice is complete for the 5 flagship screens: tokens extracted and committed, spec written, design risks addressed or explicitly escalated. Next phase-gate action is Phase 3 (Plan) against `SPEC.md`'s D-016 Slice 5 section, then `model-router` before any build work, per this project's established D-016 pattern.
+
+**Carried into Phase 3, unresolved by design (SPEC.md §S10):** font-loading strategy (fallback chains vs. explicit Google-Fonts-hosted approximations), whether the Explore add-to-holdings toggle is new scope needing its own analytics event, and the standing regression-risk mitigation (real-browser verification at 390px on a throwaway Neon branch before merge, matching the D-016 ledger slice's own rehearsal pattern).
+
+**Gate: Stage 6 (Handoff) complete. Phase 2 (Design) for D-016 Slice 5 is done for its in-scope screens. Ready for Phase 3 (Plan).**
+
 **Superseded (2026-08-25):** the ASCII wireframes for Landing (2a) and Dashboard (2b) and the empty/error-state table that previously followed here were drawn against the wrong Stage 2 answers (generic "vault frame," no mint/brass, old typefaces) and have been removed. The concept folio's Landing and Dashboard plates are the Stage 3 artifact for those two screens now; see "Stage 3 — Wireframes, resolution" above.
