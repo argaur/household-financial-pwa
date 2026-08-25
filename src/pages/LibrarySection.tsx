@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { track } from '@/lib/analytics'
 import { getSectionByUrlSlug } from '@/lib/library-sections'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
-import { ASSET_DOT_CLASS } from '@/lib/asset-classes'
+import { ASSET_DOT_CLASS, ASSET_ACCENT_CLASS } from '@/lib/asset-classes'
 import { riskLevel, riskGloss } from '@/lib/instrument-preview'
 import { cn } from '@/lib/utils'
 
@@ -100,7 +100,10 @@ export function LibrarySection() {
                 <Link
                   key={instrument.slug}
                   to={`/explore/${section.urlSlug}/${instrument.slug}`}
-                  className="group flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-4 shadow-card transition-colors hover:bg-accent/50 md:p-6"
+                  className={cn(
+                    'group flex items-start justify-between gap-4 rounded-lg border border-border border-l-4 bg-card p-4 shadow-card transition-colors hover:bg-accent/50 md:p-6',
+                    ASSET_ACCENT_CLASS[section.assetClass],
+                  )}
                 >
                   <div className="min-w-0 space-y-1.5">
                     <p className="text-body font-medium md:text-title">{instrument.name}</p>
