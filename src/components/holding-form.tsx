@@ -31,6 +31,13 @@ interface HoldingFormProps {
   members: FamilyMember[]
   instruments: Instrument[]
   initialHolding?: Holding
+  /**
+   * Pre-selects the instrument on a fresh add (never used once `initialHolding`
+   * is set — editing always keeps its own instrument). The lightweight sibling
+   * of `initialHolding`'s prefill: a caller that only knows which instrument to
+   * start from, not a full existing row, e.g. Explore's "+ Add" entry point.
+   */
+  initialInstrumentId?: string
   submitLabel: string
   submittingLabel: string
   analyticsSurface: string
@@ -56,6 +63,7 @@ export function HoldingForm({
   members,
   instruments,
   initialHolding,
+  initialInstrumentId,
   submitLabel,
   submittingLabel,
   analyticsSurface,
@@ -70,7 +78,7 @@ export function HoldingForm({
   const canDelete = editing
 
   const [memberId, setMemberId] = useState(initialHolding?.memberId ?? members[0]?.id ?? '')
-  const [instrumentId, setInstrumentId] = useState(initialHolding?.instrumentId ?? '')
+  const [instrumentId, setInstrumentId] = useState(initialHolding?.instrumentId ?? initialInstrumentId ?? '')
   const [investedAmount, setInvestedAmount] = useState(initialHolding?.investedAmount ?? '')
   const [currentValue, setCurrentValue] = useState(initialHolding?.currentValue ?? '')
   const [optionalOpen, setOptionalOpen] = useState(false)

@@ -56,6 +56,23 @@ const instrument: Instrument = {
   createdAt: '',
 }
 
+const instrument2: Instrument = {
+  id: 'i2',
+  slug: 'debt-index-fund',
+  category: 2,
+  name: 'Debt Index Fund',
+  summary: '',
+  returns: '',
+  tax: '',
+  liquidity: '',
+  risk: '',
+  eligibility: '',
+  minInvestment: '',
+  rateValue: null,
+  rateAsOf: null,
+  createdAt: '',
+}
+
 const holding: Holding = {
   id: 'hold1',
   householdId: 'h1',
@@ -228,6 +245,37 @@ describe('HoldingForm', () => {
       ),
     )
     expect(onSaved).toHaveBeenCalled()
+  })
+
+  it('pre-selects the instrument in the Instrument select when initialInstrumentId is set', () => {
+    render(
+      <HoldingForm
+        members={[member]}
+        instruments={[instrument, instrument2]}
+        initialInstrumentId="i2"
+        submitLabel="Add to plan"
+        submittingLabel="Adding…"
+        analyticsSurface="test"
+        onSaved={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('combobox', { name: /instrument/i })).toHaveTextContent('Debt Index Fund')
+  })
+
+  it("initialHolding's instrument wins over initialInstrumentId when both are passed", () => {
+    render(
+      <HoldingForm
+        members={[member]}
+        instruments={[instrument, instrument2]}
+        initialHolding={holding}
+        initialInstrumentId="i2"
+        submitLabel="Save changes"
+        submittingLabel="Saving…"
+        analyticsSurface="test"
+        onSaved={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('combobox', { name: /instrument/i })).toHaveTextContent('Large Cap Index Fund')
   })
 
   it('shows an inline error and does not call onSaved when the save fails', async () => {
