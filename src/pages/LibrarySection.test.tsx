@@ -266,4 +266,62 @@ describe('LibrarySection', () => {
     expect(screen.getAllByRole('button', { name: /\+ add/i })).toHaveLength(1)
     expect(listHoldings).toHaveBeenCalledTimes(1)
   })
+
+  it('fires explore_holding_added exactly once on a successful save, with the instrument slug and section', async () => {
+    const { track } = await import('@/lib/analytics')
+    ;(track as ReturnType<typeof vi.fn>).mockClear()
+    getVault.mockResolvedValue({ householdId: 'h1', dataKey: {} })
+    listHoldings.mockResolvedValue({ holdings: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    listInstruments.mockResolvedValue([instrumentA, instrumentB])
+    renderAt('/explore/equity')
+
+    await waitFor(() => expect(listHoldings).toHaveBeenCalledTimes(1))
+    const buttons = screen.getAllByRole('button', { name: /\+ add/i })
+    fireEvent.click(buttons[0])
+    fireEvent.click(screen.getByRole('button', { name: /simulate save/i }))
+
+    await screen.findByText(/in ledger/i)
+    expect(track).toHaveBeenCalledWith('explore_holding_added', {
+      instrument_slug: 'equity-direct-stocks',
+      section: 'equity',
+    })
+    const exploreHoldingAddedCalls = (track as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c) => c[0] === 'explore_holding_added',
+    )
+    expect(exploreHoldingAddedCalls).toHaveLength(1)
+  })
+
+  it('does not fire explore_holding_added merely from opening the "+ Add" sheet', async () => {
+    const { track } = await import('@/lib/analytics')
+    ;(track as ReturnType<typeof vi.fn>).mockClear()
+    getVault.mockResolvedValue(null)
+    listInstruments.mockResolvedValue([instrumentA, instrumentB])
+    renderAt('/explore/equity')
+
+    await screen.findByText('Direct Stocks')
+    const buttons = screen.getAllByRole('button', { name: /\+ add/i })
+    fireEvent.click(buttons[0])
+
+    expect(screen.getByTestId('sheet-equity-direct-stocks')).toBeInTheDocument()
+    expect(track).not.toHaveBeenCalledWith('explore_holding_added', expect.anything())
+  })
+
+  it('carries no property describing the holding itself, only catalog metadata', async () => {
+    const { track } = await import('@/lib/analytics')
+    ;(track as ReturnType<typeof vi.fn>).mockClear()
+    getVault.mockResolvedValue({ householdId: 'h1', dataKey: {} })
+    listHoldings.mockResolvedValue({ holdings: [], unreadableCount: 0, notYetEncryptedCount: 0 })
+    listInstruments.mockResolvedValue([instrumentA, instrumentB])
+    renderAt('/explore/equity')
+
+    await waitFor(() => expect(listHoldings).toHaveBeenCalledTimes(1))
+    const buttons = screen.getAllByRole('button', { name: /\+ add/i })
+    fireEvent.click(buttons[0])
+    fireEvent.click(screen.getByRole('button', { name: /simulate save/i }))
+
+    await screen.findByText(/in ledger/i)
+    const call = (track as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[0] === 'explore_holding_added')
+    expect(call).toBeDefined()
+    expect(Object.keys(call?.[1] as object).sort()).toEqual(['instrument_slug', 'section'])
+  })
 })

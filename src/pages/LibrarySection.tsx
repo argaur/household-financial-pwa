@@ -87,6 +87,12 @@ export function LibrarySection() {
 
   function handleAdded(holding: Holding) {
     setHeldInstrumentIds((prev) => new Set(prev).add(holding.instrumentId))
+    if (section) {
+      const addedInstrument = instruments.find((i) => i.id === holding.instrumentId)
+      if (addedInstrument) {
+        track('explore_holding_added', { instrument_slug: addedInstrument.slug, section: section.urlSlug })
+      }
+    }
   }
 
   useEffect(() => {

@@ -84,6 +84,13 @@ export interface EventMap {
   // Fires when a 5th ledger is attempted and blocked (METRICS_PLAN criterion 3
   // class: a capacity signal, not a failure).
   ledger_cap_reached: Record<string, never>
+  // Fires when a holding created via the Explore screen's "+ Add" entry point
+  // is successfully saved, not on tap, which only opens the prefilled form.
+  // The list-level entry point only: the detail page's "Record this in my
+  // plan" CTA fires holding_created alone (METRICS_PLAN.md:214, D-023).
+  // Catalog metadata only, per the same property discipline as
+  // instrument_viewed: never anything describing what the household holds.
+  explore_holding_added: { instrument_slug: string; section: string }
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {
