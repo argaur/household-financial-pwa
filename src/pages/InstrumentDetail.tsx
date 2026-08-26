@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AddHoldingSheet } from '@/components/add-holding-sheet'
 import { track } from '@/lib/analytics'
 import { getSectionByUrlSlug } from '@/lib/library-sections'
 import { getInstrument, type Instrument } from '@/lib/instruments-api'
@@ -38,6 +40,7 @@ export function InstrumentDetail() {
   const [state, setState] = useState<State>('loading')
   const [instrument, setInstrument] = useState<Instrument | null>(null)
   const viewedFired = useRef(false)
+  const [addHoldingOpen, setAddHoldingOpen] = useState(false)
 
   useEffect(() => {
     if (!instrumentSlug) return
@@ -104,6 +107,14 @@ export function InstrumentDetail() {
               <p className="text-body-lg text-muted-foreground">{instrument.summary}</p>
             </header>
 
+            {/* `md:`, not `sm:`. This project redefines `sm` to 390px, the
+                primary phone width, so `sm:w-auto` would drop the full-width
+                button at exactly the size it is meant for. 768px is the real
+                "bigger than a phone" boundary here. */}
+            <Button size="lg" className="w-full md:w-auto" onClick={() => setAddHoldingOpen(true)}>
+              Record this in my plan
+            </Button>
+
             <Separator />
 
             {/* Tier 1: the three questions a first-time investor actually
@@ -147,6 +158,13 @@ export function InstrumentDetail() {
                 ))}
               </dl>
             </div>
+
+            <AddHoldingSheet
+              instrument={instrument}
+              open={addHoldingOpen}
+              onOpenChange={setAddHoldingOpen}
+              onAdded={() => setAddHoldingOpen(false)}
+            />
           </>
         )}
       </div>
