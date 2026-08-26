@@ -458,3 +458,80 @@ Run 2026-08-25 against T1–T6 above.
 - **Chunk 4's toggle-build half** — separable on request (see Chunk 4's scope flag) if Gaurav wants a smaller first merge; not withdrawn by default, since SPEC.md already confirmed it as in-scope new interaction, not speculative.
 
 None of the above is scope creep into this plan — each is either already-decided elsewhere, blocked on an unbuilt dependency, or explicitly deferred by Gaurav, not silently dropped.
+
+---
+
+# D-021 Follow-on — Add-from-library (Explore "+ Add" + instrument-detail CTA)
+
+**Written 2026-08-26.** The follow-on PR D-021 deferred. Ruling recorded in `Documentation/solution/DECISIONS_LOG.md` D-023.
+
+**Branch:** `explore-add-holding`, fresh off `origin/main` @ `5217b99`. `d016-slice5-mint` and `d016-slice5-chunk4-quarantine` are untouched. The quarantined commit `cc32697` is a **reference implementation only** — hunks are lifted from it by hand where they still apply; this is not a rebase of that branch.
+
+**Drift check against `origin/main`, read directly `[P]`:** comparing the quarantine's parent (`24817d1`) to `origin/main`, `src/components/holding-form.tsx` and `src/lib/analytics.ts` are unchanged, `src/lib/asset-classes.ts` gained `ASSET_ACCENT_CLASS` (which the quarantine also added), and `src/pages/LibrarySection.tsx` received exactly the shipped retint hunk and nothing else. The quarantine's code is therefore near-current in shape but wrong in two substantive ways, both stated below.
+
+## Chunk A — Add-from-library
+
+- **Owns:** `src/components/add-holding-sheet.tsx` (new, shared by both entry points), the `initialInstrumentId` prop on `HoldingForm`, the `InstrumentDetail` "Record this in my plan" CTA, the `LibrarySection` card "+ Add" affordance, `explore_holding_added` telemetry.
+- **Reads but does not own:** `src/lib/holdings-api.ts`, `src/lib/family-members-api.ts`, `src/lib/key-setup.ts`, `src/lib/crypto/key-store.ts`, `src/pages/Unlock.tsx`, `src/pages/HouseholdGate.tsx`.
+- **Endpoints:** none new. No schema change, no migration.
+- **Copy and telemetry are already specced, not invented here:** CTA text `COPY_DECK.md:247`, layout `WIREFRAMES.md:44`, event `METRICS_PLAN.md:214`. Neither file needs an edit.
+
+### The design problem this chunk actually solves
+
+`/explore/*` is routed deliberately outside `HouseholdGate` (that component's own docstring says so), and both `listHoldings` and `createHolding` call `openVault()` which calls `requireVault()`, which throws `VaultLockedError` when the vault is locked. `[P]` — read directly from `src/lib/holdings-api.ts:147,163` and `src/lib/crypto/key-store.ts:148`.
+
+So `<SignedIn>` — a Clerk session — is **not** the gate. Vault readiness is. The quarantined code used `<SignedIn>`, which is the first of its two substantive errors: a signed-in user with a locked vault got a live "+ Add" button, a full form, and a generic error on submit. The sheet resolves its own state on open instead, mirroring `HouseholdGate`'s two layers but rendering inline and never navigating away:
+
+| `resolveVaultState` result | Sheet renders |
+|---|---|
+| signed out | sign-in prompt + link to `/sign-in` |
+| `ready`, 1 or more family members | the prefilled `HoldingForm` |
+| `ready`, 0 family members | "finish setting up your household" + link to `/dashboard` |
+| `unlock` | inline passphrase / recovery-code unlock, then falls through to the form in place |
+| `key-setup` | "you haven't created a household yet" + link to `/dashboard` |
+| `completing-setup` | `completeKeySetup()` then re-resolve, silently — same as the gate |
+| `unrecoverable` / `predates-encryption` | one short line + link to `/dashboard`, not the gate's long copy duplicated |
+
+Two deliberate constraints:
+
+1. **`resolveVaultState` runs on sheet open only, never on page load.** `/explore` stays a fast public page that makes zero authenticated network calls for a browsing stranger.
+2. **`LibrarySection`'s "In ledger" derivation gates on `getVault()`** (IndexedDB only, no network, returns `null` when locked), not on `isSignedIn`. The quarantine fired `listHoldings` for any signed-in user and swallowed the lock error, so nothing ever rendered as held for a locked vault.
+
+**Ledger (second substantive correction).** `HoldingForm` gained `ledgerId` / `ledgerName` props in D-016, after the quarantine branched. Both entry points here call `createHolding(token, input, undefined)` and `listHoldings(token, undefined)` — no `ledgerId` — so writes land in the baseline **Current** ledger and the "In ledger" state is Current-scoped. This is a decision (D-023), not an omission: `ledgerId` is left unpassed with an explicit comment saying why.
+
+**Telemetry split.** `explore_holding_added` fires **only** from the `LibrarySection` card path. `METRICS_PLAN.md:214` defines it as the list-level entry point, "distinct from the existing detail-page 'Record this in my plan' flow". The detail-page CTA fires only `holding_created`, which `HoldingForm` already emits. No new event for the detail page.
+
+### Acceptance criteria
+
+- The detail page renders "Record this in my plan"; tapping it opens the sheet prefilled with that instrument.
+- Tapping "+ Add" on a library card opens the same sheet, same prefill, without navigation.
+- On a successful save from a card, that card re-renders as "In ledger" with no page navigation and no refetch.
+- A holding created from Explore is field-for-field identical to one created from Portfolio for the same instrument and inputs.
+- A signed-in user with a locked vault gets an unlock prompt inside the sheet and, after unlocking, the form — never a generic error, never a redirect off `/explore`.
+- A signed-out visitor sees the "+ Add" button and gets an inline sign-in prompt on tap, and triggers no authenticated network call until that tap.
+- `explore_holding_added` fires on save from the card path only, with `instrument_slug` / `section`; never on tap; never from the detail page.
+- Every existing test file under `src/pages/` and `src/components/` passes unmodified, except the three this chunk extends.
+- Zero em-dashes in every new user-facing string.
+
+### Dispatch steps — TDD, failing test first at every step
+
+- [ ] **A1. `initialInstrumentId` on `HoldingForm`** `[model: sonnet]` — Failing test in `holding-form.test.tsx`: the instrument select is pre-selected when `initialInstrumentId` is passed, and `initialHolding` still wins when both are present. Then the prop, lifted verbatim from `cc32697` (it merges clean against current `main`).
+- [ ] **A2. Vault-readiness resolution for an ungated route** `[model: opus]` — Failing tests first, one per row of the state table above, in `add-holding-sheet.test.tsx`. Then the resolver. This step decides how much of `HouseholdGate`'s logic is shared versus restated: the quality bar extracts at 3+ duplicates and this is the second caller, so the default is a local resolver that *calls* `resolveVaultState`, not a refactor of the gate.
+- [ ] **A3. Inline unlock inside the sheet** `[model: opus]` — Failing test: locked vault, passphrase entry, the form appears in place, no navigation. `Unlock.tsx` renders a full-page `min-h-screen` shell and cannot be dropped into a sheet as-is. Decide between an `embedded` variant on `Unlock` and a thin inline form calling `unlockWithPassphrase` / `unlockWithRecoveryCode` directly. Recovery-code entry must stay reachable, and no failure path may leak whether a passphrase was wrong versus a household missing.
+- [ ] **A4. `AddHoldingSheet` shell** `[model: sonnet]` — Failing tests: opening loads family members once and not again on reopen; and the Radix reset trap the ledger slice already paid for (dialogs stay mounted between opens, they do not remount) is covered by open, type, close, reopen, assert a clean form. Then the component, using `cc32697`'s shape as the reference.
+- [ ] **A5. Detail-page CTA** `[model: sonnet]` — Failing test in `InstrumentDetail.test.tsx`: the CTA renders with the `COPY_DECK.md:247` string and opens the sheet for that instrument. Then wire it. Existing assertions in that file stay untouched.
+- [ ] **A6. Library card "+ Add" and the held-set** `[model: sonnet]` — Failing tests in `LibrarySection.test.tsx`: the button renders per card; `getVault()` returning `null` means no `listHoldings` call and no "In ledger" state; a held instrument renders the inert "In ledger" state and no button. Then the card restructure — `Link` to `div` with the `Link` and the button as siblings, because a button cannot nest inside an anchor — lifted from `cc32697` and applied **on top of** main's already-shipped retint, not replacing it.
+- [ ] **A7. Telemetry** `[model: sonnet]` — Failing test: `explore_holding_added` fires exactly once on a successful save from a card with the right two properties, does not fire on tap, and does not fire on save from the detail page. Then the `EventMap` entry and the call site.
+- [ ] **A8. Cross-path parity test** `[model: sonnet]` — Failing test asserting the `createHolding` payload from the Explore card, from the detail CTA, and from Portfolio's existing sheet is identical for the same instrument and inputs, and that all three carry no `ledgerId`. This is the assertion the D-016 Slice 5 plan's Chunk 4 asked for and never got.
+- [ ] **A9. 390px verification** `[model: sonnet]` — Both new surfaces at a genuine 390px, light and dark, signed out and signed in, plus the locked-vault sheet. This chunk restructures a card into a flex row containing a button, which is the exact failure class D-022 is still open on. **Blocked on a real device or Chrome DevTools' device toolbar; this session's tooling floors at ~630px, so this step does not close by re-running it here.**
+- [ ] **A10. Docs** `[model: sonnet]` — D-023 in `DECISIONS_LOG.md` and this chunk in `IMPLEMENTATION_PLAN.md` (both landed ahead of code, on `explore-add-holding`). `COPY_DECK.md` and `METRICS_PLAN.md` need no edit — both already carry what this builds.
+
+**Model tally: 8 sonnet, 2 opus, 0 fable.** The two opus steps are the ungated-route vault state machine (A2) and the inline unlock (A3). Both touch encryption state outside the gate that normally owns it, which is where a wrong call is expensive to unwind.
+
+### Out of Plan (Chunk A)
+
+- Bulk holdings Excel import; the AI counsel / goal-planner layer — both still their own backlog items needing their own Phase 0 to 3 pass.
+- Ledger *selection* from Explore — Current only, by D-023.
+- A remove / un-add action from either entry point — none exists by design; the card offers add only.
+- Any further mint retint, any change to `HouseholdGate`, to `Unlock`'s own route, or to `holdings-api.ts`'s surface.
+- Any schema or migration work.
