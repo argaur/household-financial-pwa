@@ -214,6 +214,27 @@ describe('Unlock — copy and analytics', () => {
   }, 30_000)
 })
 
+describe('Unlock — embedded variant', () => {
+  it('drops the full-page shell that the standalone route keeps', () => {
+    const embedded = render(<Unlock keys={keys} embedded onUnlocked={vi.fn()} />)
+    expect(embedded.container.querySelector('.min-h-screen')).toBeNull()
+    expect(embedded.container.querySelector('h1')).toBeNull()
+    embedded.unmount()
+
+    const standalone = render(<Unlock keys={keys} onUnlocked={vi.fn()} />)
+    expect(standalone.container.querySelector('.min-h-screen')).not.toBeNull()
+    expect(standalone.container.querySelector('h1')).not.toBeNull()
+  })
+
+  it('keeps the recovery-code switch and both help texts reachable', () => {
+    render(<Unlock keys={keys} embedded onUnlocked={vi.fn()} />)
+    expect(screen.getByText(/cannot reset it for you/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /recovery code instead/i }))
+    expect(screen.getByLabelText(/recovery code/i)).toBeInTheDocument()
+    expect(screen.getByText(/upper or lower case/i)).toBeInTheDocument()
+  })
+})
+
 describe('Unlock — accessibility', () => {
   it('passes the structural checks on the passphrase step', () => {
     const { container } = render(<Unlock keys={keys} onUnlocked={vi.fn()} />)

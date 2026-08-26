@@ -17,12 +17,16 @@ vi.mock('@/lib/analytics', () => ({ track: vi.fn() }))
 
 const resolveVaultState = vi.fn()
 const completeKeySetup = vi.fn()
+const unlockWithPassphrase = vi.fn()
+const unlockWithRecoveryCode = vi.fn()
 vi.mock('@/lib/key-setup', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/key-setup')>()
   return {
     ...actual,
     resolveVaultState: (...args: unknown[]) => resolveVaultState(...args),
     completeKeySetup: (...args: unknown[]) => completeKeySetup(...args),
+    unlockWithPassphrase: (...args: unknown[]) => unlockWithPassphrase(...args),
+    unlockWithRecoveryCode: (...args: unknown[]) => unlockWithRecoveryCode(...args),
   }
 })
 
@@ -128,6 +132,8 @@ describe('AddHoldingSheet', () => {
     listFamilyMembers.mockReset()
     listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
     createHolding.mockReset()
+    unlockWithPassphrase.mockReset()
+    unlockWithRecoveryCode.mockReset()
   })
 
   it('resolves nothing while closed, and only resolves once open flips to true', async () => {
@@ -182,12 +188,61 @@ describe('AddHoldingSheet', () => {
     expect(screen.queryByLabelText(/amount invested/i)).not.toBeInTheDocument()
   })
 
-  it('unlock: shows the placeholder unlock line and loads no members', async () => {
+  it('unlock: renders the unlock form inline, loads no members, and offers no way off the page', async () => {
     resolveVaultState.mockResolvedValue({ state: 'unlock', keys })
     renderSheet()
 
-    expect(await screen.findByText(/unlock/i)).toBeInTheDocument()
+    expect(await screen.findByLabelText(/your passphrase/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^unlock$/i })).toBeInTheDocument()
     expect(listFamilyMembers).not.toHaveBeenCalled()
+    // Nothing may take the user away from the library they were browsing.
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    // And the page shell of the standalone /unlock route must not appear here.
+    expect(document.querySelector('.min-h-screen')).toBeNull()
+  })
+
+  it('unlock: a correct passphrase unlocks in place and falls through to the prefilled form', async () => {
+    resolveVaultState.mockResolvedValueOnce({ state: 'unlock', keys }).mockResolvedValue(readyVault)
+    unlockWithPassphrase.mockResolvedValue(undefined)
+    renderSheet()
+
+    fireEvent.change(await screen.findByLabelText(/your passphrase/i), { target: { value: 'open sesame please' } })
+    fireEvent.click(screen.getByRole('button', { name: /^unlock$/i }))
+
+    await waitFor(() => expect(unlockWithPassphrase).toHaveBeenCalledWith(keys, 'open sesame please'))
+    expect(await screen.findByLabelText(/amount invested/i)).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /instrument/i })).toHaveTextContent('Large Cap Index Fund')
+    expect(resolveVaultState).toHaveBeenCalledTimes(2)
+  })
+
+  it('unlock: the recovery-code path is reachable from the inline form', async () => {
+    resolveVaultState.mockResolvedValueOnce({ state: 'unlock', keys }).mockResolvedValue(readyVault)
+    unlockWithRecoveryCode.mockResolvedValue(undefined)
+    renderSheet()
+
+    fireEvent.click(await screen.findByRole('button', { name: /recovery code instead/i }))
+    fireEvent.change(screen.getByLabelText(/recovery code/i), { target: { value: 'ABCDEF-GHIJKL' } })
+    fireEvent.click(screen.getByRole('button', { name: /^unlock$/i }))
+
+    await waitFor(() => expect(unlockWithRecoveryCode).toHaveBeenCalledWith(keys, 'ABCDEF-GHIJKL'))
+    expect(await screen.findByLabelText(/amount invested/i)).toBeInTheDocument()
+  })
+
+  it('unlock: a failed unlock shows the one generic message and does not fall through to the form', async () => {
+    resolveVaultState.mockResolvedValue({ state: 'unlock', keys })
+    unlockWithPassphrase.mockRejectedValue(new Error('OperationError: unwrap failed'))
+    renderSheet()
+
+    fireEvent.change(await screen.findByLabelText(/your passphrase/i), { target: { value: 'wrong one entirely' } })
+    fireEvent.click(screen.getByRole('button', { name: /^unlock$/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/didn't unlock your household/i)
+    // No cause an attacker could read as an oracle, and no echo of the attempt.
+    expect(alert.textContent).not.toMatch(/tamper|corrupt|altered|missing|household not found|unwrap/i)
+    expect(alert.textContent).not.toContain('wrong one entirely')
+    expect(screen.queryByLabelText(/amount invested/i)).not.toBeInTheDocument()
+    expect(resolveVaultState).toHaveBeenCalledTimes(1)
   })
 
   it('key-setup: says no household exists yet and links to /dashboard', async () => {

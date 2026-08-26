@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { HoldingForm } from '@/components/holding-form'
+import { Unlock } from '@/pages/Unlock'
 import { completeKeySetup, resolveVaultState } from '@/lib/key-setup'
 import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
 import type { HouseholdKeys } from '@/lib/household-keys-api'
@@ -161,10 +162,12 @@ export function AddHoldingSheet({ instrument, open, onOpenChange, onAdded }: Add
               </Link>
             </>
           ) : resolution.status === 'unlock' ? (
-            // TODO(A3): replace with a real inline unlock, using the keys held
-            // in state. Step A3 lands next; this is the one placeholder allowed
-            // in this component, and only for that reason.
-            <p className="text-body text-muted-foreground">Unlock your household to add this holding.</p>
+            /* The real unlock screen, embedded. Reused rather than reimplemented
+               on purpose: it owns the one-message-per-method failure behaviour,
+               which must not be duplicated and allowed to diverge. `embedded`
+               changes presentation only. On success, re-run this sheet's own
+               resolution so the user falls through to the form in place. */
+            <Unlock keys={resolution.keys} embedded onUnlocked={reload} />
           ) : resolution.status === 'key-setup' ? (
             <>
               <p className="text-body text-muted-foreground">
