@@ -15,6 +15,21 @@ vi.mock('@clerk/clerk-react', () => ({
 
 vi.mock('@/lib/analytics', () => ({ track: vi.fn() }))
 
+// jsdom has no real CSS animations, so Radix's Presence (inside SheetContent)
+// unmounts synchronously on close with nothing to wait for. In a real
+// browser it can stay mounted through an exit transition (the same class of
+// bug the ledger slice's NewLedgerModal hit) -- so SheetContent is mocked to
+// stay mounted regardless of `open`, letting the remount tests exercise
+// AddHoldingSheet's own key strategy rather than an artifact of jsdom's lack
+// of animation timing.
+vi.mock('@/components/ui/sheet', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/ui/sheet')>()
+  return {
+    ...actual,
+    SheetContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  }
+})
+
 const resolveVaultState = vi.fn()
 const completeKeySetup = vi.fn()
 const unlockWithPassphrase = vi.fn()
@@ -314,5 +329,67 @@ describe('AddHoldingSheet', () => {
     )
     await waitFor(() => expect(onAdded).toHaveBeenCalledWith(holding))
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('reopening after a ready resolution does not refetch family members or re-resolve the vault', async () => {
+    resolveVaultState.mockResolvedValue(readyVault)
+    const onOpenChange = vi.fn()
+    const { rerender } = render(
+      <MemoryRouter>
+        <AddHoldingSheet instrument={instrument} open onOpenChange={onOpenChange} onAdded={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText(/amount invested/i)).toBeInTheDocument()
+    await waitFor(() => expect(resolveVaultState).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(listFamilyMembers).toHaveBeenCalledTimes(1))
+
+    // Close.
+    rerender(
+      <MemoryRouter>
+        <AddHoldingSheet instrument={instrument} open={false} onOpenChange={onOpenChange} onAdded={vi.fn()} />
+      </MemoryRouter>,
+    )
+    // Reopen.
+    rerender(
+      <MemoryRouter>
+        <AddHoldingSheet instrument={instrument} open onOpenChange={onOpenChange} onAdded={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText(/amount invested/i)).toBeInTheDocument()
+    // No fresh resolve, no fresh refetch: the cached `ready` state serves it.
+    await Promise.resolve()
+    expect(resolveVaultState).toHaveBeenCalledTimes(1)
+    expect(listFamilyMembers).toHaveBeenCalledTimes(1)
+  })
+
+  it('closing and reopening clears the form: typed input does not survive the Radix reset trap', async () => {
+    resolveVaultState.mockResolvedValue(readyVault)
+    const onOpenChange = vi.fn()
+    const { rerender } = render(
+      <MemoryRouter>
+        <AddHoldingSheet instrument={instrument} open onOpenChange={onOpenChange} onAdded={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    const amountField = await screen.findByLabelText(/amount invested/i)
+    fireEvent.change(amountField, { target: { value: '12345' } })
+    expect(screen.getByLabelText(/amount invested/i)).toHaveValue(12345)
+
+    // Close.
+    rerender(
+      <MemoryRouter>
+        <AddHoldingSheet instrument={instrument} open={false} onOpenChange={onOpenChange} onAdded={vi.fn()} />
+      </MemoryRouter>,
+    )
+    // Reopen.
+    rerender(
+      <MemoryRouter>
+        <AddHoldingSheet instrument={instrument} open onOpenChange={onOpenChange} onAdded={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText(/amount invested/i)).toHaveValue(null)
   })
 })

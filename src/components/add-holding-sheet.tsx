@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import { Link } from 'react-router-dom'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -49,6 +49,26 @@ export function AddHoldingSheet({ instrument, open, onOpenChange, onAdded }: Add
   const [resolution, setResolution] = useState<Resolution>({ status: 'idle' })
   const [reloadToken, setReloadToken] = useState(0)
 
+  // Caches the instrument a `ready` resolution was reached for. Only a
+  // settled `ready` is cached: reopening after error/unlock/key-setup/
+  // no-members must still retry, and `reload()` (the completing-setup
+  // self-heal and the post-unlock fall-through) never sees this set,
+  // because neither state is `ready` when it fires.
+  const readyForInstrumentRef = useRef<string | null>(null)
+
+  // The Radix reset trap: Sheet content can stay mounted (hidden via CSS)
+  // between opens rather than remounting, so `HoldingForm`'s `useState`
+  // initialisers would not re-run and stale input would survive a close and
+  // reopen. Bump a counter on every open transition, adjusted during render
+  // per React's "adjusting state when a prop changes" pattern, and use it as
+  // `HoldingForm`'s `key` below so it genuinely remounts with fresh state.
+  const [openInstance, setOpenInstance] = useState(0)
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) setOpenInstance((n) => n + 1)
+  }
+
   /** Re-run resolution after a self-heal. */
   const reload = useCallback(() => setReloadToken((n) => n + 1), [])
 
@@ -60,6 +80,9 @@ export function AddHoldingSheet({ instrument, open, onOpenChange, onAdded }: Add
     // Signed out is answered from the Clerk session alone. No token, no probe,
     // no vault work: there is nothing on the server to resolve against.
     if (!isSignedIn) return
+    // Already resolved to `ready` for this instrument: reopening must not
+    // refetch family members or re-run vault resolution.
+    if (readyForInstrumentRef.current === instrument.id) return
 
     let cancelled = false
     setResolution({ status: 'loading' })
@@ -97,9 +120,12 @@ export function AddHoldingSheet({ instrument, open, onOpenChange, onAdded }: Add
 
         const memberList = await listFamilyMembers(token)
         if (cancelled) return
-        setResolution(
-          memberList.members.length === 0 ? { status: 'no-members' } : { status: 'ready', members: memberList.members },
-        )
+        if (memberList.members.length === 0) {
+          setResolution({ status: 'no-members' })
+        } else {
+          readyForInstrumentRef.current = instrument.id
+          setResolution({ status: 'ready', members: memberList.members })
+        }
       } catch {
         if (cancelled) return
         // Never a silent swallow: every failure becomes a visible line.
@@ -110,7 +136,7 @@ export function AddHoldingSheet({ instrument, open, onOpenChange, onAdded }: Add
     return () => {
       cancelled = true
     }
-  }, [open, isSignedIn, getToken, reloadToken, reload])
+  }, [open, isSignedIn, getToken, reloadToken, reload, instrument.id])
 
   function handleSaved(holding: Holding) {
     onOpenChange(false)
@@ -140,6 +166,7 @@ export function AddHoldingSheet({ instrument, open, onOpenChange, onAdded }: Add
             </>
           ) : resolution.status === 'ready' ? (
             <HoldingForm
+              key={openInstance}
               members={resolution.members}
               instruments={[instrument]}
               initialInstrumentId={instrument.id}
