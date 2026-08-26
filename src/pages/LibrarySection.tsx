@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
+import { useAuth } from '@clerk/clerk-react'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AddHoldingSheet } from '@/components/add-holding-sheet'
 import { track } from '@/lib/analytics'
 import { getSectionByUrlSlug } from '@/lib/library-sections'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
+import { listHoldings, type Holding } from '@/lib/holdings-api'
+import { getVault } from '@/lib/crypto/key-store'
 import { ASSET_DOT_CLASS, ASSET_ACCENT_CLASS } from '@/lib/asset-classes'
 import { riskLevel, riskGloss } from '@/lib/instrument-preview'
 import { cn } from '@/lib/utils'
@@ -23,8 +27,16 @@ type State = 'loading' | 'loaded' | 'error'
 export function LibrarySection() {
   const { sectionSlug } = useParams<{ sectionSlug: string }>()
   const section = sectionSlug ? getSectionByUrlSlug(sectionSlug) : undefined
+  const { getToken } = useAuth()
   const [state, setState] = useState<State>('loading')
   const [instruments, setInstruments] = useState<Instrument[]>([])
+  // Which instruments the household already holds, so held cards can show
+  // "In ledger" instead of "+ Add". Current-scoped only (no ledgerId), by
+  // decision D-023 — Explore has no ledger picker.
+  const [heldInstrumentIds, setHeldInstrumentIds] = useState<Set<string>>(new Set())
+  // The instrument whose AddHoldingSheet is open, or null. One sheet per
+  // section, reused across cards via the instrument prop, controlled here.
+  const [openInstrumentId, setOpenInstrumentId] = useState<string | null>(null)
   const viewedFired = useRef(false)
 
   useEffect(() => {
@@ -46,6 +58,36 @@ export function LibrarySection() {
       cancelled = true
     }
   }, [section])
+
+  useEffect(() => {
+    // HARD CONSTRAINT: gate on getVault(), never on isSignedIn. getVault()
+    // reads IndexedDB only — no network call — and returns null when the
+    // vault is locked or absent, so a signed-out (or signed-in-but-locked)
+    // visitor triggers zero authenticated calls and no card renders held.
+    // Everything here fails soft: no held state, no crash, no visible error
+    // on a browse page.
+    let cancelled = false
+    ;(async () => {
+      try {
+        const vault = await getVault()
+        if (!vault || cancelled) return
+        const token = await getToken()
+        const { holdings } = await listHoldings(token, undefined)
+        if (cancelled) return
+        setHeldInstrumentIds(new Set(holdings.map((h) => h.instrumentId)))
+      } catch {
+        if (cancelled) return
+        // Fail soft — see comment above.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [getToken])
+
+  function handleAdded(holding: Holding) {
+    setHeldInstrumentIds((prev) => new Set(prev).add(holding.instrumentId))
+  }
 
   useEffect(() => {
     if (section && !viewedFired.current) {
@@ -96,28 +138,55 @@ export function LibrarySection() {
             {instruments.map((instrument) => {
               const level = riskLevel(instrument.risk)
               const gloss = riskGloss(level)
+              const held = heldInstrumentIds.has(instrument.id)
               return (
-                <Link
+                // A div, not a Link — a button can't nest inside an anchor, so
+                // the "+ Add" trigger sits as a sibling of the Link that keeps
+                // the detail-page navigation.
+                <div
                   key={instrument.slug}
-                  to={`/explore/${section.urlSlug}/${instrument.slug}`}
                   className={cn(
-                    'group flex items-start justify-between gap-4 rounded-lg border border-border border-l-4 bg-card p-4 shadow-card transition-colors hover:bg-accent/50 md:p-6',
+                    'group flex items-start gap-3 rounded-lg border border-border border-l-4 bg-card p-4 shadow-card transition-colors hover:bg-accent/50 md:p-6',
                     ASSET_ACCENT_CLASS[section.assetClass],
                   )}
                 >
-                  <div className="min-w-0 space-y-1.5">
-                    <p className="text-body font-medium md:text-title">{instrument.name}</p>
-                    <p className="text-body text-muted-foreground">{instrument.summary}</p>
-                    <p className="text-caption text-muted-foreground">
-                      <span className="font-medium">Risk:</span> {level}
-                      {gloss ? `. ${gloss.charAt(0).toUpperCase()}${gloss.slice(1)}.` : ''}
-                    </p>
-                  </div>
-                  <ChevronRight
-                    className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-                    aria-hidden="true"
+                  <Link
+                    to={`/explore/${section.urlSlug}/${instrument.slug}`}
+                    className="flex min-w-0 flex-1 items-start justify-between gap-4"
+                  >
+                    <div className="min-w-0 space-y-1.5">
+                      <p className="text-body font-medium md:text-title">{instrument.name}</p>
+                      <p className="text-body text-muted-foreground">{instrument.summary}</p>
+                      <p className="text-caption text-muted-foreground">
+                        <span className="font-medium">Risk:</span> {level}
+                        {gloss ? `. ${gloss.charAt(0).toUpperCase()}${gloss.slice(1)}.` : ''}
+                      </p>
+                    </div>
+                    <ChevronRight
+                      className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                  {held ? (
+                    <span className="mt-0.5 flex shrink-0 items-center whitespace-nowrap text-caption text-muted-foreground">
+                      In ledger <span aria-hidden="true">✓</span>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setOpenInstrumentId(instrument.id)}
+                      className="inline-flex min-h-11 shrink-0 items-center self-center rounded-md border border-border px-3 text-caption font-medium transition-colors hover:bg-accent"
+                    >
+                      + Add
+                    </button>
+                  )}
+                  <AddHoldingSheet
+                    instrument={instrument}
+                    open={openInstrumentId === instrument.id}
+                    onOpenChange={(open) => setOpenInstrumentId(open ? instrument.id : null)}
+                    onAdded={handleAdded}
                   />
-                </Link>
+                </div>
               )
             })}
           </div>
