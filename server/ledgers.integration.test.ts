@@ -665,6 +665,33 @@ describe('ledgers routes — POST body is opaque and strict', () => {
     expect(holdingRows).toHaveLength(0)
   })
 
+  /**
+   * D-024 G1 widened the SEALED payload to `{ name, goal? }`. The wire shape is
+   * deliberately unchanged: a goal is household data, so the only way it may
+   * reach the server is inside `ciphertext`. `createLedgerSchema` is `.strict()`
+   * by inheritance, so this is already refused — the test pins it, because a
+   * later well-meant `goal` column is exactly the mistake the widening avoids.
+   */
+  it('rejects a plaintext goal alongside the envelope — the goal only ever travels sealed', async () => {
+    await createHousehold('user_a', HOUSEHOLD_A)
+
+    const res = await authed('user_a', 'POST', {
+      id: uuid(1),
+      ...nameEnvelope('1'),
+      source: 'blank',
+      holdings: [],
+      goal: {
+        label: 'College fund',
+        targetAmountInr: 4000000,
+        targetYear: 2043,
+        monthlyCapacityInr: null,
+      },
+    })
+
+    expect(res.status).toBe(400)
+    expect(ledgerRows.filter((l) => !l.isBaseline)).toHaveLength(0)
+  })
+
   it('rejects a client-claimed isBaseline, origin or snapshotOf', async () => {
     await createHousehold('user_a', HOUSEHOLD_A)
 
