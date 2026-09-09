@@ -14,6 +14,10 @@ import { resolve } from 'node:path'
  *     at exactly 390px.
  *   - D-021's CTA used `w-full sm:w-auto`, dropping a full width button to auto
  *     width at exactly 390px.
+ *   - D-022/D-023 identified a third instance not yet pinned: the vendored
+ *     `DialogFooter`/`SheetFooter` (`sm:flex-row sm:justify-end sm:space-x-2`)
+ *     and the landing hero's CTA row (`sm:flex-row`) all go side-by-side at
+ *     exactly 390px. Fixed to `md:` and pinned below (see CHUNK_FOOTER_FILES).
  * Both passed every test in the suite at the time. Both were found by a human
  * reading `tailwind.config.ts`, not by the suite. `SPEC.md` §G6.1 and §I6.1
  * turn that into an assertion, and this file is that assertion:
@@ -84,7 +88,18 @@ const CHUNK_A_FILES: string[] = []
 /** Chunk I: bulk Excel import. Filled by plan step I15. */
 const CHUNK_I_FILES: string[] = []
 
-const COVERED_FILES = [...CHUNK_E_FILES, ...CHUNK_A_FILES, ...CHUNK_I_FILES]
+/**
+ * Footer/CTA stacking fix (2026-09-09, D-022/D-023 follow-up). Vendored shadcn
+ * primitives and the landing hero were previously out of scope for this pin;
+ * these three files are now the deliberately-scoped exception, fixed to `md:`.
+ */
+const CHUNK_FOOTER_FILES = [
+  'src/components/ui/dialog.tsx',
+  'src/components/ui/sheet.tsx',
+  'src/pages/Landing.tsx',
+]
+
+const COVERED_FILES = [...CHUNK_E_FILES, ...CHUNK_A_FILES, ...CHUNK_I_FILES, ...CHUNK_FOOTER_FILES]
 
 /**
  * One `md:` class per markup file that is known to be there. If a path is
@@ -94,6 +109,9 @@ const COVERED_FILES = [...CHUNK_E_FILES, ...CHUNK_A_FILES, ...CHUNK_I_FILES]
 const RESPONSIVE_ANCHORS: Record<string, string[]> = {
   'src/components/projection-panel.tsx': ['md:grid-cols-2', 'md:hidden', 'md:block'],
   'src/pages/Portfolio.tsx': ['md:'],
+  'src/components/ui/dialog.tsx': ['md:flex-row', 'md:justify-end', 'md:space-x-2'],
+  'src/components/ui/sheet.tsx': ['md:flex-row', 'md:justify-end', 'md:space-x-2'],
+  'src/pages/Landing.tsx': ['md:flex-row'],
 }
 
 /**
