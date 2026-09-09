@@ -9,6 +9,7 @@ import { familyMembersRoutes } from './routes/family-members.js'
 import { instrumentsRoutes } from './routes/instruments.js'
 import { holdingsRoutes } from './routes/holdings.js'
 import { ledgersRoutes } from './routes/ledgers.js'
+import { projectionSettingsRoutes } from './routes/projection-settings.js'
 import { protectionRoutes } from './routes/protection.js'
 import { clerkWebhookRoutes } from './routes/clerk-webhook.js'
 
@@ -63,6 +64,8 @@ app.route('/family-members', familyMembersRoutes)
 app.route('/instruments', instrumentsRoutes)
 app.route('/holdings', holdingsRoutes)
 app.route('/ledgers', ledgersRoutes)
+// Single path segment — see server/routes/projection-settings.ts for why.
+app.route('/projection-settings', projectionSettingsRoutes)
 app.route('/protection', protectionRoutes)
 app.route('/clerk-webhook', clerkWebhookRoutes)
 

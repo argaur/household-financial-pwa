@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { HoldingForm } from '@/components/holding-form'
 import { LedgerTabStrip } from '@/components/ledger-tab-strip'
 import { LedgerCompareStrip } from '@/components/ledger-compare-strip'
+import { ProjectionPanel, type ProjectionPanelState } from '@/components/projection-panel'
 import { LedgerTable } from '@/components/ledger-table'
 import { track } from '@/lib/analytics'
 import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
@@ -226,6 +227,23 @@ export function Portfolio() {
             never renders against a moment-ago ledger's stale numbers. */}
         {state === 'loaded' && !isBaselineActive && activeLedger && ledgerHoldingsState === 'loaded' && (
           <LedgerCompareStrip ledger={activeLedger} ledgerHoldings={ledgerHoldings} baselineHoldings={holdings} />
+        )}
+
+        {/* E6 (D-024) shell — lives in the ledger view, below the compare
+            strip and above the ledger table (see projection-panel.tsx's
+            module doc for why not "below the allocation donut" as
+            SPEC.md §G4 literally says: no donut exists in this view).
+            Applies to any ledger, baseline included, per DATA_MODEL.md's
+            "Projection panel (any ledger)" row. */}
+        {state === 'loaded' && activeLedgerId && (
+          <ProjectionPanel
+            state={
+              (displayedLoading ? 'loading' : displayedError ? 'error' : 'ready') satisfies ProjectionPanelState
+            }
+            holdings={displayedHoldings}
+            instruments={instruments}
+            ledgerId={activeLedgerId}
+          />
         )}
 
         {displayedLoading && (

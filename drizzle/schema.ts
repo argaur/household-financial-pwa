@@ -54,6 +54,14 @@ export const instruments = pgTable('instruments', {
   minInvestment: text('min_investment').notNull(),
   rateValue: numeric('rate_value'),
   rateAsOf: date('rate_as_of'),
+  // E1 (D-024/D-025 AI import) — the projection engine's per-instrument rate
+  // assumption. Deliberately separate from rateValue/rateAsOf above (library
+  // display, 5 rows populated): assumedRateAsOf maps to a distinct db column
+  // (assumed_rate_as_of) rather than reusing rate_as_of, since that name is
+  // already taken. Plaintext catalog data, not household data — no envelope.
+  assumedAnnualRatePct: numeric('assumed_annual_rate_pct', { precision: 5, scale: 2 }),
+  rateSource: text('rate_source'),
+  assumedRateAsOf: date('assumed_rate_as_of'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   slugIdx: uniqueIndex('instruments_slug_idx').on(t.slug),
@@ -121,6 +129,23 @@ export const holdings = pgTable('holdings', {
   householdIdIdx: index('holdings_household_id_idx').on(t.householdId),
   memberIdIdx: index('holdings_member_id_idx').on(t.memberId),
   ledgerIdIdx: index('holdings_ledger_id_idx').on(t.ledgerId),
+}))
+
+// E1 (D-024/D-025 AI import) — specced during D-016, never built until now.
+// First consumer is a later step (E5). One override row per (ledger, asset
+// class): a projection can substitute a household-chosen rate for the
+// asset-class default. Plaintext assumptions, not holdings — no
+// ciphertext/iv/alg/version envelope by design.
+export const ledgerProjectionSettings = pgTable('ledger_projection_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ledgerId: uuid('ledger_id').notNull().references(() => ledgers.id, { onDelete: 'cascade' }),
+  assetClass: text('asset_class', { enum: assetClassEnum }).notNull(),
+  annualRatePct: numeric('annual_rate_pct', { precision: 5, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  ledgerIdIdx: index('ledger_projection_settings_ledger_id_idx').on(t.ledgerId),
+  ledgerAssetClassIdx: uniqueIndex('ledger_projection_settings_ledger_asset_class_idx').on(t.ledgerId, t.assetClass),
 }))
 
 export const protectionTypeEnum = ['term-life', 'health', 'disability', 'other'] as const
@@ -199,6 +224,11 @@ export const ledgersRelations = relations(ledgers, ({ one, many }) => ({
     relationName: 'ledgerSnapshotOf',
   }),
   snapshots: many(ledgers, { relationName: 'ledgerSnapshotOf' }),
+  projectionSettings: many(ledgerProjectionSettings),
+}))
+
+export const ledgerProjectionSettingsRelations = relations(ledgerProjectionSettings, ({ one }) => ({
+  ledger: one(ledgers, { fields: [ledgerProjectionSettings.ledgerId], references: [ledgers.id] }),
 }))
 
 export const familyMembersRelations = relations(familyMembers, ({ one, many }) => ({

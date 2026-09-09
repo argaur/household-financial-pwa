@@ -12,6 +12,18 @@ export interface Instrument {
   minInvestment: string
   rateValue: string | null
   rateAsOf: string | null
+  // Projection-engine rate assumption (D-024 Chunk E). Distinct from
+  // rateValue/rateAsOf above, which are the library display pair: the column
+  // behind this one is assumed_rate_as_of, because rate_as_of was already
+  // taken. Null for the 24 instruments with no defensible published rate,
+  // which fall back to their asset-class default.
+  //
+  // Optional rather than required so that existing Instrument fixtures across
+  // the component tests stay valid. The API always sends all three; a consumer
+  // must handle absence the same way it handles null, which it must do anyway.
+  assumedAnnualRatePct?: string | null
+  rateSource?: string | null
+  assumedRateAsOf?: string | null
   createdAt: string
 }
 

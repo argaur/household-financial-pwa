@@ -11,6 +11,7 @@ import {
   instruments,
   goals,
   ledgers,
+  ledgerProjectionSettings,
 } from './schema'
 
 /**
@@ -423,5 +424,156 @@ describe('drizzle/migrations/0004 — holdings.ledger_id cutover', () => {
   it('leaves holdings.household_id alone — it is retained, never dropped', () => {
     const sql = fs.readFileSync(path.join(migrationsDir, migration0004File()), 'utf-8').toUpperCase()
     expect(sql).not.toMatch(/HOUSEHOLD_ID/)
+  })
+})
+
+/**
+ * E1 (D-024/D-025 AI import) — instrument-level published-rate catalog
+ * columns, plaintext and nullable. Distinct from the pre-existing
+ * `rateValue`/`rateAsOf` pair (library-display, 5 rows populated): these new
+ * columns back the projection engine's per-instrument assumption and its
+ * cited source, which the display fields never carried. The as-of column is
+ * named `assumedRateAsOf` (db: assumed_rate_as_of), not `rateAsOf`, because
+ * `instruments.rate_as_of` already exists — adding a second column with the
+ * same db name would either collide or silently shadow it.
+ */
+describe('drizzle/schema.ts — instruments rate-assumption columns (E1)', () => {
+  const columns = getTableColumns(instruments)
+
+  it('has assumedAnnualRatePct as a nullable numeric(5,2)', () => {
+    expect(columns.assumedAnnualRatePct).toBeDefined()
+    expect(columns.assumedAnnualRatePct.notNull).toBe(false)
+    expect(columns.assumedAnnualRatePct.dataType).toBe('string')
+    expect((columns.assumedAnnualRatePct as unknown as { precision?: number }).precision).toBe(5)
+    expect((columns.assumedAnnualRatePct as unknown as { scale?: number }).scale).toBe(2)
+  })
+
+  it('has rateSource as a nullable text column', () => {
+    expect(columns.rateSource).toBeDefined()
+    expect(columns.rateSource.notNull).toBe(false)
+    expect(columns.rateSource.dataType).toBe('string')
+  })
+
+  it('has assumedRateAsOf as a nullable date column mapped to assumed_rate_as_of', () => {
+    expect(columns.assumedRateAsOf).toBeDefined()
+    expect(columns.assumedRateAsOf.notNull).toBe(false)
+    expect(columns.assumedRateAsOf.name).toBe('assumed_rate_as_of')
+  })
+
+  it('leaves the pre-existing rateValue/rateAsOf columns untouched', () => {
+    expect(columns.rateValue).toBeDefined()
+    expect(columns.rateValue.notNull).toBe(false)
+    expect(columns.rateAsOf).toBeDefined()
+    expect(columns.rateAsOf.name).toBe('rate_as_of')
+    expect(columns.rateAsOf.notNull).toBe(false)
+  })
+})
+
+/**
+ * E1 — ledger_projection_settings: specced during D-016, never built. First
+ * consumer is a later step (E5). Plaintext assumptions, not holdings — no
+ * ciphertext/iv/alg envelope here by design.
+ */
+describe('drizzle/schema.ts — ledgerProjectionSettings table (E1)', () => {
+  it('maps to the ledger_projection_settings table', () => {
+    expect(getTableName(ledgerProjectionSettings)).toBe('ledger_projection_settings')
+  })
+
+  it('has exactly the expected columns', () => {
+    const columns = getTableColumns(ledgerProjectionSettings)
+    const expectedKeys = [
+      'id',
+      'ledgerId',
+      'assetClass',
+      'annualRatePct',
+      'createdAt',
+      'updatedAt',
+    ].sort()
+    expect(Object.keys(columns).sort()).toEqual(expectedKeys)
+  })
+
+  it('has id as primary key, defaulted', () => {
+    const columns = getTableColumns(ledgerProjectionSettings)
+    expect(columns.id.primary).toBe(true)
+    expect(columns.id.notNull).toBe(true)
+    expect(columns.id.hasDefault).toBe(true)
+  })
+
+  it('has ledgerId as NOT NULL, cascading to ledgers.id', () => {
+    const columns = getTableColumns(ledgerProjectionSettings)
+    expect(columns.ledgerId).toBeDefined()
+    expect(columns.ledgerId.notNull).toBe(true)
+  })
+
+  it('has assetClass as NOT NULL, restricted to the assetClassEnum values', () => {
+    const columns = getTableColumns(ledgerProjectionSettings)
+    expect(columns.assetClass).toBeDefined()
+    expect(columns.assetClass.notNull).toBe(true)
+    expect(columns.assetClass.enumValues).toEqual(['equity', 'debt', 'gold', 'hybrid', 'real-estate', 'alternative'])
+  })
+
+  it('has annualRatePct as a NOT NULL numeric(5,2)', () => {
+    const columns = getTableColumns(ledgerProjectionSettings)
+    expect(columns.annualRatePct).toBeDefined()
+    expect(columns.annualRatePct.notNull).toBe(true)
+    expect((columns.annualRatePct as unknown as { precision?: number }).precision).toBe(5)
+    expect((columns.annualRatePct as unknown as { scale?: number }).scale).toBe(2)
+  })
+
+  it('has createdAt/updatedAt as NOT NULL with a default, matching neighbouring tables', () => {
+    const columns = getTableColumns(ledgerProjectionSettings)
+    expect(columns.createdAt.notNull).toBe(true)
+    expect(columns.createdAt.hasDefault).toBe(true)
+    expect(columns.updatedAt.notNull).toBe(true)
+    expect(columns.updatedAt.hasDefault).toBe(true)
+  })
+
+  it('has no ciphertext/iv/alg/version envelope — plaintext assumptions, not holdings', () => {
+    const columns = getTableColumns(ledgerProjectionSettings)
+    expect(columns.ciphertext).toBeUndefined()
+    expect(columns.iv).toBeUndefined()
+    expect(columns.alg).toBeUndefined()
+    expect(columns.version).toBeUndefined()
+  })
+})
+
+describe('drizzle/migrations/0006 — instrument rate columns + ledger_projection_settings, additive only (E1)', () => {
+  const migrationsDir = path.resolve(__dirname, 'migrations')
+
+  function migration0006File(): string {
+    const files = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql') && f.startsWith('0006'))
+      .sort()
+    if (files.length === 0) {
+      throw new Error('No migration SQL file starting with "0006" found — run `npm run db:generate` first.')
+    }
+    return files[0]
+  }
+
+  it('contains no DROP TABLE, DROP COLUMN, SET NOT NULL, RENAME, or TRUNCATE statements', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0006File()), 'utf-8').toUpperCase()
+
+    expect(sql).not.toMatch(/DROP\s+TABLE/)
+    expect(sql).not.toMatch(/DROP\s+COLUMN/)
+    expect(sql).not.toMatch(/SET\s+NOT\s+NULL/)
+    expect(sql).not.toMatch(/RENAME/)
+    expect(sql).not.toMatch(/TRUNCATE/)
+  })
+
+  it('adds the three new nullable instrument columns', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0006File()), 'utf-8').toUpperCase()
+
+    expect(sql).toMatch(/ADD\s+COLUMN\s+"?ASSUMED_ANNUAL_RATE_PCT"?/)
+    expect(sql).toMatch(/ADD\s+COLUMN\s+"?RATE_SOURCE"?/)
+    expect(sql).toMatch(/ADD\s+COLUMN\s+"?ASSUMED_RATE_AS_OF"?/)
+  })
+
+  it('creates the ledger_projection_settings table with a cascade FK and a unique (ledger_id, asset_class) index', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0006File()), 'utf-8').toUpperCase()
+
+    expect(sql).toMatch(/CREATE\s+TABLE\s+"?LEDGER_PROJECTION_SETTINGS"?/)
+    expect(sql).toMatch(/REFERENCES\s+"?(PUBLIC"?\."?)?LEDGERS"?\("?ID"?\)\s+ON\s+DELETE\s+CASCADE/)
+    expect(sql).toMatch(/CREATE\s+UNIQUE\s+INDEX.*LEDGER_PROJECTION_SETTINGS_LEDGER_ASSET_CLASS_IDX/)
   })
 })

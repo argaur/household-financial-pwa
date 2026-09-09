@@ -91,6 +91,29 @@ export interface EventMap {
   // Catalog metadata only, per the same property discipline as
   // instrument_viewed: never anything describing what the household holds.
   explore_holding_added: { instrument_slug: string; section: string }
+  // Fires on a COMMITTED edit to a class rate override (blur/Enter), never on
+  // a keystroke.
+  //
+  // NO PROPERTIES, deliberately. METRICS_PLAN.md:204 originally specced
+  // `asset_class` on this event, which contradicted the property-discipline
+  // rule sixteen lines below it in the same file ("No event may carry anything
+  // describing what a household owns") and the FORBIDDEN_ANALYTICS_PROPERTIES
+  // guard in src/test/analytics-guard.ts, where `asset_class` is the first
+  // entry. The leak is real and specific to this panel: a rate row is only
+  // rendered for an asset class the household actually holds, so the property
+  // would report which classes they own. Criterion 6 only asks whether a
+  // household overrode at least one default rate, which a bare count answers.
+  // METRICS_PLAN.md:204 has been corrected to match. Do not re-add it.
+  //
+  // `projection_viewed`, this event's funnel partner, is E10's job.
+  projection_rate_overridden: Record<string, never>
+  // E10 (D-024 AI import). Fires once per ledger, the first time a freshly
+  // computed projection is actually visible to the user (see
+  // src/components/projection-panel.tsx's own comment on the effect).
+  // `horizon_years` is a setting the user chose, not portfolio shape, so it
+  // is not on FORBIDDEN_ANALYTICS_PROPERTIES and is fine here
+  // (METRICS_PLAN.md:203).
+  projection_viewed: { horizon_years: number }
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {
