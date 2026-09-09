@@ -426,3 +426,205 @@ ledgers        N ──── 1  ledgers             (snapshot_of self-reference
 **No new entities, fields, relationships, or states.** Slice 5 is a visual restyle of screens against entities and states already fully specified above (households, family_members, holdings, protection, instruments, plus the ledger amendments). Every screen in scope — landing, dashboard, explore, `/why`, onboarding, Profile, instrument detail — already has its data shape and State Matrix row defined either in the original tables above or (for ledgers) in the amendments section. This slice changes how those states render, never what they are.
 
 **Gate: Stage 0 passes by inspection, not by new content.** No table to fill — confirming absence of a data-model delta is itself the Stage 0 output for a pure visual slice.
+
+---
+
+## Stage 0: D-024 (AI Goal Planner, Counsel Cards, Deterministic Projection Engine, 2026-09-07)
+
+**Phase:** Design Stage 0 for D-024, run after Gaurav's 2026-09-07 resolutions on the shared Anthropic key (reuse, accepted risk) and prompt caching (none). Scoped to the build order D-024 decision 7 sets: (a) deterministic engine alone, (b) goal draft, (c) counsel cards. Everything the D-016 bundle already added (`ledgers`, `holdings.ledger_id`, `ledger_projection_settings`, `households.ai_plans_created`) is live in production at `1fa570c` and is not restated here, only amended.
+
+### Encryption boundary, stated once for this whole section
+
+Three categories, and every field below belongs to exactly one:
+
+| Category | Rule | Fields in this section |
+|---|---|---|
+| **Household data** | Client-side encrypted via `sealRow` into `{ ciphertext, iv, alg, version }`, AAD bound to `{ table, householdId, rowId, version }`. The server has no schema that can accept the plaintext (`server/lib/envelope.ts` is `.strict()`). | The goal payload, carried inside the existing `ledgers` envelope |
+| **Catalog data** | Plaintext. Public, identical for every household, already served unencrypted by `GET /api/instruments`. | `instruments.assumed_annual_rate_pct`, `instruments.rate_source`, `instruments.rate_as_of` |
+| **Counters and structure** | Plaintext integers, ids, and timestamps. They describe how many times something happened, never what a household owns. Same category as the existing `ai_plans_created`, `is_baseline`, `ledger_id`. | Everything in `ai_call_reservations` and `ai_global_usage`, plus `ledgers.ai_edits_used` |
+
+There is no fourth category. A field that does not obviously fall into catalog or counters is household data and gets sealed.
+
+### ledgers: amended (goal payload rides the existing envelope)
+
+**No new columns.** The goal a ledger was planned toward is added to the plaintext payload that is already sealed into `ledgers.ciphertext`, widening it from `{ name }` to `{ name, goal? }`:
+
+```
+{
+  name: string,                       // existing, max 60 chars, checked client-side
+  goal?: {
+    label: string,                    // max 80 chars, e.g. a college fund
+    targetAmountInr: number,          // integer rupees
+    targetYear: number,               // four-digit year
+    monthlyCapacityInr: number | null // what the household says it can add per month
+  }
+}
+```
+
+**Why the envelope and not a table.** D-024 open question 3 named the existing `goals` table as unshippable: it is plaintext, which D-014 forbids for household data. Two options existed, encrypt `goals` as its own table, or fold the goal into the ledger. Folding wins because a goal has exactly one ledger and a ledger has at most one goal, so a separate table buys a join and a second AAD binding for nothing. `sealRow` and `decryptWireRow` in `src/lib/ledgers-api.ts` already handle this row under `LEDGERS_TABLE`; widening the sealed object needs no schema change, no migration, and no new server code, because the server never sees the payload shape at all.
+
+**The `goals` table stays in the schema, unused,** exactly as `analytics_events` does (D-012). It is not dropped in this pass, and nothing reads or writes it. A future pass may drop it; doing so here would mix an unrelated migration into this feature.
+
+**Version bump.** Widening the sealed payload does not change `version`, because a reader that gets `{ name }` with no `goal` key is a valid, expected state (a manually created ledger). `decryptWireRow` returns the parsed object as-is and the caller treats `goal` as optional.
+
+**`origin` enum unchanged.** `manual` and `ai_suggestion` already exist (D-019). A ledger created through the goal planner is `ai_suggestion` and counts against `households.ai_plans_created`. A ledger a user creates by hand and later attaches a goal to stays `manual` and does not count, consistent with D-017 §2's rule that the caps bound Anthropic calls and never bound how a household uses its own data.
+
+### instruments: amended (seeded return assumptions)
+
+Catalog data, plaintext, served by the existing `GET /api/instruments`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| assumed_annual_rate_pct | numeric(5,2) | no | The long-run nominal annual return this instrument is projected at. Populated for the 6 instruments that have a defensible published rate (D-024 decision 1); null for the other 24, which fall back to their asset class default in `ledger_projection_settings` |
+| rate_source | text | no | Where the number came from, in plain words, rendered verbatim in the "See the maths" panel. Null wherever `assumed_annual_rate_pct` is null |
+| rate_as_of | date | no | The date the rate was last checked. Drives a staleness note in the maths panel rather than any automatic behaviour. Null wherever the rate is null |
+
+**These three are display-and-audit fields, not a pricing feed.** D-002's "no live price feeds in v1" is untouched: nothing fetches these, they are seeded in the same migration that adds them and change only when a human edits the seed.
+
+### ledger_projection_settings: unchanged, now actually used
+
+Specced in the D-016 additions above, never built. The deterministic engine (D-024 decision 1) is its first consumer. No shape change. The resolution order the engine applies is new and belongs here rather than in code comments:
+
+1. `instruments.assumed_annual_rate_pct` if the user has not overridden this asset class
+2. `ledger_projection_settings.annual_rate_pct` for the holding's asset class if the user has overridden it, which overrides the instrument rate for every holding in that class
+3. the seeded per-class default if neither exists, unstored until edited
+
+An override is per asset class, never per instrument. A per-instrument override is not in scope and is not deferred with a plan, it is simply not offered.
+
+### ai_call_reservations (new)
+
+**Description:** The atomic pre-call reservation D-024 item (b) makes a hard requirement. One row per attempted AI call, written **before** the outbound Anthropic request, never after. `neon-http` has no transactions, so the guarantee has to come from a unique constraint plus a single conditional statement, not from a transaction.
+
+**Owner:** The household. Plaintext throughout, counters only.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| id | uuid | yes | PK |
+| household_id | uuid | yes | FK to households.id, ON DELETE CASCADE |
+| ledger_id | uuid | no | FK to ledgers.id, ON DELETE CASCADE. Null for a goal-plan call, which creates its ledger only after the response arrives. Set for a counsel call, which targets an existing ledger |
+| idempotency_key | text | yes | Client-supplied v4 UUID, one per user gesture. **UNIQUE on `(household_id, idempotency_key)`** |
+| kind | enum | yes | `goal_plan` or `counsel`. Determines which cap the reservation was taken against |
+| cap_type | enum | yes | `plans` or `edits`. Which counter this reservation consumed |
+| status | enum | yes | `reserved`, `completed`, or `failed`. Default `reserved` |
+| created_at | timestamptz | yes | auto |
+
+**States:** reserved (call in flight) / completed (response relayed to the client) / failed (proxy or provider error).
+
+**A failed call does not release its reservation.** D-024 item (b) explicitly left this open as a Phase 2 question. It is answered here in the strict direction: `status` moves to `failed` and the counter stays consumed. Releasing on failure reintroduces the exact hole the reservation exists to close, because "failure" is client-reported and a client that reports every call as failed gets unlimited calls. The counter is the cost control (D-016 says so in as many words) and it must be un-gameable, not fair. The cost of this is real and is a copy problem, not a schema problem: a user whose call fails loses one of two plans. The copy in `COPY_DECK.md` says so at the moment of the call, before the call, not after it fails.
+
+### ai_global_usage (new)
+
+**Description:** The global monthly circuit breaker of D-024 decision 6. The only cost layer that survives a cold start, unlike the in-process `server/lib/rate-limit.ts`. One row per calendar month, shared by every household.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| period | text | yes | PK. `YYYY-MM` in UTC. A row is created lazily by the first call of the month |
+| calls_used | int | yes | Default `0`. Incremented by the same single conditional statement that takes the reservation |
+| cap_calls | int | yes | The month's ceiling. Seeded from a server constant on row creation, stored per row so raising the cap does not retroactively change a past month's record |
+| updated_at | timestamptz | yes | auto |
+
+**Both counters move in one statement each, and both are conditional.** The required shape, expressible without transactions:
+
+```
+-- per household, plans cap (goal_plan)
+UPDATE households SET ai_plans_created = ai_plans_created + 1
+  WHERE id = $1 AND ai_plans_created < 2 RETURNING ai_plans_created;
+
+-- per ledger, edits cap (counsel)
+UPDATE ledgers SET ai_edits_used = ai_edits_used + 1
+  WHERE id = $1 AND ai_edits_used < 2 RETURNING ai_edits_used;
+
+-- global, every kind
+UPDATE ai_global_usage SET calls_used = calls_used + 1
+  WHERE period = $1 AND calls_used < cap_calls RETURNING calls_used;
+```
+
+Zero rows affected means the cap is reached. The `ai_call_reservations` insert runs first and its unique constraint absorbs the double-tap and client-retry cases; the conditional UPDATEs absorb the concurrent-tab case. Neither alone is sufficient, which is why both are specced.
+
+### AI suggestion cards: still not persisted
+
+Unchanged from the D-016 additions. Cards live in browser state only. Apply commits as a normal holdings or ledger write; Dismiss discards with no trace. `ai_call_reservations` records that a call happened, never what it said.
+
+### Relationships: amended
+
+```
+households  1 ---- N  ai_call_reservations
+ledgers     1 ---- N  ai_call_reservations   (nullable edge, null for goal_plan calls)
+ai_global_usage                              (no edges, one row per month, global)
+instruments                                  (three new plaintext catalog columns, no new edges)
+```
+
+### State Matrix: additions
+
+| Screen | Loading | Empty | Populated | Error | Auth-blocked |
+|---|---|---|---|---|---|
+| Projection panel (any ledger) | Skeleton line plus skeleton rate rows | Ledger has no holdings: panel hidden entirely, not shown empty | Compound-growth line for the chosen horizon, rate rows editable inline | Inline message, last valid line stays visible | Redirect to /sign-in |
+| "See the maths" panel | N/A, opens over already-loaded data | N/A | Per-class rate, source, as-of date, and the formula in words | N/A | N/A |
+| Goal step in "+ New" modal | Submitting: fields disabled, spinner on CTA | Blank goal fields, horizon prefilled to the target year minus the current year | Filled goal, Continue enabled | Inline validation per field, modal stays open | Redirect to /sign-in |
+| AI consent step | N/A | N/A | Per-transmission disclosure plus what is and is not sent, single Continue | N/A | Redirect to /sign-in |
+| AI call in flight | Spinner on the card slot, cancel not offered | N/A | N/A | Card slot shows the failure and states the attempt was counted | Redirect to /sign-in |
+| AI suggestion card | N/A | Model returned no allocation: card shows the no-suggestion state, Dismiss only | Proposed slugs and weights, every number from the deterministic engine, Apply and Dismiss | Card replaced by failure copy | Redirect to /sign-in |
+| AI cap-exhausted (household plans) | N/A | N/A | Soft message, manual creation stays fully available | N/A | Redirect to /sign-in |
+| AI cap-exhausted (per-ledger edits) | N/A | N/A | "Review this ledger" disabled with the same soft register | N/A | Redirect to /sign-in |
+| Global circuit-breaker tripped | N/A | N/A | Distinct soft message naming a monthly limit, not the household's own cap | N/A | Redirect to /sign-in |
+
+### Notes for Design (D-024)
+
+12. **The deterministic engine ships and stands alone.** Every state above from "Projection panel" through "See the maths" must be complete and shippable with no AI code present at all. This is D-024 decision 1 expressed as a design constraint, not a build-order preference.
+13. **Cap-exhausted has three distinct copies, not one.** Household plans exhausted, this ledger's edits exhausted, and the global monthly breaker tripped are three different facts with three different implications for the user, and collapsing them into one message tells a user their own limit is reached when it is not.
+14. **"See the maths" is the regulatory surface, not a nicety.** D-018 §8 named the regulatory reading of projections as the bundle's largest risk and explicitly did not soften it. The panel is what makes a projection an illustration the user can audit rather than a number the product asserts.
+15. **No screen may render a number that came from the model.** The card shows slugs and weights; every rupee figure beside them is computed locally by the engine from those weights. This is mechanical, not editorial.
+
+**Gate: Stage 0 for D-024 is drafted, not approved.** Gaurav has not reviewed it.
+
+---
+
+## Stage 0: D-025 (Bulk Holdings Import from Excel, 2026-09-07)
+
+**Phase:** Design Stage 0 for D-025, run after Gaurav's 2026-09-07 resolutions on the batch endpoint (build it) and dropdowns (none, so SheetJS Community Edition and the prefilled per-member template shape both lock).
+
+### No new tables, no new columns, no migration
+
+Import writes ordinary `holdings` rows through the existing sealed-envelope path. Everything it needs already exists: `holdings.ledger_id` (live since migration `0005`), `holdings.member_id`, the `memberScopedCreateSchema` body shape, `MAX_LEDGER_HOLDINGS = 200`, and the ledger-ownership and member-tenancy checks in `server/routes/holdings.ts`. **Confirming the absence of a data-model delta is the Stage 0 output here**, the same way it was for D-016 Slice 5 above.
+
+### Encryption boundary, the part that is genuinely new
+
+The import flow creates a plaintext lifetime that no other flow in this app has, and it is bounded deliberately at each end.
+
+| Stage | Where the data is | Encrypted? | Bound |
+|---|---|---|---|
+| Template generation | Browser memory, then an `.xlsx` the browser hands to the OS | **No.** Member names are written into the file in the clear | Accepted and disclosed per D-016 item 3 and D-017 item 9. The moment the file lands on a device it is outside Vittam's boundary, and so is any browser extension with file access |
+| The filled file on the user's machine | The user's filesystem | **No** | Outside the boundary entirely. Vittam makes no claim about it and does not try to |
+| Parse and review | Browser memory only, React state | **No, and this is the sharp edge** | No parsed row may reach IndexedDB, localStorage, sessionStorage, the service worker cache, a Sentry breadcrumb, a session replay, or the console. D-025 decision 5 and its hard-requirements list. This is the only place in the app where unsealed household data exists outside a form field |
+| Commit | `sealRow` per row, then one `POST /api/holdings-batch` | **Yes**, identical to a hand-entered holding | AAD bound to `{ holdings, householdId, rowId, version }` per row, exactly as `src/lib/holdings-api.ts` already does |
+| At rest | Neon | **Yes**, ciphertext only | Unchanged. The server never had a schema that could accept a plaintext amount and still does not |
+
+**The batch endpoint does not weaken the boundary,** because the client seals every row before the request is built. The server receives an array of envelopes it cannot open, which is the same thing `POST /api/ledgers` already receives.
+
+### Row buckets are computed, never stored
+
+D-025 decision 6's four buckets (Ready, Needs attention, Possible duplicate, Skipped) are derived in the browser at parse time and live only in component state. No table, no column, no persisted draft. Leaving the import screen discards them, and the copy says so before it happens.
+
+**Duplicate detection is local and conservative.** A parsed row is flagged Possible duplicate when the target ledger already holds a decrypted holding with the same instrument slug and the same `member_id`. This comparison happens after the vault is unlocked and holdings are decrypted in the browser, which is the only place both sides of the comparison exist in plaintext. The server cannot and does not participate.
+
+### State Matrix: additions
+
+| Screen | Loading | Empty | Populated | Error | Auth-blocked |
+|---|---|---|---|---|---|
+| Import entry point | N/A | Household has no members: entry point hidden, a template would have no tabs | Button on the ledger's holdings view, naming the active ledger | N/A | Redirect to /sign-in |
+| PII disclosure, pre-download | N/A | N/A | What the file will contain, in plain words, single Download CTA | N/A | N/A |
+| Template generation | Button spinner while SheetJS builds the workbook | N/A | Browser download handed off | Inline failure plus retry, nothing partially written | Redirect to /sign-in |
+| File picker and parse | Parse progress, file name shown | No rows filled in: an empty-file message plus a link back to the guide | Review screen | Unreadable or wrong-shape file: named reason, no row list | Redirect to /sign-in |
+| Review screen | N/A | Every row landed in Skipped: no commit CTA, only the rejects download | Four buckets, per-row plain-language reasons, primary CTA commits Ready only | Per-row reasons name the column and the reason, never the value | Redirect to /sign-in |
+| Commit in flight | Primary CTA disabled with spinner, buckets frozen | N/A | N/A | One failure message for the batch, nothing partially applied | Redirect to /sign-in |
+| Commit result | N/A | N/A | Count added, count still needing attention, link to the ledger | Batch rejected: nothing was written, the review screen is still intact | Redirect to /sign-in |
+| Ledger row-cap reached | N/A | N/A | Commit blocked before the request, naming the 200-holding ledger cap and how many rows over | N/A | Redirect to /sign-in |
+
+### Notes for Design (D-025)
+
+16. **The review screen is the feature.** Parsing is table stakes; the four buckets with plain-language reasons are what makes a bad spreadsheet fixable rather than rejected. Design weight belongs here, not on the upload control.
+17. **Per-row messages name the column, never the value.** "Current value is not a number I can read" is allowed. Echoing the offending cell contents is not, because those messages are the most likely thing to end up in a Sentry breadcrumb or a screenshot.
+18. **The two India-specific parsing traps are design-visible, not just test cases.** Lakh grouping parses silently. Shorthand such as "1.5L" is rejected with a message that says what to type instead. A user who sees one rejection needs to understand the rule from that one message.
+19. **Nothing about this flow may become offline-capable by accident.** The parser chunk must be precached so the screen works offline; the row data must never be cached. Those two requirements pull opposite directions through the same config file and have to be designed as one decision, not two.
+
+**Gate: Stage 0 for D-025 is drafted, not approved.** Gaurav has not reviewed it.

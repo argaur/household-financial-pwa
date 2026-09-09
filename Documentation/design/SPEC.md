@@ -211,3 +211,274 @@ New motif primitives, all documented in `Documentation/design/COMPONENT_SHOWCASE
 - All 3 Stage 1 design risks addressed in §S8 — risk 3 (regression) is honestly left escalated, not force-resolved.
 
 ### Gate: Stage 5 (Spec Doc) — ready for Gaurav's review before Stage 6 (Handoff) and Phase 3 (Plan).
+
+---
+
+# D-024: AI Goal Planner, Counsel Cards, Deterministic Projection Engine (2026-09-07)
+
+Appended as its own spec section, same convention as the D-016 Slice 5 section above. Prefix `G`. Written after Gaurav's 2026-09-07 resolutions in `DECISIONS_LOG.md` D-024 (shared Anthropic key reused as an accepted risk; no prompt caching, no Files API, no queues, no retries at the Anthropic layer).
+
+## G1. Context
+
+Three shippable things in one decision, built strictly in this order (D-024 decision 7):
+
+1. **The deterministic projection engine**, client-side, no network call, no AI. Standalone value.
+2. **The goal planner**, a third choice inside the existing "+ New" ledger modal, one proxy call.
+3. **Counsel cards**, on-demand only, on the same proxy with a second output schema.
+
+The engine is a prerequisite, not a sibling. If 2 and 3 are never built, 1 still ships.
+
+## G2. Brand Guide Reference
+
+No new tokens. Mint/treasury system as shipped in D-016 Slice 5 (`Documentation/brand/brand-guide.md`, `Documentation/design/tokens/tailwind.config.ts`). The projection line reuses the Recharts styling already established on the allocation donut's palette. The AI card uses the existing card surface, not a new one, so an AI suggestion does not read as a different product.
+
+## G3. API surface
+
+**Vercel routing constraint applies to every route here.** This project's zero-config Vite build routes only single-path-segment `/api/*` requests to the catch-all function; a second path segment 404s at the platform before Hono sees it (`app/CLAUDE.md`, 2026-07-11). Every route below is one segment. Anything further is a query parameter, never a path segment.
+
+### `POST /api/ai-suggestions`: the thin proxy (D-017 §1)
+
+One route, two request schemas and two response schemas, switched on `kind`. This is D-024 decision 7's "counsel cards on the same proxy with a second schema", taken literally.
+
+Request, `kind: "goal_plan"`:
+
+```
+{
+  kind: "goal_plan",
+  idempotencyKey: string,        // client v4 uuid, one per user gesture
+  horizonYears: number,          // 1..40
+  targetAmountBandInr: number,   // rounded to the nearest 100000, never exact
+  monthlyCapacityBandInr: number | null,  // rounded to the nearest 1000
+  currentMix: [                  // percentages only, never rupees
+    { assetClass: string, weightPct: number }
+  ]
+}
+```
+
+Request, `kind: "counsel"`:
+
+```
+{
+  kind: "counsel",
+  idempotencyKey: string,
+  ledgerId: string,              // uuid, ownership checked server-side
+  currentMix: [ { assetClass: string, weightPct: number } ],
+  holdingSlugs: string[]         // library slugs only, no amounts, no names
+}
+```
+
+Response, both kinds, on success:
+
+```
+{
+  status: "ok",
+  kind: "goal_plan" | "counsel",
+  suggestion: {
+    allocations: [ { slug: string, weightPct: number } ],   // slugs from the library enum only
+    reasoning: string,                                       // prose, no numbers the engine did not produce
+    caveat: string                                           // fixed education-not-advice line
+  },
+  usage: { plansUsed, plansCap, editsUsed, editsCap }
+}
+```
+
+Response on a cap, `409`:
+
+```
+{ status: "cap_reached", capType: "plans" | "edits" | "global" }
+```
+
+Response on a provider or proxy failure, `502`:
+
+```
+{ status: "failed", reason: "provider_error" | "invalid_output" | "timeout", attemptCounted: true }
+```
+
+`attemptCounted` is always `true` and is in the shape deliberately, because a failed call does not release its reservation (`DATA_MODEL.md`, `ai_call_reservations`) and the UI has to say so.
+
+**Route behaviour, in order, none of it optional:**
+
+1. Auth first. Session resolved via `server/lib/auth.ts` before the body is read at all.
+2. Body size and shape limits before parse. Strict Zod, unknown keys rejected, same discipline as `server/lib/envelope.ts`.
+3. Insert the `ai_call_reservations` row. Unique `(household_id, idempotency_key)` absorbs double-taps and client retries; a conflict returns the original outcome, not a second call.
+4. Run the three conditional counter UPDATEs. Zero rows affected on any of them returns `409` and the reservation is marked `failed`.
+5. Only then call Anthropic. `claude-sonnet-5` (D-018 §5), structured output, no prompt caching, no retries, no queue.
+6. Validate the model's output against the allowlist schema. A slug outside the library enum invalidates the whole response (`invalid_output`), it is not filtered out silently.
+7. Relay. Write nothing to Neon beyond the reservation status, log no request or response body, no Sentry body capture, `Cache-Control: no-store`.
+
+**The browser CSP is not touched.** The browser never calls Anthropic; the proxy does. Adding the Anthropic host to the browser CSP would be a mistake of exactly the class D-024's ship-traps list names.
+
+### `GET /api/ai-suggestions`: usage only
+
+Returns `{ plansUsed, plansCap, editsUsed, editsCap, globalOpen }` for the household, so the cap-exhausted states render without a speculative POST. No body, no household data, cheap enough to fetch with the dashboard.
+
+### `GET /api/projection-settings` and `PUT /api/projection-settings`
+
+Per-ledger asset-class rate overrides. Ledger selected by query parameter, never a path segment: `GET /api/projection-settings?ledgerId=<uuid>`.
+
+```
+GET  -> { ledgerId, horizonYears: number | null, rates: [ { assetClass, annualRatePct } ] }
+PUT  -> body { ledgerId, horizonYears?, rates: [ { assetClass, annualRatePct } ] }
+     -> { status: "ok" }
+```
+
+Plaintext by category: an asset-class return rate is an assumption, not a holding. It says nothing about what the household owns.
+
+### `GET /api/instruments`: extended, not replaced
+
+Adds `assumedAnnualRatePct`, `rateSource`, `assumedRateAsOf` to each instrument in the existing response. Catalog data, already public.
+
+**Corrected at build time (E2):** this line originally read `rateAsOf`, which was a drafting slip. `instruments.rate_as_of` already exists as an unrelated library-display field (paired with `rate_value`) and keeps that name, so the new column is `assumed_rate_as_of` and the new response field is `assumedRateAsOf`. Both pairs coexist. The response is also now an explicit column projection rather than the row returned straight through, so a future column added to `instruments` is not published until it is added to the projection deliberately.
+
+### No new route for the goal itself
+
+The goal is sealed into the ledger envelope, so it travels on the existing `POST /api/ledgers` body with no server change at all.
+
+## G4. Per-panel decisions
+
+| Panel | Decision |
+|---|---|
+| Projection panel | Lives inside the ledger view, below the allocation donut, collapsed by default on phone and expanded on desktop. One line chart, one horizon control, one rate list |
+| Horizon control | Preset chips (5 / 10 / 15 / 20 years) plus a free numeric field. D-018 left preset-against-free-field open; both is the answer, because presets carry the common case and the field carries a real goal year |
+| Rate rows | One row per asset class present in this ledger, not all six. A class with no holdings has no rate to override |
+| "See the maths" | A disclosure panel, not a modal. It must be readable while the chart is visible, because its job is to let a user check the chart |
+| Goal step | A third option in the existing "+ New" modal, added beside blank and copy. Selecting it swaps the modal body, it does not open a second surface |
+| Consent step | A separate step inside the same modal, always shown, never remembered. Per-transmission means per transmission |
+| Suggestion card | Rendered inline in the ledger view, in the position the compare strip occupies, never as a toast or a modal. Apply and Dismiss are the only actions |
+| Cap-exhausted | Replaces the action's own affordance in place, styled as informational, never as an error toast |
+
+## G5. Analytics surface
+
+Events are specified in `METRICS_PLAN.md` under the D-024 section. Existing names reused unchanged: `projection_viewed`, `projection_rate_overridden`, `ai_suggestion_shown`, `ai_suggestion_applied`, `ai_suggestion_dismissed`, `ai_cap_reached`. New names follow the same convention.
+
+**The proxy route itself emits no analytics.** Carried forward verbatim from the D-016 property-discipline note: anything the proxy could usefully report is derived from plaintext holdings. Every event here fires from the browser.
+
+## G6. Constraints contract (testable assertions, Phase 5 verifies these)
+
+1. **`sm:` is 390px in this project and must not be used for any layout that should stay full width on a phone.** Confirmed twice by real bugs: the D-016 compare strip's `sm:grid-cols-3` and the D-021 button's `w-full sm:w-auto`. Every new full-width control in this feature uses `md:` for its breakpoint. Specifically: the goal-step form fields, the consent step's Continue button, the suggestion card's Apply and Dismiss pair, the horizon preset chips, and the rate-row grid. **Assertion: no new class string in this feature matches `sm:(grid-cols|w-auto|flex-row|inline-flex)`.** Pin it with a test in the style of `csp-policy.test.ts`.
+2. The rate-row grid is one column below `md:`, two at `md:` and up. At 390px, six rows stacked is correct and is not a bug.
+3. Apply and Dismiss stack vertically below `md:`, each full width, each at least 44px tall.
+4. The projection chart's container carries `min-w-0` and its own `overflow-x` context, so a long axis label cannot push the page into horizontal scroll at 390px.
+5. No response field from the proxy is rendered as a currency amount. Assertion: the card component receives weights and slugs only, and has no access to a formatter that takes a model-supplied number.
+6. The proxy writes no request or response body to logs, Sentry, or Neon. Assertion by test against the route with a spy on the logger and the Sentry client.
+7. `Cache-Control: no-store` on every `/api/ai-suggestions` response, success and failure.
+8. A second POST with the same `idempotencyKey` returns the first outcome and makes no second Anthropic call.
+9. Concurrent POSTs from two sessions with different keys, with one plan remaining, result in exactly one success and one `409`.
+10. The Anthropic host appears in no browser CSP directive.
+
+## G7. Implementation cost flags
+
+- The reservation-plus-conditional-UPDATE shape is the single most delicate thing in this feature and has no precedent in this repo. It needs its own tests before any UI exists.
+- The deterministic engine's compounding maths needs a fixture-based test suite that is readable by a human who wants to check the numbers, because "See the maths" promises the user exactly that.
+- Structured-output schema handling against `claude-sonnet-5` cannot be verified locally against production behaviour; it needs a live deploy check, same class as the 2026-08-05 Turnstile lesson.
+
+## G8. Open questions
+
+1. **The `goals` table's future.** This spec leaves it in the schema, unused. Dropping it is a separate migration and a separate decision.
+2. **The global monthly cap's actual number.** `ai_global_usage.cap_calls` is specced; the value is not chosen here. It is a cost judgment Gaurav owns.
+3. **Whether the horizon control keeps both presets and a free field** after first use, or collapses to one. Specced as both; cheap to reduce later.
+
+**Gate: not run.** This section is drafted for Gaurav's review. No stage is marked passed.
+
+---
+
+# D-025: Bulk Holdings Import from Excel (2026-09-07)
+
+Prefix `I`. Written after Gaurav's 2026-09-07 resolutions in `DECISIONS_LOG.md` D-025: build the atomic batch endpoint, no spreadsheet dropdowns, SheetJS Community Edition, per-member tabs with all 30 instruments prefilled.
+
+## I1. Context
+
+Import only, no export. A downloaded template carries one tab per household member with all 30 library instruments prefilled and grouped by asset class. The user fills in amounts, uploads, reviews four buckets of rows, and commits the clean ones into whichever ledger is active in the app.
+
+## I2. Brand Guide Reference
+
+No new tokens. The review screen's four buckets reuse the existing status treatments; the Needs attention and Skipped buckets use the same red-toned register already established for the instrument-drift banner, so the app has one warning language rather than two.
+
+## I3. API surface
+
+### `POST /api/holdings-batch`: new, single segment by necessity
+
+`/api/holdings/batch` is impossible on this project's Vercel config. This is a new top-level Hono mount in `server/app.ts`, not a sub-path of the holdings router.
+
+Request:
+
+```
+{
+  ledgerId: string,              // uuid, ownership checked server-side against the session household
+  holdings: [                    // 1..MAX_LEDGER_HOLDINGS, each already sealed by the browser
+    { id, memberId, ciphertext, iv, alg }
+  ]
+}
+```
+
+The array element is exactly `memberScopedCreateSchema` from `server/lib/envelope.ts`, reused unchanged. The body shape is deliberately the same one `createLedgerSchema` already carries (`holdings: z.array(memberScopedCreateSchema).max(MAX_LEDGER_HOLDINGS)`), so this endpoint extends a proven shape rather than inventing one.
+
+Response, success:
+
+```
+{ status: "ok", inserted: number }
+```
+
+Response, `409`, when the ledger would exceed its row cap:
+
+```
+{ status: "ledger_full", currentCount: number, cap: number, attempted: number }
+```
+
+Response, `403`, when the ledger or any `memberId` does not belong to the session household. Ownership is checked for every member id in the array, not just the first.
+
+**All or nothing within the one insert.** A single multi-row INSERT succeeds or fails as one statement, which is the only atomicity available over `neon-http`. Partial commit is a client-side concept here: the client sends only the Ready bucket, and that set either lands entirely or not at all.
+
+### No API for template generation
+
+The workbook is built entirely in the browser by SheetJS from the decrypted member list and the existing `GET /api/instruments` response. Nothing about the template touches the server, which is what keeps member names out of any server surface even though they are in the file.
+
+### No API for parsing
+
+Parsing is browser-only, by decision. Any hosted parsing API was rejected in D-025.
+
+## I4. Per-panel decisions
+
+| Panel | Decision |
+|---|---|
+| Entry point | A secondary action on the ledger's holdings view, next to the existing add affordance, naming the active ledger. Not in the FAB, not in the nav |
+| PII disclosure | A step before the download, not a checkbox beside it. It states what the file will contain and that the file is outside the app's protection once saved |
+| Template download | A single button. The file name carries the household's ledger name and the date, so a stale download is identifiable by its name |
+| Upload | A drop zone with a file button, one file at a time, `.xlsx` only |
+| Review screen | Four collapsible bucket sections in fixed order: Ready, Needs attention, Possible duplicate, Skipped. Ready is expanded by default, the rest collapsed with counts visible |
+| Row rows | Member, instrument, amount, and the reason if any. No inline editing in v1: the fix loop is download the rejects, fix in Excel, re-upload |
+| Primary CTA | Commits the Ready bucket only, and its label carries the count and the ledger name |
+| Rejects download | A secondary action, always present when any row is outside Ready |
+| Leaving the screen | A confirm step, because parsed rows are memory-only and leaving discards them |
+
+## I5. Analytics surface
+
+Existing names reused unchanged: `bulk_import_template_downloaded`, `bulk_import_completed` with `rows_clean` and `rows_rejected`, `pii_disclosure_shown` with `surface`. New names in `METRICS_PLAN.md` under the D-025 section, all row counts, never row contents.
+
+## I6. Constraints contract (testable assertions, Phase 5 verifies these)
+
+1. **`sm:` fires at 390px here.** Every full-width control in this feature uses `md:`, never `sm:`. Named specifically: the template download button, the upload drop zone, the primary commit CTA, the rejects download button, and the bucket header rows. **Assertion: no new class string in this feature matches `sm:(grid-cols|w-auto|flex-row|inline-flex)`**, same pin as G6.1.
+2. The review screen's row list is one column below `md:`. A four-column row table at 390px is the failure mode to avoid; below `md:` each row is a stacked block with its reason beneath it.
+3. Bucket sections and every row block carry `min-w-0`. A long instrument name must wrap, never widen the page.
+4. Every touch target on the review screen is at least 44px.
+5. **No parsed row reaches persistent storage.** Assertion by test: after a parse, `localStorage`, `sessionStorage`, and IndexedDB contain no value matching any fixture amount.
+6. **The service worker caches no `/api/*` request or response body**, pinned in the style of `sw-cache-policy.test.ts` and `pwa-registration.config.test.ts`.
+7. **The parser chunk is in the precache list**, pinned in the same test file, so the screen works offline.
+8. Per-cell validation messages name the column and the reason and contain no cell value. Assertion by test over the message builder with a fixture value that would be recognisable if echoed.
+9. Excel date serials are formatted from local date parts. Assertion: a serial for 1 January under an IST offset produces 1 January, not 31 December. `toISOString()` appears nowhere in the parser.
+10. Lakh grouping parses. Shorthand is rejected with a message, never guessed.
+11. `POST /api/holdings-batch` rejects a body carrying any plaintext field. The array element schema is `memberScopedCreateSchema` and it is `.strict()`.
+12. A batch that would exceed the ledger row cap inserts zero rows.
+
+## I7. Implementation cost flags
+
+- SheetJS must be pinned to the vendor tarball URL, not the frozen npm registry copy, and loaded by dynamic import so the main bundle and the 2s load target are untouched. This is a build-config change, not just a dependency add.
+- Requirements 6 and 7 above pull opposite directions through the same vite-plugin-pwa config and must be done in one pass with one test file covering both.
+- The cross-tool manual pass (real Excel, Google Sheets, LibreOffice) that D-025 calls out is not automatable and belongs in the Phase 3 plan as its own gate.
+
+## I8. Open questions
+
+1. **Whether the rejects file is a filtered copy of the original template or a flat list.** Specced as a filtered copy so the fix-and-re-upload loop uses the same file shape; a flat list is smaller but breaks the loop.
+2. **Whether a second upload replaces the review state or merges into it.** Specced as replace, because merge invents a reconciliation problem the user did not ask for.
+
+**Gate: not run.** This section is drafted for Gaurav's review. No stage is marked passed.

@@ -325,3 +325,102 @@ Leads with **the encryption exception decision**, with the Mint redesign as supp
 | Whether the AI proxy needs streaming | D-017 flagged that streaming could force persistence and break the "never at rest" claim | Phase 2 design of the proxy route |
 | Projection horizon presets vs free entry | Gaurav said "the horizon they pick"; whether that is a free number field or a small set of presets is a UI decision | Phase 2, `SPEC.md` |
 | Mobile width (390px) verification on redesigned screens | Existing open item, unchanged by this bundle, and the redesign enlarges it | Before promoting the redesign slice |
+
+---
+
+## Phase 0 Intake: AI Goal Planner and Counsel Layer (D-024, 2026-09-07)
+
+**Provenance. Read this before treating anything below as a Gaurav answer.** This is a Phase 0 intake-equivalent brief, not a transcript. Vittam's standing pattern is a live Phase 1 Solution Stage interview per feature (the pattern since D-018). Gaurav explicitly authorised skipping the live interview for this item and for the bulk-import item below, and substituting a synthesis of two agent runs: a Fable 5.1 product brainstorm and an OpenAI Codex (Sol, high effort) engineering critique, both run 2026-09-07 against the repository as it stands. Every resolution below is agent-derived. The open questions are the parts nobody has answered yet. Full decision text: `DECISIONS_LOG.md` D-024.
+
+This is a third Phase 0 pass, scoped to one item of the public-showcase backlog. The v1 read-back and the D-016 bundle read-back earlier in this document both still stand.
+
+### PRD Read-Back (this feature)
+
+- **Problem:** A household can now record holdings and branch strategy ledgers, but nothing helps them decide what a ledger should contain. There is no way to say "I want ₹X in Y years" and see a plausible allocation, and no way to get a second read on a ledger that has drifted. D-018 promoted projections from non-goal to goal and they are still not built, so even the deterministic half of this is missing.
+- **Target user:** A household that has completed onboarding and created at least one holding, now planning forward rather than recording the present. Same user as the D-016 bundle, one step further along.
+- **Success criteria (draft, made falsifiable below):** Households use the projection view; households at the goal-planner entry point produce a draft ledger they keep; AI usage stays inside its cap; nobody is shown a number the product cannot explain.
+- **Hard constraints:** ₹0/month infra everywhere except the Anthropic call, bounded by the D-016 cap of 2 plans per household and 2 edits per plan. D-014 client-side encryption is not renegotiated. "Education, not advice" is a regulatory line, not a style preference. No embedded-insurance product may ever be named. Vercel routes only single-segment `/api/*` paths, so the proxy is `/api/ai?kind=goal`, never `/api/ai/goal`.
+- **Explicit non-goals (this feature):** No chat interface. No autonomous execution: every AI output is Apply or Dismiss. No streaming (it would reopen D-017's retention question). No tune/edit flow, no multiple goals per ledger, no step-up SIP, no tax-adjusted returns, no Monte Carlo, no per-user caps. No arithmetic performed by the model.
+
+### Falsifiable success criteria
+
+| # | Draft criterion | Falsifiable rewrite | Status |
+|---|---|---|---|
+| 1 | "Projections are useful" | 35% of households with 2+ holdings will open the projection view on at least one ledger within 60 days of launch | Falsifiable. Conservative first read, no prior usage data, same reasoning as D-006 |
+| 2 | "The goal planner produces something people keep" | 40% of goal-planner drafts created will still exist as a ledger 7 days after creation | Falsifiable. Retention, not creation, because creating a draft costs the user nothing |
+| 3 | "Counsel cards get acted on" | 25% of households shown a counsel card will Apply at least one suggestion within 30 days | Falsifiable |
+| 4 | "AI stays inside its cap" | Fewer than 5% of households exhaust both the 2-plan and 2-edit caps in the first 90 days | Falsifiable. Capacity check, not a value metric. Carried forward unchanged from the D-016 bundle's criterion 3 |
+| 5 | "The ₹0 ceiling holds" | The global monthly circuit breaker is never tripped in the first 90 days, and if it is, the AI layer degrades to disabled with a soft message rather than incurring spend | Falsifiable, and it is the enforcement mechanism as well as the metric |
+| 6 | "Users can audit the numbers" | Not falsifiable as an analytics event. Rewritten as a build gate: every number shown by the goal planner is traceable through the "See the maths" panel to the deterministic engine, verified by test, and no number originates from the model | Flagged as a **build gate**, not a growth metric |
+
+### Ambiguities and unstated assumptions
+
+1. **The `goals` table is plaintext and cannot ship as-is under D-014.** Proposed resolution is to move goal data inside the ledger's existing encrypted envelope rather than give it a table of its own. Not confirmed.
+2. **The projection engine is a prerequisite, not a sibling.** D-018 scoped projections as its own goal and they were never built. The AI layer has no numbers to frame without them. This ordering is assumed throughout and has not been put to Gaurav in these terms.
+3. **Only 6 of 30 instruments carry real seeded rates.** The other 24 need a user-editable long-run assumption. Whether those defaults are shipped as opinionated numbers or left blank until the user fills them is undecided, and it is a regulatory-tone question as much as a UX one.
+4. **Prompt caching at the Anthropic layer is contested between the two agents.** Cost against retention surface. See D-024 open question 2.
+5. **The Anthropic API key remains the reuse-or-mint question D-018 left open.** See D-024 open question 1.
+6. **D-017's "never at rest" claim is factually overstated** and needs a `/privacy` and `/why` correction before this ships. The exact locations and the required wording are in D-024, section (a). The copy itself is deliberately not written yet.
+7. **Cap counters are currently specced but their migration state is unverified.** `ai_plans_created` is in the D-019 data model addition; `ai_edits_used` needs checking against the actual database via `npm run db:probe`, not against the migrations journal (the 2026-08-04 lesson).
+8. **Reservation release on failure is undesigned.** The cap must be reserved atomically before the call. Whether a failed Anthropic call returns the reservation to the household, or is simply consumed, is a product question with a cost consequence.
+9. **The circuit breaker is a new global row with no owner.** Nobody has said who resets it, or whether it resets on a calendar month boundary or a rolling window.
+
+### Prior Art and Steal List
+
+1. **Boldin's goal-driven plan builder.** State a target and a date, get a plan you can then edit by hand. Steal: the goal is the entry point, the plan is the artifact, and editing the plan never re-invokes the goal engine. That separation is what keeps the cap counting only AI actions (D-017 item 2).
+2. **Copilot Money and Cleo suggestion cards.** Proposal, reasoning inline, Apply or Dismiss, never a silent change. Already the standing rule here since D-017 item 5. Steal: on-demand rather than proactive, which this decision adds on cost grounds rather than UX grounds.
+3. **Wealthfront's Path.** Shows the assumption set on the same screen as the projection, so the number and the reason it is that number never separate. Steal: this is the "See the maths" panel, and it is the answer to criterion 6.
+4. **Monarch Money's editable return assumptions.** Per asset class, user-overridable, with the default visible rather than hidden. Steal: exactly the shape needed for the 24 instruments with no seeded rate.
+5. **GitHub Copilot's structured suggestion boundary.** The model proposes inside a schema the host controls, so the host, not the model, decides what is expressible. Steal: the slug enum is what mechanically enforces the no-product-names and no-embedded-insurance constraints. The constraint lives in the schema, not in the prompt, because a prompt can be talked out of it.
+
+### Gate status
+
+**Not approved. No gate has been passed.** This brief and D-024 exist so Gaurav can answer the three open questions in D-024 and the nine ambiguities above. Phase 2 design has not started and must not start until he does. No application code has been written.
+
+---
+
+## Phase 0 Intake: Bulk Holdings Import from Excel (D-025, 2026-09-07)
+
+**Provenance:** identical to the section above. Agent-brainstormed synthesis (Fable 5.1 product brainstorm plus OpenAI Codex Sol high-effort engineering critique, both 2026-09-07), substituted for the live Phase 1 interview with Gaurav's explicit authorisation. Not a transcript. Full decision text: `DECISIONS_LOG.md` D-025.
+
+### PRD Read-Back (this feature)
+
+- **Problem:** Holdings are entered one at a time through a form. A household with a real portfolio (Gaurav's own is 7 funds across 3 members before counting gold, SSY, and a LIC policy) faces a long, dull, error-prone session before the app can tell them anything. The empty-portfolio state is the product's hardest moment and manual entry is the only way out of it.
+- **Target user:** A household past onboarding with more holdings to record than patience for a form. Also the returning user adding a batch after a quarterly review.
+- **Success criteria (draft, made falsifiable below):** Households download the template and come back with it filled; the review screen resolves problems rather than dumping the file; imported rows are correct; no plaintext row ever escapes the browser to a place it was not meant to go.
+- **Hard constraints:** ₹0/month infra, so no hosted parsing service. D-014 encryption holds: rows are sealed in the browser, the server stores ciphertext only. The template carries member names in plaintext and that exposure is already accepted and disclosed (D-016 item 3, D-017 item 9). Vercel single-segment routing means `/api/holdings-batch`, never `/api/holdings/batch`. `MAX_LEDGER_HOLDINGS` caps a ledger. The 2s load target means the parser is a lazy dynamic import, never main-bundle.
+- **Explicit non-goals (this feature):** No export in v1 (it is its own encryption-boundary decision). No foreign CSVs or bank statements. No free-text instrument entry. No clipboard import path. No shorthand amount parsing ("1.5L" is rejected, not guessed). No auto-resolution of a near-miss instrument name.
+
+### Falsifiable success criteria
+
+| # | Draft criterion | Falsifiable rewrite | Status |
+|---|---|---|---|
+| 1 | "Bulk import is used" | 15% of households with 5+ manually-entered holdings will complete a bulk import within 60 days of launch | Falsifiable. Carried forward unchanged from the D-016 bundle's criterion 4 so the two do not drift |
+| 2 | "The template is usable without help" | 60% of households that fire `bulk_import_template_downloaded` will fire `bulk_import_completed` within 7 days | Falsifiable. This is the real usability measure: the gap between download and commit is where a bad template shows up |
+| 3 | "The review screen resolves rather than blocks" | Of imports reaching the review screen, 80% commit at least one row | Falsifiable. Partial commit is the default, so a file with problems should still produce value |
+| 4 | "Rows are parsed correctly" | Not falsifiable from analytics: a wrongly parsed amount looks like a successful import. Rewritten as a build gate: the date-serial IST trap and the lakh-grouping trap each have a failing test written first, plus one manual cross-tool pass (a file saved from real Excel, Google Sheets, and LibreOffice) before promotion | Flagged as a **build gate**. See the verification-gap note in D-025 |
+| 5 | "No plaintext leaks" | Not falsifiable from analytics. Rewritten as a build gate: tests pin that the service worker caches neither the import screen's row data nor any `/api/*` body, that the parser chunk is in the precache list, and that Sentry and PostHog carry no row values | Flagged as a **build gate**. Every item is a named hard requirement in D-025 |
+
+### Ambiguities and unstated assumptions
+
+1. **Batch endpoint or serial per-row calls.** The brainstorm assumed a batch endpoint; Codex agreed technically but flagged it as a real scope increase Gaurav should confirm. This changes the size of the Phase 3 plan. A recommendation with reasoning is on record in D-025 open question 1, and it is a recommendation, not a decision.
+2. **Dropdown validation, yes or no.** The highest-leverage open question in this feature. It selects the library (ExcelJS if yes, SheetJS if no) and it changes the template design. D-025 open question 2.
+3. **The two agents disagree on the library outright** (SheetJS against `read-excel-file`), for reasons that are on record and not reconciled. D-025 open question 3.
+4. **Typical import size is unknown.** Tens of rows and hundreds of rows imply different batching, concurrency, and progress-UI answers. Nobody has a number, because nobody has done this yet.
+5. **Duplicate detection has no defined rule.** "Possible duplicate" is a review-screen bucket in the design with no stated matching criterion (same instrument and same member? same amount too? within what window?).
+6. **Reserved but unstated:** whether an import can target a non-baseline ledger at all, or only Current. The design says the active ledger tab receives it, which implies any ledger, but that has not been confirmed against the D-023 ruling that add-from-library writes to Current only.
+7. **The failed-rows download file is a second plaintext artifact** leaving the encrypted boundary, on the same footing as the template. It plausibly falls under the D-017 item 9 disclosure, but that ruling names the template specifically, not this file.
+8. **The template drifts if the instrument library changes.** Nothing yet says whether a template downloaded before a library change is rejected, warned about, or silently accepted on upload. The D-017 item 6 drift ruling covers ledgers, not templates.
+
+### Prior Art and Steal List
+
+1. **Airtable and Notion CSV import.** Column-mapping preview, per-row flags, fix or skip before anything is written. Steal: row-level accept and reject rather than a whole-file pass or fail. Already named in the D-016 bundle's steal list and it is still the closest match.
+2. **Bank and HR bulk-upload templates.** Locked headers, prefilled rows, validation generated from the live system rather than hand-maintained. Steal: generate the template from the same instrument table Explore reads, so it cannot drift from the library. Note the D-016 bundle's steal list also recommended dropdowns here, and D-025 open question 2 is exactly whether to take that half of it.
+3. **Stripe's CSV importer.** Errors are grouped by cause with a plain-language reason and a downloadable failures file, so the retry loop is short. Steal: the failures file, which is the mechanism that makes partial commit actually usable rather than a dead end.
+4. **Google Sheets import dialog.** Never guesses at an ambiguous format, asks. Steal: the "1.5L" rejection. A clear refusal about money beats a plausible wrong guess.
+5. **1Password and Bitwarden vault import.** Parse client-side, encrypt client-side, never let the parsed intermediate touch disk. Steal: the entire memory-only handling rule in D-025 decision 5, which is the closest existing product to this app's constraint set.
+
+### Gate status
+
+**Not approved. No gate has been passed.** Three open questions in D-025 need Gaurav's answer, and eight ambiguities above need resolving, before Phase 2 design can lock the template shape or the endpoint shape. No application code has been written.
+
