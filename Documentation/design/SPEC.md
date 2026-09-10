@@ -296,15 +296,34 @@ Response on a provider or proxy failure, `502`:
 
 `attemptCounted` is always `true` and is in the shape deliberately, because a failed call does not release its reservation (`DATA_MODEL.md`, `ai_call_reservations`) and the UI has to say so.
 
+Response when no provider is configured, `503`:
+
+```
+{ status: "failed", reason: "provider_error", attemptCounted: false }
+```
+
+**This is the one case where `attemptCounted` is `false`**, and it is why the check sits at step 2.5 below rather than being folded into the provider call at step 5. A deploy with a missing or broken key would otherwise reserve, spend one of a household's two plans, and only then discover that no call was ever possible. Nothing is reserved and no counter moves.
+
+Response on a replayed gesture, `409`:
+
+```
+{ status: "duplicate", attemptCounted: true, usage: { ... } }
+```
+
+Distinguished from a cap by `status`, not by the code. §G6.8 requires that a second POST with the same `idempotencyKey` makes no second provider call; this is the shape of that answer. The first call's suggestion is deliberately **not** replayable, because cards are never persisted (`DATA_MODEL.md`: the reservation row records that a call happened, never what it said), so the honest answer is that the gesture is already spent rather than a re-served suggestion.
+
 **Route behaviour, in order, none of it optional:**
 
 1. Auth first. Session resolved via `server/lib/auth.ts` before the body is read at all.
 2. Body size and shape limits before parse. Strict Zod, unknown keys rejected, same discipline as `server/lib/envelope.ts`.
-3. Insert the `ai_call_reservations` row. Unique `(household_id, idempotency_key)` absorbs double-taps and client retries; a conflict returns the original outcome, not a second call.
-4. Run the three conditional counter UPDATEs. Zero rows affected on any of them returns `409` and the reservation is marked `failed`.
+2.5. **Provider configured?** If not, `503` with `attemptCounted: false`, before anything is reserved. Placed after auth and shape so it changes no ordering the cost control depends on, and before the reservation so a misconfigured deploy cannot spend a cap on an impossible call.
+3. Insert the `ai_call_reservations` row. Unique `(household_id, idempotency_key)` absorbs double-taps and client retries; a conflict returns the original outcome as `409 duplicate`, not a second call.
+4. Run the three conditional counter UPDATEs. Zero rows affected on any of them returns `409` and the reservation is marked `failed`. **Per-entity cap first, global breaker second** — see `server/lib/ai-counters.ts` for the ordering trade-off and its documented cost.
 5. Only then call Anthropic. `claude-sonnet-5` (D-018 §5), structured output, no prompt caching, no retries, no queue.
 6. Validate the model's output against the allowlist schema. A slug outside the library enum invalidates the whole response (`invalid_output`), it is not filtered out silently.
 7. Relay. Write nothing to Neon beyond the reservation status, log no request or response body, no Sentry body capture, `Cache-Control: no-store`.
+
+**Steps 2.5 and the `duplicate` response were added during Chunk A's build (2026-09-10), not in the original spec.** Both are recorded here so the document matches the shipped code. Neither has been through a Blueprint gate; they are build-time corrections in the same class as §8b's, and are flagged for review rather than presented as approved design.
 
 **The browser CSP is not touched.** The browser never calls Anthropic; the proxy does. Adding the Anthropic host to the browser CSP would be a mistake of exactly the class D-024's ship-traps list names.
 
