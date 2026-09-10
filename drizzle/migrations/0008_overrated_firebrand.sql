@@ -1,0 +1,1 @@
+ALTER TABLE "households" ADD COLUMN "ai_plans_created" integer DEFAULT 0 NOT NULL;

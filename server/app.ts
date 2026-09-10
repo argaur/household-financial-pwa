@@ -10,6 +10,7 @@ import { instrumentsRoutes } from './routes/instruments.js'
 import { holdingsRoutes } from './routes/holdings.js'
 import { ledgersRoutes } from './routes/ledgers.js'
 import { projectionSettingsRoutes } from './routes/projection-settings.js'
+import { aiSuggestionsRoutes } from './routes/ai-suggestions.js'
 import { protectionRoutes } from './routes/protection.js'
 import { clerkWebhookRoutes } from './routes/clerk-webhook.js'
 
@@ -66,6 +67,8 @@ app.route('/holdings', holdingsRoutes)
 app.route('/ledgers', ledgersRoutes)
 // Single path segment — see server/routes/projection-settings.ts for why.
 app.route('/projection-settings', projectionSettingsRoutes)
+// Single path segment — see server/routes/ai-suggestions.ts for why.
+app.route('/ai-suggestions', aiSuggestionsRoutes)
 app.route('/protection', protectionRoutes)
 app.route('/clerk-webhook', clerkWebhookRoutes)
 

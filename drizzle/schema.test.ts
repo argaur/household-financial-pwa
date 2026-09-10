@@ -12,7 +12,13 @@ import {
   goals,
   ledgers,
   ledgerProjectionSettings,
+  aiCallReservations,
+  aiGlobalUsage,
+  aiCallKindEnum,
+  aiCallCapTypeEnum,
+  aiCallStatusEnum,
 } from './schema'
+import { AI_GLOBAL_MONTHLY_CALL_CAP } from '../server/lib/ai-usage.js'
 
 /**
  * Structural regression guard for the additive encryption-prep migration.
@@ -575,5 +581,240 @@ describe('drizzle/migrations/0006 — instrument rate columns + ledger_projectio
     expect(sql).toMatch(/CREATE\s+TABLE\s+"?LEDGER_PROJECTION_SETTINGS"?/)
     expect(sql).toMatch(/REFERENCES\s+"?(PUBLIC"?\."?)?LEDGERS"?\("?ID"?\)\s+ON\s+DELETE\s+CASCADE/)
     expect(sql).toMatch(/CREATE\s+UNIQUE\s+INDEX.*LEDGER_PROJECTION_SETTINGS_LEDGER_ASSET_CLASS_IDX/)
+  })
+})
+
+/**
+ * R1 (D-024/D-025 AI import, Chunk R) — Migration B: `ai_call_reservations`
+ * and `ai_global_usage`. Both plaintext, counters-only, no ciphertext/iv/alg
+ * envelope by design (DATA_MODEL.md's `ai_call_reservations` and
+ * `ai_global_usage` sections). Built and proven before any Anthropic call
+ * exists in the codebase — this step only asserts shape, never wires cap
+ * enforcement (that's R2-R4).
+ */
+describe('drizzle/schema.ts — ai_call_reservations table (R1)', () => {
+  it('maps to the ai_call_reservations table', () => {
+    expect(getTableName(aiCallReservations)).toBe('ai_call_reservations')
+  })
+
+  it('has exactly the expected columns', () => {
+    const columns = getTableColumns(aiCallReservations)
+    const expectedKeys = [
+      'id',
+      'householdId',
+      'ledgerId',
+      'idempotencyKey',
+      'kind',
+      'capType',
+      'status',
+      'createdAt',
+    ].sort()
+    expect(Object.keys(columns).sort()).toEqual(expectedKeys)
+  })
+
+  it('has id as a defaulted primary key', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.id.primary).toBe(true)
+    expect(columns.id.notNull).toBe(true)
+    expect(columns.id.hasDefault).toBe(true)
+  })
+
+  it('has householdId as NOT NULL, cascading to households.id', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.householdId).toBeDefined()
+    expect(columns.householdId.notNull).toBe(true)
+  })
+
+  it('has ledgerId as nullable — null for a goal_plan call, set for a counsel call', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.ledgerId).toBeDefined()
+    expect(columns.ledgerId.notNull).toBe(false)
+  })
+
+  it('has idempotencyKey as NOT NULL text', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.idempotencyKey).toBeDefined()
+    expect(columns.idempotencyKey.notNull).toBe(true)
+    expect(columns.idempotencyKey.dataType).toBe('string')
+  })
+
+  it('has kind restricted to exactly goal_plan and counsel', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.kind.notNull).toBe(true)
+    expect(columns.kind.enumValues).toEqual(['goal_plan', 'counsel'])
+    expect(aiCallKindEnum).toEqual(['goal_plan', 'counsel'])
+  })
+
+  it('has capType restricted to exactly plans and edits', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.capType.notNull).toBe(true)
+    expect(columns.capType.enumValues).toEqual(['plans', 'edits'])
+    expect(aiCallCapTypeEnum).toEqual(['plans', 'edits'])
+  })
+
+  it('has status restricted to exactly reserved, completed, failed, defaulting to reserved', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.status.notNull).toBe(true)
+    expect(columns.status.enumValues).toEqual(['reserved', 'completed', 'failed'])
+    expect(columns.status.hasDefault).toBe(true)
+    expect(columns.status.default).toBe('reserved')
+    expect(aiCallStatusEnum).toEqual(['reserved', 'completed', 'failed'])
+  })
+
+  it('has createdAt as NOT NULL with a default', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.createdAt.notNull).toBe(true)
+    expect(columns.createdAt.hasDefault).toBe(true)
+  })
+
+  it('has no ciphertext/iv/alg/version envelope — plaintext counters, not household data', () => {
+    const columns = getTableColumns(aiCallReservations)
+    expect(columns.ciphertext).toBeUndefined()
+    expect(columns.iv).toBeUndefined()
+    expect(columns.alg).toBeUndefined()
+    expect(columns.version).toBeUndefined()
+  })
+})
+
+describe('drizzle/schema.ts — ai_global_usage table (R1)', () => {
+  it('maps to the ai_global_usage table', () => {
+    expect(getTableName(aiGlobalUsage)).toBe('ai_global_usage')
+  })
+
+  it('has exactly the expected columns, with period as the primary key', () => {
+    const columns = getTableColumns(aiGlobalUsage)
+    const expectedKeys = ['period', 'callsUsed', 'capCalls', 'updatedAt'].sort()
+    expect(Object.keys(columns).sort()).toEqual(expectedKeys)
+
+    expect(columns.period.primary).toBe(true)
+    expect(columns.period.notNull).toBe(true)
+    expect(columns.period.dataType).toBe('string')
+  })
+
+  it('has callsUsed as NOT NULL int, defaulting to 0', () => {
+    const columns = getTableColumns(aiGlobalUsage)
+    expect(columns.callsUsed.notNull).toBe(true)
+    expect(columns.callsUsed.hasDefault).toBe(true)
+    expect(columns.callsUsed.default).toBe(0)
+  })
+
+  it('has capCalls as NOT NULL int, no schema-level default — seeded per row from the server constant', () => {
+    const columns = getTableColumns(aiGlobalUsage)
+    expect(columns.capCalls.notNull).toBe(true)
+  })
+
+  it('has updatedAt as NOT NULL with a default', () => {
+    const columns = getTableColumns(aiGlobalUsage)
+    expect(columns.updatedAt.notNull).toBe(true)
+    expect(columns.updatedAt.hasDefault).toBe(true)
+  })
+
+  it('has no ciphertext/iv/alg/version envelope', () => {
+    const columns = getTableColumns(aiGlobalUsage)
+    expect(columns.ciphertext).toBeUndefined()
+    expect(columns.iv).toBeUndefined()
+    expect(columns.alg).toBeUndefined()
+    expect(columns.version).toBeUndefined()
+  })
+})
+
+describe('drizzle/schema.ts — the two per-entity cap counters (R3)', () => {
+  /**
+   * `ai_edits_used` landed with the D-016 bundle in migration 0003.
+   * `ai_plans_created` never did — it was specced in the D-019 data model and
+   * carried as unverified in `SOLUTION_BRIEF.md` open item 7, and R3 found it
+   * genuinely absent from both the schema and every migration. Pinned here
+   * because the conditional UPDATE that enforces the plans cap is unwritable
+   * without it, and a missing counter column fails as an unenforced cap rather
+   * than as an error.
+   */
+  it('households has ai_plans_created as a NOT NULL int defaulting to 0', () => {
+    const columns = getTableColumns(households)
+    expect(columns.aiPlansCreated).toBeDefined()
+    expect(columns.aiPlansCreated.name).toBe('ai_plans_created')
+    expect(columns.aiPlansCreated.notNull).toBe(true)
+    expect(columns.aiPlansCreated.hasDefault).toBe(true)
+    expect(columns.aiPlansCreated.default).toBe(0)
+  })
+
+  it('ledgers has ai_edits_used as a NOT NULL int defaulting to 0', () => {
+    const columns = getTableColumns(ledgers)
+    expect(columns.aiEditsUsed).toBeDefined()
+    expect(columns.aiEditsUsed.name).toBe('ai_edits_used')
+    expect(columns.aiEditsUsed.notNull).toBe(true)
+    expect(columns.aiEditsUsed.hasDefault).toBe(true)
+    expect(columns.aiEditsUsed.default).toBe(0)
+  })
+
+  it('both counters are plaintext, outside the encryption envelope', () => {
+    // They count how many times something happened, never what a household
+    // owns — the "counters and structure" category of DATA_MODEL.md's field
+    // classification, which has no third option for a column like this.
+    expect(getTableColumns(households).aiPlansCreated.dataType).toBe('number')
+    expect(getTableColumns(ledgers).aiEditsUsed.dataType).toBe('number')
+  })
+})
+
+describe('server/lib/ai-usage.ts — global monthly cap constant (R1)', () => {
+  it('is 50, resolved 2026-09-07', () => {
+    expect(AI_GLOBAL_MONTHLY_CALL_CAP).toBe(50)
+  })
+})
+
+describe('drizzle/migrations/0007 — Migration B, additive only (R1)', () => {
+  const migrationsDir = path.resolve(__dirname, 'migrations')
+
+  function migration0007File(): string {
+    const files = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql') && f.startsWith('0007'))
+      .sort()
+    if (files.length === 0) {
+      throw new Error('No migration SQL file starting with "0007" found — run `npm run db:generate` first.')
+    }
+    return files[0]
+  }
+
+  it('contains no DROP TABLE, DROP COLUMN, SET NOT NULL, RENAME, or TRUNCATE statements', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0007File()), 'utf-8').toUpperCase()
+
+    expect(sql).not.toMatch(/DROP\s+TABLE/)
+    expect(sql).not.toMatch(/DROP\s+COLUMN/)
+    expect(sql).not.toMatch(/SET\s+NOT\s+NULL/)
+    expect(sql).not.toMatch(/RENAME/)
+    expect(sql).not.toMatch(/TRUNCATE/)
+  })
+
+  it('creates both new tables', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0007File()), 'utf-8').toUpperCase()
+
+    expect(sql).toMatch(/CREATE\s+TABLE\s+"?AI_CALL_RESERVATIONS"?/)
+    expect(sql).toMatch(/CREATE\s+TABLE\s+"?AI_GLOBAL_USAGE"?/)
+  })
+
+  it('creates a composite UNIQUE index on ai_call_reservations(household_id, idempotency_key)', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0007File()), 'utf-8').toUpperCase()
+
+    const uniqueIdxMatch = sql.match(
+      /CREATE\s+UNIQUE\s+INDEX\s+"?AI_CALL_RESERVATIONS_HOUSEHOLD_IDEMPOTENCY_IDX"?\s+ON\s+"?AI_CALL_RESERVATIONS"?[^;]*\("?HOUSEHOLD_ID"?,\s*"?IDEMPOTENCY_KEY"?\)/,
+    )
+    expect(uniqueIdxMatch).not.toBeNull()
+  })
+
+  it('adds both ON DELETE CASCADE edges — household_id and ledger_id', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0007File()), 'utf-8').toUpperCase()
+
+    expect(sql).toMatch(
+      /"?AI_CALL_RESERVATIONS"?\s+ADD\s+CONSTRAINT[^;]*FOREIGN\s+KEY\s+\("?HOUSEHOLD_ID"?\)\s+REFERENCES\s+"?(PUBLIC"?\."?)?HOUSEHOLDS"?\("?ID"?\)\s+ON\s+DELETE\s+CASCADE/,
+    )
+    expect(sql).toMatch(
+      /"?AI_CALL_RESERVATIONS"?\s+ADD\s+CONSTRAINT[^;]*FOREIGN\s+KEY\s+\("?LEDGER_ID"?\)\s+REFERENCES\s+"?(PUBLIC"?\."?)?LEDGERS"?\("?ID"?\)\s+ON\s+DELETE\s+CASCADE/,
+    )
+  })
+
+  it('makes ai_global_usage.period the primary key', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, migration0007File()), 'utf-8').toUpperCase()
+
+    expect(sql).toMatch(/"?PERIOD"?\s+TEXT\s+PRIMARY\s+KEY/)
   })
 })
