@@ -51,7 +51,7 @@
 import { PgDialect } from 'drizzle-orm/pg-core'
 // Imported as a value, not a type: `applySet` needs `instanceof SQL` to tell an
 // increment expression from a literal assignment.
-import { SQL } from 'drizzle-orm'
+import { SQL, getTableName } from 'drizzle-orm'
 import {
   aiCallReservations,
   aiGlobalUsage,
@@ -87,11 +87,30 @@ export interface AiGlobalUsageRow {
 export interface AiHouseholdRow {
   id: string
   aiPlansCreated: number
+  /**
+   * The tenancy column. Added for A3, whose route resolves the household from
+   * the session through `getHouseholdForOwner` rather than being handed one.
+   * Optional so every Chunk R test that seeds a household without it still
+   * compiles; a row without it simply matches no owner lookup.
+   */
+  ownerUserId?: string
 }
 
 export interface AiLedgerRow {
   id: string
   aiEditsUsed: number
+  /** Tenancy, for the same reason as `ownerUserId` above. */
+  householdId?: string
+  isBaseline?: boolean
+}
+
+/** One write this fake actually applied, so "no other table is touched" is checkable. */
+export interface AiDbFakeWrite {
+  operation: 'insert' | 'update'
+  /** SQL table name, read off the Drizzle table object. */
+  table: string
+  /** Column names the statement set. Empty for an insert. */
+  columns: string[]
 }
 
 /** Counters the tests assert on, so "no second write" is a number, not a vibe. */
@@ -102,6 +121,13 @@ export interface AiDbFakeCounts {
   conflicts: number
   /** Conditional counter UPDATEs issued, whether or not they affected a row. */
   updates: number
+  /**
+   * Every insert and update in order. A5 asserts against this that the proxy
+   * writes nothing to Neon beyond the reservation row, its status, and the
+   * cost-control counters — so a future change that stashed a request or a
+   * response anywhere would show up here as an extra table or an extra column.
+   */
+  writes: AiDbFakeWrite[]
 }
 
 export interface AiDbFake {
@@ -135,11 +161,14 @@ const GLOBAL_USAGE_FIELDS: Record<string, keyof AiGlobalUsageRow> = {
 const HOUSEHOLD_FIELDS: Record<string, keyof AiHouseholdRow> = {
   id: 'id',
   ai_plans_created: 'aiPlansCreated',
+  owner_user_id: 'ownerUserId',
 }
 
 const LEDGER_FIELDS: Record<string, keyof AiLedgerRow> = {
   id: 'id',
   ai_edits_used: 'aiEditsUsed',
+  household_id: 'householdId',
+  is_baseline: 'isBaseline',
 }
 
 const dialect = new PgDialect()
@@ -312,7 +341,16 @@ export function createAiDbFake(seed: {
   const globalUsage: AiGlobalUsageRow[] = [...(seed.globalUsage ?? [])]
   const households: AiHouseholdRow[] = (seed.households ?? []).map((row) => ({ ...row }))
   const ledgers: AiLedgerRow[] = (seed.ledgers ?? []).map((row) => ({ ...row }))
-  const counts: AiDbFakeCounts = { selects: 0, inserts: 0, conflicts: 0, updates: 0 }
+  const counts: AiDbFakeCounts = { selects: 0, inserts: 0, conflicts: 0, updates: 0, writes: [] }
+
+  /**
+   * Recorded for every write the fake applies, conflicts included, so A5's
+   * "nothing reaches Neon beyond the reservation status" is asserted against
+   * what the statement actually did rather than against a count.
+   */
+  function recordWrite(operation: 'insert' | 'update', table: unknown, columns: string[] = []): void {
+    counts.writes.push({ operation, table: getTableName(table as never), columns })
+  }
   let idCounter = 0
   let clock = 0
 
@@ -396,6 +434,7 @@ export function createAiDbFake(seed: {
             const state = tableState(table)
             const predicates = decodePredicates(condition)
             counts.updates += 1
+            recordWrite('update', table, Object.keys(values))
 
             const affected = state.rows.filter((row) =>
               satisfies(row as never, predicates, state.fields as never),
@@ -440,6 +479,7 @@ export function createAiDbFake(seed: {
                 }
                 globalUsage.push(row)
                 counts.inserts += 1
+                recordWrite('insert', aiGlobalUsage)
                 return roundTrip([row] as unknown[])
               },
             }),
@@ -487,6 +527,7 @@ export function createAiDbFake(seed: {
 
                 reservations.push(candidate)
                 counts.inserts += 1
+                recordWrite('insert', aiCallReservations)
                 return roundTrip([candidate] as unknown[])
               },
             }),

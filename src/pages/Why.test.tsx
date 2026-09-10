@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Why } from './Why'
 import { WHY_SECTIONS, WHY_REPO_URL } from '@/lib/why-decisions'
+import { AI_REQUEST_LIMIT } from '@/lib/privacy-note'
 import { expectNoAxeViolations } from '@/test/axe'
 
 const track = vi.fn()
@@ -68,5 +69,20 @@ describe('Why', () => {
   it('has zero axe violations', async () => {
     const { container } = renderWhy()
     await expectNoAxeViolations(container)
+  })
+
+  // D-018 Q7 / D-024: the AI-request exception must appear here in the same
+  // words as on /privacy, sourced from the same shared constant so the two
+  // cannot drift apart.
+  it('states the AI-request exception, sourced from the shared privacy-note constant', () => {
+    renderWhy()
+    expect(screen.getByText(AI_REQUEST_LIMIT.body)).toBeInTheDocument()
+  })
+
+  it('never claims AI-request data is retained nowhere, or is "never at rest" with no provider carve-out', () => {
+    renderWhy()
+    expect(screen.queryByText(/never (be )?retained/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/never at rest/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not (be )?retained anywhere/i)).not.toBeInTheDocument()
   })
 })

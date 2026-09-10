@@ -52,3 +52,19 @@ export const LOST_PASSPHRASE = {
   body:
     'Your recovery code is the second way in, and it is shown once at setup. If both are gone, your data is gone. We hold no copy of either, so there is nothing for us to reset. This is the cost of the claim at the top of this page, and it is the reason the Profile screen offers a download of everything in readable form. Take one.',
 } as const
+
+/**
+ * D-024. A second, narrower exception to the claim at the top of this page:
+ * a goal plan or portfolio review sends part of your plan to Anthropic. This
+ * has to carry the same two-part honesty as PRIVACY_CLAIM.limit above, not
+ * a softer version of it: (1) Vittam's database does not store the
+ * plaintext of that request, and (2) Anthropic, which receives it, may
+ * still retain it under its own policy. Dropping either half turns this
+ * into a false claim, not a shorter one. Rendered identically on /privacy
+ * and /why (D-018 Q7) — import this constant, never re-type the copy.
+ */
+export const AI_REQUEST_LIMIT = {
+  heading: 'If a request ever goes to Anthropic',
+  body:
+    "A goal plan or portfolio review sends part of your plan to Anthropic so it can generate a suggestion. Vittam's database does not store the plaintext of that request. Anthropic receives it and may retain it for a period under its own API policy.",
+} as const

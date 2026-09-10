@@ -114,6 +114,20 @@ export interface EventMap {
   // is not on FORBIDDEN_ANALYTICS_PROPERTIES and is fine here
   // (METRICS_PLAN.md:203).
   projection_viewed: { horizon_years: number }
+  // D-024 Chunk A (goal planner / counsel suggestion cards). `target`
+  // distinguishes a suggestion shown against the protected Current ledger
+  // from one shown against a scratch ledger -- criterion 7 filters on
+  // `target = current` specifically. `kind` distinguishes a goal draft from
+  // a counsel review. Neither property, nor any other on these four events,
+  // may carry an allocation, an instrument, a rupee amount or a member --
+  // see the property-discipline note in METRICS_PLAN.md's D-016 section.
+  ai_suggestion_shown: { target: 'current' | 'ledger'; kind: 'counsel' | 'goal_plan' }
+  ai_suggestion_applied: { target: 'current' | 'ledger'; kind: 'counsel' | 'goal_plan' }
+  ai_suggestion_dismissed: { target: 'current' | 'ledger'; kind: 'counsel' | 'goal_plan' }
+  // `cap_type` is one of three distinct facts (AiCapNotice's own module doc):
+  // the household's plans cap, this ledger's edits cap, or the global
+  // monthly breaker. No count, no household id, no ledger id.
+  ai_cap_reached: { cap_type: 'plans' | 'edits' | 'global' }
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {

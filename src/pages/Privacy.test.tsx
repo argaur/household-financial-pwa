@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { expectNoAxeViolations } from '@/test/axe'
-import { WHAT_THE_SERVER_STILL_LEARNS, WHAT_IS_NOT_LEAKED } from '@/lib/privacy-note'
+import { WHAT_THE_SERVER_STILL_LEARNS, WHAT_IS_NOT_LEAKED, AI_REQUEST_LIMIT } from '@/lib/privacy-note'
 import { Privacy } from './Privacy'
 
 vi.mock('@/lib/analytics', () => ({ track: vi.fn() }))
@@ -67,5 +67,21 @@ describe('Privacy', () => {
   it('has zero axe violations', async () => {
     const { container } = renderPage()
     await expectNoAxeViolations(container)
+  })
+
+  // D-024: a request to Anthropic (goal plan, portfolio review) is a second,
+  // narrower exception to "we cannot read your data" — it must be published
+  // with the same two-part honesty as the encryption limit above: our
+  // database does not store it, AND the provider may retain it regardless.
+  it('states the AI-request exception with both halves: our database does not store it, and Anthropic may retain it', () => {
+    renderPage()
+    expect(screen.getByText(AI_REQUEST_LIMIT.body)).toBeInTheDocument()
+  })
+
+  it('never claims AI-request data is retained nowhere, or is "never at rest" with no provider carve-out', () => {
+    renderPage()
+    expect(screen.queryByText(/never (be )?retained/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/never at rest/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not (be )?retained anywhere/i)).not.toBeInTheDocument()
   })
 })

@@ -82,8 +82,20 @@ const CHUNK_E_FILES = [
   'src/pages/Portfolio.tsx',
 ]
 
-/** Chunk A: AI suggestion layer. Filled by plan step A10. */
-const CHUNK_A_FILES: string[] = []
+/**
+ * Chunk A: AI suggestion layer. Filled by plan step A10. SPEC.md §G6.1 names
+ * the goal-step form fields, the consent step's Continue button, the Apply
+ * and Dismiss pair, the horizon preset chips, and the rate-row grid — the
+ * last two already live in `src/components/projection-panel.tsx`, covered
+ * under CHUNK_E_FILES above. The goal-step form fields have no dedicated
+ * component yet (a later chunk builds the host that renders them); these
+ * three are the new Chunk A files that render markup today.
+ */
+const CHUNK_A_FILES: string[] = [
+  'src/components/ai-consent-step.tsx',
+  'src/components/ai-suggestion-card.tsx',
+  'src/components/ai-cap-notice.tsx',
+]
 
 /** Chunk I: bulk Excel import. Filled by plan step I15. */
 const CHUNK_I_FILES: string[] = []
@@ -112,6 +124,12 @@ const RESPONSIVE_ANCHORS: Record<string, string[]> = {
   'src/components/ui/dialog.tsx': ['md:flex-row', 'md:justify-end', 'md:space-x-2'],
   'src/components/ui/sheet.tsx': ['md:flex-row', 'md:justify-end', 'md:space-x-2'],
   'src/pages/Landing.tsx': ['md:flex-row'],
+  'src/components/ai-consent-step.tsx': ['md:w-auto'],
+  'src/components/ai-suggestion-card.tsx': ['md:flex-row', 'md:justify-end', 'md:w-auto'],
+  // ai-cap-notice.tsx renders markup but carries no md: class today (no
+  // responsive layout in it yet), so it has no anchor to name -- see the
+  // module doc: "Files that render no markup are deliberately absent from
+  // this map." It is covered by the assertion below regardless.
 }
 
 /**

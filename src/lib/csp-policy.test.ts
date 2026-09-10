@@ -151,6 +151,48 @@ describe('Content-Security-Policy', () => {
  * can sign in at all; these tests exist so it stays a host swap and never
  * becomes a relaxation that drifts back into production.
  */
+/**
+ * D-024 (AI goal planner/counsel). The browser never calls Anthropic --
+ * `server/routes/ai-suggestions.ts` does, from Vercel's own runtime, not the
+ * user's browser. Adding `api.anthropic.com` (or any Anthropic host) to a
+ * browser CSP directive is named explicitly in that route's own module doc as
+ * the mistake to avoid: it would widen the origin the browser is allowed to
+ * exfiltrate decrypted household data to, for a call the browser never makes.
+ *
+ * PIN, NOT A FIX: nothing is broken today -- no directive in either policy
+ * carries an Anthropic host right now. This only stops a future well-meant
+ * "the AI feature needs its own CSP entry" edit from adding one.
+ */
+describe('Content-Security-Policy — never widened for the AI proxy', () => {
+  const ANTHROPIC_HOST_FRAGMENT = 'anthropic.com'
+
+  it('carries no Anthropic host in any production directive', () => {
+    const d = cspDirectives()
+    for (const [directive, values] of d) {
+      for (const value of values) {
+        expect(
+          value.toLowerCase().includes(ANTHROPIC_HOST_FRAGMENT),
+          `production ${directive} carries an Anthropic host ("${value}"). The proxy route calls ` +
+            'Anthropic from the server, never the browser -- see server/routes/ai-suggestions.ts.',
+        ).toBe(false)
+      }
+    }
+  })
+
+  it('carries no Anthropic host in any preview directive', () => {
+    const d = previewCspDirectives()
+    for (const [directive, values] of d) {
+      for (const value of values) {
+        expect(
+          value.toLowerCase().includes(ANTHROPIC_HOST_FRAGMENT),
+          `preview ${directive} carries an Anthropic host ("${value}"). The proxy route calls ` +
+            'Anthropic from the server, never the browser -- see server/routes/ai-suggestions.ts.',
+        ).toBe(false)
+      }
+    }
+  })
+})
+
 describe('Content-Security-Policy — preview deployments', () => {
   const PRODUCTION_CLERK = 'https://clerk.finance.gauravg.dev'
   const PREVIEW_CLERK = 'https://*.clerk.accounts.dev'
