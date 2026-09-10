@@ -101,6 +101,13 @@ const CHUNK_A_FILES: string[] = [
 const CHUNK_I_FILES: string[] = []
 
 /**
+ * Chunk C: counsel cards, same proxy, second schema. C3's "Review this
+ * ledger" action is the only new file in this feature slice that renders
+ * markup — C4 (card reuse/telemetry) deliberately adds no new component.
+ */
+const CHUNK_C_FILES: string[] = ['src/components/review-ledger-action.tsx']
+
+/**
  * Footer/CTA stacking fix (2026-09-09, D-022/D-023 follow-up). Vendored shadcn
  * primitives and the landing hero were previously out of scope for this pin;
  * these three files are now the deliberately-scoped exception, fixed to `md:`.
@@ -111,7 +118,7 @@ const CHUNK_FOOTER_FILES = [
   'src/pages/Landing.tsx',
 ]
 
-const COVERED_FILES = [...CHUNK_E_FILES, ...CHUNK_A_FILES, ...CHUNK_I_FILES, ...CHUNK_FOOTER_FILES]
+const COVERED_FILES = [...CHUNK_E_FILES, ...CHUNK_A_FILES, ...CHUNK_I_FILES, ...CHUNK_C_FILES, ...CHUNK_FOOTER_FILES]
 
 /**
  * One `md:` class per markup file that is known to be there. If a path is
@@ -126,6 +133,7 @@ const RESPONSIVE_ANCHORS: Record<string, string[]> = {
   'src/pages/Landing.tsx': ['md:flex-row'],
   'src/components/ai-consent-step.tsx': ['md:w-auto'],
   'src/components/ai-suggestion-card.tsx': ['md:flex-row', 'md:justify-end', 'md:w-auto'],
+  'src/components/review-ledger-action.tsx': ['md:w-auto'],
   // ai-cap-notice.tsx renders markup but carries no md: class today (no
   // responsive layout in it yet), so it has no anchor to name -- see the
   // module doc: "Files that render no markup are deliberately absent from

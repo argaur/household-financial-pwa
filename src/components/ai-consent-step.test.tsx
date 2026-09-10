@@ -23,11 +23,13 @@ function Host({
   onOpenChange,
   onConfirm,
   remaining,
+  kind,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
   remaining: number
+  kind?: 'goal_plan' | 'counsel'
 }) {
   const [step, setStep] = useState<HostStep>('other')
 
@@ -52,7 +54,7 @@ function Host({
             </DialogFooter>
           </>
         ) : (
-          <AiConsentStep remaining={remaining} onConfirm={onConfirm} onCancel={() => onOpenChange(false)} />
+          <AiConsentStep remaining={remaining} kind={kind} onConfirm={onConfirm} onCancel={() => onOpenChange(false)} />
         )}
       </DialogContent>
     </Dialog>
@@ -64,7 +66,13 @@ function renderHost(props: Partial<React.ComponentProps<typeof Host>> = {}) {
   const onConfirm = props.onConfirm ?? vi.fn()
   const utils = render(
     <MemoryRouter>
-      <Host open={props.open ?? true} onOpenChange={onOpenChange} onConfirm={onConfirm} remaining={props.remaining ?? 3} />
+      <Host
+        open={props.open ?? true}
+        onOpenChange={onOpenChange}
+        onConfirm={onConfirm}
+        remaining={props.remaining ?? 3}
+        kind={props.kind}
+      />
     </MemoryRouter>,
   )
   return { ...utils, onOpenChange, onConfirm }
@@ -200,5 +208,29 @@ describe('AiConsentStep', () => {
     const text = screen.getByRole('dialog').textContent ?? ''
     expect(text).not.toContain('—')
     expect(text).not.toContain('–')
+  })
+
+  it('defaults to "plans" when no kind is given, so an existing caller is unaffected', () => {
+    renderHost({ remaining: 3 })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    expect(screen.getByTestId('ai-consent-counter-line')).toHaveTextContent(
+      'This uses one of your 3 remaining plans. It is counted when the request is sent, even if it fails.',
+    )
+  })
+
+  it('says "plans" for kind="goal_plan", explicitly', () => {
+    renderHost({ remaining: 3, kind: 'goal_plan' })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    expect(screen.getByTestId('ai-consent-counter-line')).toHaveTextContent('one of your 3 remaining plans')
+  })
+
+  it('says "reviews", not "plans", for kind="counsel" (D-024 Chunk C, the noun problem)', () => {
+    renderHost({ remaining: 2, kind: 'counsel' })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    const counterLine = screen.getByTestId('ai-consent-counter-line')
+    expect(counterLine).toHaveTextContent(
+      'This uses one of your 2 remaining reviews. It is counted when the request is sent, even if it fails.',
+    )
+    expect(counterLine).not.toHaveTextContent(/plans/)
   })
 })

@@ -188,7 +188,33 @@ export function createAiSuggestionsRoutes(deps: AiSuggestionsRouteDeps): Hono {
     if (!parsed.success) return c.json({ error: 'invalid_body' }, 400)
     const request = parsed.data
 
-    // ---- 2.5 Provider precondition, before anything is reserved ------------
+    // ---- 2.5 Counsel: ledgerId ownership, before anything is reserved ------
+    // D-024 Chunk C, steps C1 and C2. A goal_plan body carries no ledgerId and
+    // this branch is a no-op for it. Ownership follows the ledgers/holdings
+    // convention (server/lib/ledgers.ts), not projection-settings.ts's: a
+    // foreign or nonexistent ledger both answer 403 here, via the one
+    // household-scoped lookup, so a caller cannot tell "not yours" from
+    // "doesn't exist".
+    //
+    // The id carried forward is the one the *lookup* returned, never the one
+    // the request asked for. They are equal on the only path that reaches the
+    // reservation, and taking it from the verified row is what keeps them equal
+    // if this check is ever loosened: an ownership-verified ledger is the only
+    // thing a cap can be charged against.
+    //
+    // Null for goal_plan, and that is a fact about the domain rather than a
+    // default — the ledger a goal plan is about to produce does not exist yet,
+    // so there is no per-ledger counter to spend and the household's plans cap
+    // is the right one. `reserveAiCall` derives `cap_type` from `kind` alone;
+    // this only supplies the row the `edits` cap is charged against.
+    let counselLedgerId: string | null = null
+    if (request.kind === 'counsel') {
+      const ledger = await getLedgerForHousehold(deps.db, household.id, request.ledgerId)
+      if (!ledger) return c.json({ error: 'forbidden' }, 403)
+      counselLedgerId = ledger.id
+    }
+
+    // ---- 2.6 Provider precondition, before anything is reserved ------------
     // Not part of §G3's numbered order and deliberately placed here rather than
     // at step 5: a route with no provider will certainly fail, and failing
     // after the reservation would spend one of the household's two plans on a
@@ -202,7 +228,12 @@ export function createAiSuggestionsRoutes(deps: AiSuggestionsRouteDeps): Hono {
     // ---- 3 and 4. Reserve, then spend the counters -------------------------
     const outcome = await reserveAiCall(
       deps.db,
-      { householdId: household.id, idempotencyKey: request.idempotencyKey, kind: request.kind },
+      {
+        householdId: household.id,
+        idempotencyKey: request.idempotencyKey,
+        kind: request.kind,
+        ledgerId: counselLedgerId,
+      },
       { consumeCounters },
     )
 
@@ -218,7 +249,7 @@ export function createAiSuggestionsRoutes(deps: AiSuggestionsRouteDeps): Hono {
       // answer is that this gesture is already spent, with its attempt counted.
       // This shape is an addition to §G3's three, which did not name the
       // duplicate case; it is distinguished by `status`, not by the code.
-      return c.json({ status: 'duplicate', attemptCounted: true, usage: await readUsage(household) }, 409)
+      return c.json({ status: 'duplicate', attemptCounted: true, usage: await readUsage(household, counselLedgerId) }, 409)
     }
 
     const reservationId = outcome.reservation.id
@@ -258,7 +289,7 @@ export function createAiSuggestionsRoutes(deps: AiSuggestionsRouteDeps): Hono {
       status: 'ok',
       kind: request.kind,
       suggestion: validated.suggestion,
-      usage: await readUsage(household),
+      usage: await readUsage(household, counselLedgerId),
     })
   })
 
@@ -282,17 +313,31 @@ export function createAiSuggestionsRoutes(deps: AiSuggestionsRouteDeps): Hono {
    * `plansUsed` is re-read rather than derived, because the conditional UPDATE
    * reports only whether it affected a row, never the resulting value.
    *
-   * `editsUsed`/`editsCap` describe the ledger this plan is about to create,
-   * which has spent none of its edits — a goal-plan request carries no
-   * `ledgerId` because that ledger does not exist yet. Chunk C's counsel kind
-   * has a real ledger and reads its counter instead.
+   * `editsUsed` is a bug fix (2026-09-10): this used to hardcode `0`, which
+   * was harmless while only `goal_plan` existed but started under-reporting
+   * the moment Chunk C's counsel path made `consumeCounters` spend
+   * `ledgers.ai_edits_used` — a successful counsel response echoed a stale
+   * zero instead of what the ledger's own counter had just recorded.
+   *
+   * `ledgerId` is `null` for a goal plan, and that is a fact about the domain
+   * made explicit rather than an accident of the old hardcoded zero: the
+   * ledger a goal plan is about to produce does not exist yet, so there is no
+   * per-ledger counter to read and `editsUsed: 0` describes the ledger this
+   * plan is about to create. For a counsel call `ledgerId` is the
+   * ownership-verified row from step 2.5, re-read fresh here (rather than
+   * reusing the pre-call row) for the same reason `plansUsed` is re-read: the
+   * conditional UPDATE that just ran reports only whether it affected a row,
+   * never the resulting value.
    */
-  async function readUsage(household: Household) {
+  async function readUsage(household: Household, ledgerId: string | null) {
     const fresh = await getHouseholdForOwner(deps.db, household.ownerUserId)
+    const editsUsed = ledgerId
+      ? ((await getLedgerForHousehold(deps.db, household.id, ledgerId))?.aiEditsUsed ?? 0)
+      : 0
     return {
       plansUsed: fresh?.aiPlansCreated ?? household.aiPlansCreated,
       plansCap: MAX_AI_PLANS_PER_HOUSEHOLD,
-      editsUsed: 0,
+      editsUsed,
       editsCap: MAX_AI_EDITS_PER_LEDGER,
     }
   }

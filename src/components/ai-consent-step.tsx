@@ -30,6 +30,19 @@ import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/co
  * so a failed attempt still consumes it, matching the copy below). `onCancel`
  * is invoked when "Not now" is clicked and must not invoke `onConfirm`.
  */
+/**
+ * The noun the counter line uses varies by what the call spends: a goal plan
+ * spends one of the household's plans, a counsel call spends one of the
+ * ledger's reviews. `COPY_DECK.md`'s consent-step table only ever wrote out
+ * the goal-plan line ("...remaining plans"); the counsel entry-point row
+ * ("Uses one of your {remaining} reviews") is the only place the deck names
+ * the counsel noun, so that word is reused here rather than invented.
+ */
+const REMAINING_NOUN: Record<'goal_plan' | 'counsel', string> = {
+  goal_plan: 'plans',
+  counsel: 'reviews',
+}
+
 export interface AiConsentStepProps {
   /**
    * The remaining count from `GET /api/ai-suggestions` (`plansCap -
@@ -38,6 +51,13 @@ export interface AiConsentStepProps {
    * given). Never hardcoded here.
    */
   remaining: number
+  /**
+   * Which call this consent step is in front of. Defaults to `'goal_plan'` so
+   * every pre-existing caller (there is exactly one host in this file's own
+   * test) keeps rendering "plans" unchanged. C3 ("Review this ledger") is the
+   * first caller to pass `'counsel'`.
+   */
+  kind?: 'goal_plan' | 'counsel'
   /** Invoked exactly once when the user confirms. This is the send seam — see the module doc. */
   onConfirm: () => void
   /** Invoked when the user backs out. Must not also invoke `onConfirm`. */
@@ -46,7 +66,14 @@ export interface AiConsentStepProps {
   submitting?: boolean
 }
 
-export function AiConsentStep({ remaining, onConfirm, onCancel, submitting = false }: AiConsentStepProps) {
+export function AiConsentStep({
+  remaining,
+  kind = 'goal_plan',
+  onConfirm,
+  onCancel,
+  submitting = false,
+}: AiConsentStepProps) {
+  const noun = REMAINING_NOUN[kind]
   return (
     <>
       <DialogHeader>
@@ -72,7 +99,7 @@ export function AiConsentStep({ remaining, onConfirm, onCancel, submitting = fal
         {/* The before-the-call disclosure P2 decision 2 requires: this line renders
             unconditionally, above the confirm action, every time this step mounts. */}
         <p data-testid="ai-consent-counter-line" className="text-caption font-medium text-foreground">
-          This uses one of your {remaining} remaining plans. It is counted when the request is sent, even if it
+          This uses one of your {remaining} remaining {noun}. It is counted when the request is sent, even if it
           fails.
         </p>
         <Link to="/privacy" className="inline-block text-caption underline underline-offset-4">

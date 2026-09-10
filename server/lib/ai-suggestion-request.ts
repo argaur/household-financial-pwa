@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { assetClassEnum } from '../../drizzle/schema.js'
+import { LIBRARY_INSTRUMENT_SLUGS } from './ai-suggestion-output.js'
+import { ledgerIdSchema } from './projection-settings.js'
 
 /**
  * The request contract for `POST /api/ai-suggestions` (D-024 Chunk A, step A3;
@@ -31,9 +33,11 @@ import { assetClassEnum } from '../../drizzle/schema.js'
  *   is what stops the exact portfolio being reconstructible from a percentage
  *   plus a total.
  *
- * Chunk C adds the `kind: "counsel"` member to the union below. The union is
- * discriminated on `kind` deliberately, so adding a second request shape cannot
- * loosen this one.
+ * Chunk C (step C1) adds the `kind: "counsel"` member below. The union is
+ * discriminated on `kind` deliberately, so adding a second request shape did
+ * not loosen this one: a body cannot mix `counsel`'s `ledgerId`/`holdingSlugs`
+ * with `goal_plan`'s fields in either direction, and every existing goal-plan
+ * assertion in `ai-suggestion-request.test.ts` still passes unmodified.
  */
 
 /**
@@ -104,14 +108,49 @@ export const goalPlanRequestSchema = z
   .strict()
 
 /**
- * What the route parses against. A discriminated union of one, today.
+ * One holding the model may reason about for a counsel card: a library slug
+ * and nothing else. No amount, no name — the same allowlist A4
+ * (`ai-suggestion-output.ts`) validates the model's *output* against, imported
+ * rather than re-derived, so the library cannot drift between what the model
+ * may be told and what its answer is checked against.
+ */
+const holdingSlugsSchema = z
+  .array(z.enum(LIBRARY_INSTRUMENT_SLUGS))
+  .min(1)
+  .refine((slugs) => new Set(slugs).size === slugs.length, 'holdingSlugs must not repeat a slug')
+
+/**
+ * The request contract for `kind: "counsel"` (D-024 Chunk C, step C1;
+ * `SPEC.md` §G3). Same payload-minimisation discipline as `goalPlanRequestSchema`
+ * above: `.strict()`, no free-text string field, percentages only in the mix.
  *
- * Written as a union rather than as the goal-plan schema directly so C1 adds a
- * member instead of rewriting the route, and so an unknown `kind` is refused by
+ * `ledgerId` is validated here only as uuid-shaped. Ownership — is this
+ * *the session's household's* ledger — is not a schema property; it is
+ * checked server-side in `server/routes/ai-suggestions.ts`, against the
+ * session-resolved household, before anything is reserved and long before any
+ * provider call.
+ */
+export const counselRequestSchema = z
+  .object({
+    kind: z.literal('counsel'),
+    idempotencyKey: idempotencyKeySchema,
+    ledgerId: ledgerIdSchema,
+    currentMix: currentMixSchema,
+    holdingSlugs: holdingSlugsSchema,
+  })
+  .strict()
+
+export type CounselRequest = z.infer<typeof counselRequestSchema>
+
+/**
+ * What the route parses against. A discriminated union of two, as of C1.
+ *
+ * Written as a union rather than either shape directly so a member can be
+ * added without rewriting the route, and so an unknown `kind` is refused by
  * the discriminator rather than falling through to whichever shape happens to
  * be first.
  */
-export const aiSuggestionRequestSchema = z.discriminatedUnion('kind', [goalPlanRequestSchema])
+export const aiSuggestionRequestSchema = z.discriminatedUnion('kind', [goalPlanRequestSchema, counselRequestSchema])
 
 export type GoalPlanRequest = z.infer<typeof goalPlanRequestSchema>
 export type AiSuggestionRequest = z.infer<typeof aiSuggestionRequestSchema>

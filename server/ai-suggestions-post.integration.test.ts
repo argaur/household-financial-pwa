@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Hono } from 'hono'
 import { createAiDbFake, type AiDbFake } from './test-helpers/ai-db-fake.js'
-import { createAiCallCounterConsumer, MAX_AI_PLANS_PER_HOUSEHOLD, aiUsagePeriod } from './lib/ai-counters.js'
+import {
+  createAiCallCounterConsumer,
+  MAX_AI_EDITS_PER_LEDGER,
+  MAX_AI_PLANS_PER_HOUSEHOLD,
+  aiUsagePeriod,
+} from './lib/ai-counters.js'
 import { AI_SUGGESTION_MODEL, type AiSuggestionProvider } from './lib/ai-provider.js'
 import { EDUCATION_NOT_ADVICE_CAVEAT } from './lib/ai-suggestion-output.js'
 import { createAiSuggestionsRoutes, type AiSuggestionsRouteDeps } from './routes/ai-suggestions.js'
@@ -44,8 +49,11 @@ vi.mock('jose', () => ({
 
 const HOUSEHOLD_A = '11111111-1111-4111-8111-111111111111'
 const LEDGER_A = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'
+const LEDGER_B = 'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb'
 const KEY_ONE = '3f7b6a10-1c4e-4a5d-9f2b-8c1e5d0a7b31'
 const KEY_TWO = '9c2d4e88-5a6b-4c7d-8e9f-0a1b2c3d4e5f'
+const KEY_THREE = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d'
+const KEY_FOUR = '7e8f9a0b-1c2d-4e3f-8a4b-5c6d7e8f9a0b'
 
 const GOAL_PLAN_BODY = {
   kind: 'goal_plan',
@@ -58,6 +66,17 @@ const GOAL_PLAN_BODY = {
     { assetClass: 'debt', weightPct: 25 },
     { assetClass: 'gold', weightPct: 15 },
   ],
+}
+
+const COUNSEL_BODY = {
+  kind: 'counsel',
+  idempotencyKey: KEY_ONE,
+  ledgerId: LEDGER_A,
+  currentMix: [
+    { assetClass: 'equity', weightPct: 60 },
+    { assetClass: 'debt', weightPct: 40 },
+  ],
+  holdingSlugs: ['equity-index-funds-etfs', 'debt-ppf'],
 }
 
 const GOOD_SUGGESTION = {
@@ -82,13 +101,21 @@ interface Harness {
 function buildHarness(options: {
   provider?: AiSuggestionProvider | null
   plansCreated?: number
+  /** Edits already spent on `LEDGER_A`. `LEDGER_B` always starts at zero. */
+  editsUsed?: number
   globalUsed?: number
   globalCap?: number
 } = {}): Harness {
   const period = aiUsagePeriod(new Date())
   const fake = createAiDbFake({
     households: [{ id: HOUSEHOLD_A, ownerUserId: 'user_a', aiPlansCreated: options.plansCreated ?? 0 }],
-    ledgers: [{ id: LEDGER_A, householdId: HOUSEHOLD_A, isBaseline: true, aiEditsUsed: 0 }],
+    // Two ledgers in the same household, always. The per-ledger edits cap is
+    // only a per-ledger cap if exhausting one leaves the other alone, and a
+    // single-ledger fixture cannot tell that apart from a second household cap.
+    ledgers: [
+      { id: LEDGER_A, householdId: HOUSEHOLD_A, isBaseline: true, aiEditsUsed: options.editsUsed ?? 0 },
+      { id: LEDGER_B, householdId: HOUSEHOLD_A, isBaseline: false, aiEditsUsed: 0 },
+    ],
     globalUsage:
       options.globalUsed === undefined
         ? []
@@ -582,6 +609,200 @@ describe('POST /api/ai-suggestions — A5, Cache-Control: no-store on EVERY resp
   it('sets it on the 503 an unwired provider returns', async () => {
     const unwired = buildHarness({ provider: null })
     expect((await post(unwired, GOAL_PLAN_BODY)).headers.get('cache-control')).toBe('no-store')
+  })
+})
+
+describe('POST /api/ai-suggestions — counsel: ledgerId ownership is checked server-side (D-024 Chunk C, C1)', () => {
+  it('answers 403 for a ledger belonging to another household, before any provider call', async () => {
+    const foreign = buildHarness()
+    // A ledger that exists, but under a different household than the caller's
+    // session resolves to. `getLedgerForHousehold`'s household filter is part
+    // of the lookup itself, so this must come back indistinguishable from a
+    // ledger that does not exist at all — 403, never 404, never a 200.
+    foreign.fake.ledgers.push({ id: 'ffffffff-2222-4222-8222-ffffffffffff', householdId: 'other-household', isBaseline: true, aiEditsUsed: 0 })
+
+    const res = await post(foreign, { ...COUNSEL_BODY, ledgerId: 'ffffffff-2222-4222-8222-ffffffffffff' })
+
+    expect(res.status).toBe(403)
+    expect(foreign.providerCalls).toHaveLength(0)
+    expect(foreign.fake.reservations).toHaveLength(0)
+  })
+
+  it('answers 403 for a ledgerId that does not exist at all, same as a foreign one', async () => {
+    const res = await post(harness, { ...COUNSEL_BODY, ledgerId: '00000000-0000-4000-8000-000000000000' })
+
+    expect(res.status).toBe(403)
+    expect(harness.providerCalls).toHaveLength(0)
+    expect(harness.fake.reservations).toHaveLength(0)
+  })
+
+  it('sets Cache-Control: no-store on the ownership 403', async () => {
+    const res = await post(harness, { ...COUNSEL_BODY, ledgerId: '00000000-0000-4000-8000-000000000000' })
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('does not run the ownership check, or refuse, for a goal_plan body', async () => {
+    // goal_plan carries no ledgerId at all; the ownership branch must be a
+    // no-op for it, not an accidental 403.
+    const res = await post(harness, GOAL_PLAN_BODY)
+    expect(res.status).toBe(200)
+  })
+})
+
+describe('POST /api/ai-suggestions — counsel spends the per-ledger edits cap (D-024 Chunk C, C2)', () => {
+  /** Both counters, always read together. */
+  function counters(h: Harness) {
+    return {
+      plans: h.fake.households.find((row) => row.id === HOUSEHOLD_A)?.aiPlansCreated,
+      editsA: h.fake.ledgers.find((row) => row.id === LEDGER_A)?.aiEditsUsed,
+      editsB: h.fake.ledgers.find((row) => row.id === LEDGER_B)?.aiEditsUsed,
+    }
+  }
+
+  it('charges ledgers.ai_edits_used and NOT households.ai_plans_created', async () => {
+    // The defect this whole step exists to make impossible: routing the counsel
+    // reservation at the household plans counter passes every happy-path test
+    // that only asserts "a call succeeded". Both counters are asserted, so a
+    // swapped mapping fails on the one that should NOT have moved.
+    const res = await post(harness, COUNSEL_BODY)
+
+    expect(res.status).toBe(200)
+    expect(counters(harness)).toEqual({ plans: 0, editsA: 1, editsB: 0 })
+  })
+
+  it('charges households.ai_plans_created and NOT ledgers.ai_edits_used for a goal plan', async () => {
+    const res = await post(harness, GOAL_PLAN_BODY)
+
+    expect(res.status).toBe(200)
+    expect(counters(harness)).toEqual({ plans: 1, editsA: 0, editsB: 0 })
+  })
+
+  it('records cap_type edits and the real ledger_id on a counsel reservation', async () => {
+    await post(harness, COUNSEL_BODY)
+    const [row] = harness.fake.reservations
+    expect(row?.kind).toBe('counsel')
+    expect(row?.capType).toBe('edits')
+    expect(row?.ledgerId).toBe(LEDGER_A)
+    expect(row?.householdId).toBe(HOUSEHOLD_A)
+  })
+
+  it('records cap_type plans and a null ledger_id on a goal-plan reservation', async () => {
+    // Unlike a counsel call: a goal plan's ledger does not exist yet, so the
+    // column is genuinely null rather than a placeholder. Asserted explicitly so
+    // "pass the ledger through for everything" fails here.
+    await post(harness, GOAL_PLAN_BODY)
+    const [row] = harness.fake.reservations
+    expect(row?.capType).toBe('plans')
+    expect(row?.ledgerId).toBeNull()
+  })
+
+  it('refuses a counsel call with 409 edits once that ledger has spent its cap', async () => {
+    const capped = buildHarness({ editsUsed: MAX_AI_EDITS_PER_LEDGER })
+    const res = await post(capped, COUNSEL_BODY)
+
+    expect(res.status).toBe(409)
+    expect((await res.json()) as unknown).toEqual({ status: 'cap_reached', capType: 'edits' })
+    expect(capped.providerCalls).toHaveLength(0)
+    expect(capped.fake.reservations[0]?.status).toBe('failed')
+  })
+
+  it('applies the global monthly breaker to a counsel call exactly as to a goal plan', async () => {
+    const capped = buildHarness({ globalUsed: 50, globalCap: 50 })
+    const counsel = await post(capped, COUNSEL_BODY)
+
+    expect(counsel.status).toBe(409)
+    expect((await counsel.json()) as unknown).toEqual({ status: 'cap_reached', capType: 'global' })
+    expect(capped.providerCalls).toHaveLength(0)
+
+    const plan = await post(capped, { ...GOAL_PLAN_BODY, idempotencyKey: KEY_TWO })
+    expect(plan.status).toBe(409)
+    expect((await plan.json()) as unknown).toEqual({ status: 'cap_reached', capType: 'global' })
+    expect(capped.providerCalls).toHaveLength(0)
+  })
+
+  it('keeps two ledgers in one household independent — exhausting A does not block B', async () => {
+    // This is what makes it a per-ledger cap rather than a second household cap.
+    const h = buildHarness({ editsUsed: MAX_AI_EDITS_PER_LEDGER })
+
+    const refused = await post(h, COUNSEL_BODY)
+    expect(refused.status).toBe(409)
+
+    const allowed = await post(h, { ...COUNSEL_BODY, ledgerId: LEDGER_B, idempotencyKey: KEY_TWO })
+    expect(allowed.status).toBe(200)
+    expect(counters(h)).toEqual({ plans: 0, editsA: MAX_AI_EDITS_PER_LEDGER, editsB: 1 })
+  })
+
+  it('exhausting a ledger does not touch the household plans cap', async () => {
+    await post(harness, COUNSEL_BODY)
+    await post(harness, { ...COUNSEL_BODY, idempotencyKey: KEY_TWO })
+    const third = await post(harness, { ...COUNSEL_BODY, idempotencyKey: KEY_THREE })
+
+    expect(third.status).toBe(409)
+    expect(counters(harness)).toEqual({ plans: 0, editsA: MAX_AI_EDITS_PER_LEDGER, editsB: 0 })
+
+    // The household's plans are untouched by all of that, so a goal plan still
+    // goes through.
+    const plan = await post(harness, { ...GOAL_PLAN_BODY, idempotencyKey: KEY_FOUR })
+    expect(plan.status).toBe(200)
+    expect(counters(harness)).toEqual({ plans: 1, editsA: MAX_AI_EDITS_PER_LEDGER, editsB: 0 })
+  })
+
+  it('exhausting the household plans cap does not block a counsel call', async () => {
+    const capped = buildHarness({ plansCreated: MAX_AI_PLANS_PER_HOUSEHOLD })
+    const res = await post(capped, COUNSEL_BODY)
+
+    expect(res.status).toBe(200)
+    expect(counters(capped)).toEqual({ plans: MAX_AI_PLANS_PER_HOUSEHOLD, editsA: 1, editsB: 0 })
+  })
+
+  it('writes the counsel counter to ledgers, never to households', async () => {
+    await post(harness, COUNSEL_BODY)
+
+    const tables = new Set(harness.fake.counts.writes.map((write) => write.table))
+    expect([...tables].sort()).toEqual(['ai_call_reservations', 'ai_global_usage', 'ledgers'])
+    expect(
+      harness.fake.counts.writes.filter((write) => write.table === 'ledgers'),
+    ).toEqual([{ operation: 'update', table: 'ledgers', columns: ['aiEditsUsed'] }])
+  })
+})
+
+describe('POST /api/ai-suggestions — readUsage reports the real edits spend on a counsel call (bug fix)', () => {
+  // `readUsage` used to hardcode `editsUsed: 0` on every response. That was
+  // harmless while only goal_plan existed (a goal plan's ledger does not
+  // exist yet, so 0 was correct), but C2 made a counsel call spend
+  // `ledgers.ai_edits_used`, and the hardcoded 0 then silently understated
+  // what the ledger's own counter had just recorded.
+  it('reports editsUsed: 1 after the first counsel call on a ledger, not 0', async () => {
+    const res = await post(harness, COUNSEL_BODY)
+    const body = (await res.json()) as { usage: { editsUsed: number; editsCap: number } }
+
+    expect(body.usage.editsUsed).toBe(1)
+    expect(body.usage.editsCap).toBe(MAX_AI_EDITS_PER_LEDGER)
+  })
+
+  it('reports editsUsed: 2 after a second counsel call on the same ledger, catching an off-by-one', async () => {
+    await post(harness, COUNSEL_BODY)
+    const res = await post(harness, { ...COUNSEL_BODY, idempotencyKey: KEY_TWO })
+    const body = (await res.json()) as { usage: { editsUsed: number } }
+
+    expect(body.usage.editsUsed).toBe(2)
+  })
+
+  it('still reports editsUsed: 0 for a goal-plan response, describing the ledger about to be created', async () => {
+    // The pre-existing, now-explicit reading: a goal plan carries no ledgerId,
+    // so there is no ledger to charge yet and 0 remains correct here.
+    const res = await post(harness, GOAL_PLAN_BODY)
+    const body = (await res.json()) as { usage: { editsUsed: number } }
+
+    expect(body.usage.editsUsed).toBe(0)
+  })
+
+  it('reports the OTHER ledger\'s untouched editsUsed on its own counsel call, not the caller\'s ledger mixed up', async () => {
+    await post(harness, COUNSEL_BODY) // spends LEDGER_A
+    const res = await post(harness, { ...COUNSEL_BODY, ledgerId: LEDGER_B, idempotencyKey: KEY_TWO })
+    const body = (await res.json()) as { usage: { editsUsed: number } }
+
+    expect(body.usage.editsUsed).toBe(1)
   })
 })
 

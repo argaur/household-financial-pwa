@@ -316,14 +316,17 @@ Distinguished from a cap by `status`, not by the code. §G6.8 requires that a se
 
 1. Auth first. Session resolved via `server/lib/auth.ts` before the body is read at all.
 2. Body size and shape limits before parse. Strict Zod, unknown keys rejected, same discipline as `server/lib/envelope.ts`.
-2.5. **Provider configured?** If not, `503` with `attemptCounted: false`, before anything is reserved. Placed after auth and shape so it changes no ordering the cost control depends on, and before the reservation so a misconfigured deploy cannot spend a cap on an impossible call.
+2.5. **Ledger ownership, `kind: "counsel"` only.** `ledgerId` is resolved through the household-scoped lookup; a ledger the session does not own returns `403`, indistinguishable from one that does not exist. A goal-plan request skips this entirely, having no ledger yet. The id used downstream is the one this lookup returned, never the one the client sent.
+2.6. **Provider configured?** If not, `503` with `attemptCounted: false`, before anything is reserved. Placed after auth and shape so it changes no ordering the cost control depends on, and before the reservation so a misconfigured deploy cannot spend a cap on an impossible call.
 3. Insert the `ai_call_reservations` row. Unique `(household_id, idempotency_key)` absorbs double-taps and client retries; a conflict returns the original outcome as `409 duplicate`, not a second call.
 4. Run the three conditional counter UPDATEs. Zero rows affected on any of them returns `409` and the reservation is marked `failed`. **Per-entity cap first, global breaker second** — see `server/lib/ai-counters.ts` for the ordering trade-off and its documented cost.
 5. Only then call Anthropic. `claude-sonnet-5` (D-018 §5), structured output, no prompt caching, no retries, no queue.
 6. Validate the model's output against the allowlist schema. A slug outside the library enum invalidates the whole response (`invalid_output`), it is not filtered out silently.
 7. Relay. Write nothing to Neon beyond the reservation status, log no request or response body, no Sentry body capture, `Cache-Control: no-store`.
 
-**Steps 2.5 and the `duplicate` response were added during Chunk A's build (2026-09-10), not in the original spec.** Both are recorded here so the document matches the shipped code. Neither has been through a Blueprint gate; they are build-time corrections in the same class as §8b's, and are flagged for review rather than presented as approved design.
+**Steps 2.5 and 2.6, and the `duplicate` response, were added during the Chunk A and Chunk C builds (2026-09-10), not in the original spec.** All three are recorded here so the document matches the shipped code. None has been through a Blueprint gate; they are build-time corrections in the same class as §8b's, and are flagged for review rather than presented as approved design.
+
+**Not built by Chunks A or C, and not a step in any of them: mounting any of this in the UI.** The consent step, the suggestion card, the three cap-exhausted states and the "Review this ledger" action all exist, are tested, and are imported by nothing outside their own tests. No page renders them, and no goal-plan trigger wires the "+ New" ledger modal's goal step (Chunk G) to `POST /api/ai-suggestions`. The plan's step list has no integration step, so this is a gap in the plan rather than a skipped step. Until it is closed the AI layer is unreachable by a user, and `SPEC.md` §G7's live-deploy check and Chunk V's V2 cannot be run at all.
 
 **The browser CSP is not touched.** The browser never calls Anthropic; the proxy does. Adding the Anthropic host to the browser CSP would be a mistake of exactly the class D-024's ship-traps list names.
 
