@@ -25,7 +25,21 @@ export default defineConfig({
       workbox: {
         // App shell (JS/CSS/HTML) is static and safe to precache at build time.
         // Dashboard data is fetched dynamically — see src/lib/pwa-cache.ts (Slice 8).
+        //
+        // This pattern already covers the async `spreadsheet-parser` chunk
+        // (D-025 step I1) — every emitted chunk is `assets/<name>-<hash>.js`.
+        // SPEC.md §I6.7 requires that chunk to be precached so the import
+        // screen parses a file offline. Do NOT widen this list to "fix" a
+        // missing chunk: widening is how §I6.6 (no /api body is cached) gets
+        // broken by accident. `spreadsheet-parser-pwa.config.test.ts` pins
+        // both directions in one file, per SPEC.md §I7.
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // SheetJS is close to a megabyte, and Workbox's default ceiling is
+        // 2 MiB. A file over the ceiling is dropped from the precache
+        // manifest with nothing but a build-time log line to show for it —
+        // the import screen would simply stop working offline, months later,
+        // for a reason nobody would connect to this. Pinned explicitly.
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // SPA fallback: a cold offline load of a deep link (/dashboard,
         // /explore/...) must still boot the app shell rather than showing the
         // browser's offline page. Without this, offline support only works on
@@ -67,6 +81,27 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // D-025 step I1. SheetJS is reached only through the dynamic import in
+        // `src/lib/spreadsheet-parser-loader.ts`, so Rollup would emit it as an
+        // async chunk regardless — but it would name that chunk after whichever
+        // module it happened to pick, and the name would move whenever the
+        // module graph shifted. Pinning the name keeps the precache assertion
+        // in `spreadsheet-parser-pwa.config.test.ts` meaningful and makes the
+        // chunk identifiable in a build listing.
+        //
+        // This stays an ASYNC chunk: nothing imports xlsx statically, and that
+        // is swept for by the same test file. A static import anywhere would
+        // pull this whole chunk into the initial bundle.
+        manualChunks(id: string) {
+          if (/[\\/]node_modules[\\/]xlsx[\\/]/.test(id)) return 'spreadsheet-parser'
+          return undefined
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
