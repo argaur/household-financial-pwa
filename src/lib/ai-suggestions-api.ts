@@ -39,3 +39,83 @@ export async function getAiSuggestionsUsage(token: string | null, ledgerId: stri
   const res = await encryptedFetch(`/api/ai-suggestions?ledgerId=${encodeURIComponent(ledgerId)}`, token, fail)
   return (await res.json()) as AiSuggestionsUsage
 }
+
+/**
+ * The browser half of `POST /api/ai-suggestions`, `kind: "goal_plan"` (D-024
+ * Chunk A/G, `server/routes/ai-suggestions.ts`, `SPEC.md` §G3). Mirrors
+ * `server/lib/ai-suggestion-request.ts`'s `goalPlanRequestSchema`: banded
+ * rupee figures, percentages-only mix, no free text, no household data.
+ */
+export interface GoalPlanSuggestionRequest {
+  kind: 'goal_plan'
+  idempotencyKey: string
+  horizonYears: number
+  targetAmountBandInr: number
+  monthlyCapacityBandInr: number | null
+  currentMix: { assetClass: string; weightPct: number }[]
+}
+
+/** `suggestion` shape shared by both `kind`s. Weights and slugs only — never a rupee amount (SPEC.md §G6.5). */
+export interface AiSuggestion {
+  allocations: { slug: string; weightPct: number }[]
+  reasoning: string
+  caveat: string
+}
+
+export interface AiSuggestionUsageSummary {
+  plansUsed: number
+  plansCap: number
+  editsUsed: number
+  editsCap: number
+}
+
+/**
+ * The full discriminated shape of `POST /api/ai-suggestions`'s response,
+ * `SPEC.md` §G3. Every member is a real, expected outcome — a cap reached, a
+ * replayed gesture, a provider/proxy failure — not an exceptional one, so
+ * this is the return type rather than something only reachable via `catch`.
+ */
+export type AiSuggestionPostResult =
+  | { status: 'ok'; kind: 'goal_plan' | 'counsel'; suggestion: AiSuggestion; usage: AiSuggestionUsageSummary }
+  | { status: 'cap_reached'; capType: 'plans' | 'edits' | 'global' }
+  | { status: 'duplicate'; attemptCounted: true; usage: AiSuggestionUsageSummary }
+  | { status: 'failed'; reason: 'provider_error' | 'invalid_output' | 'timeout'; attemptCounted: boolean }
+
+/**
+ * `POST /api/ai-suggestions`, `kind: "goal_plan"`.
+ *
+ * Deliberately does **not** go through `encryptedFetch`: that helper throws
+ * on any non-2xx response and discards the body except an `error` key, but
+ * this route's meaningful outcomes — `cap_reached` (409), `duplicate` (409),
+ * `failed` (502/503) — are all structured JSON bodies on a non-2xx status,
+ * not an `error`-shaped exception. The caller (the goal step's consent flow)
+ * needs to read `status`/`capType` to render `AiCapNotice` correctly, so the
+ * body is read the same way regardless of HTTP status. Authorization and
+ * `cache: 'no-store'` plumbing still match `encryptedFetch` exactly — this
+ * is the one route on this boundary where reading the body itself, not
+ * throwing, is the correct behaviour for a non-2xx response.
+ *
+ * A genuinely malformed response (no body, not JSON — a network-level
+ * failure, not one of the route's documented outcomes) throws
+ * `AiSuggestionsApiError`, which the caller treats as its generic error
+ * state.
+ */
+export async function postGoalPlanSuggestion(
+  token: string | null,
+  request: GoalPlanSuggestionRequest,
+): Promise<AiSuggestionPostResult> {
+  const res = await fetch('/api/ai-suggestions', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(request),
+  })
+  const body = (await res.json().catch(() => null)) as AiSuggestionPostResult | null
+  if (!body || typeof body.status !== 'string') {
+    throw fail(res.status, 'Unexpected response')
+  }
+  return body
+}
