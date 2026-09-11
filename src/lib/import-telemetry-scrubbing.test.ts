@@ -582,13 +582,36 @@ describe('PostHog init options (CONFIG: read from what initPostHog passes)', () 
     expect(posthog.init).toHaveBeenCalledTimes(1)
     const options = vi.mocked(posthog.init).mock.calls[0]![1] as Record<string, unknown>
 
-    expect(Object.keys(options).sort()).toEqual(['api_host', 'capture_pageview', 'person_profiles'].sort())
+    expect(Object.keys(options).sort()).toEqual(
+      ['api_host', 'autocapture', 'capture_pageview', 'disable_session_recording', 'person_profiles'].sort(),
+    )
     expect(options.capture_pageview).toBe(false)
     expect(options.person_profiles).toBe('identified_only')
 
-    // Stated as the finding, not as an approval.
-    expect(options.autocapture).toBeUndefined()
-    expect(options.disable_session_recording).toBeUndefined()
+    /**
+     * I-leak-1, CLOSED 2026-09-11. This assertion is the regression guard:
+     * posthog-js defaults `autocapture` to `true`, so DELETING the line in
+     * `posthog.ts` silently reopens the leak rather than causing any visible
+     * failure elsewhere. This test is the only thing that would notice.
+     */
+    expect(options.autocapture).toBe(false)
+
+    /**
+     * I-leak-2, CLOSED 2026-09-11. posthog-js defaults this to `false` (i.e.
+     * recording NOT disabled), so deleting the line in `posthog.ts` opts this
+     * app back in silently, exactly like the autocapture line above. No replay
+     * was ever captured, but only because the SHARED Web Fleet project has
+     * replay off at the project level -- a setting outside this repository,
+     * covering every app pointed at it. Setting it here removes that
+     * dependency in the safe direction.
+     */
+    expect(options.disable_session_recording).toBe(true)
+
+    /**
+     * STILL UNSET, stated as a finding rather than an approval. It governs what
+     * autocapture records, so it matters much less now that autocapture is off.
+     * Left visible rather than quietly dropped from this assertion.
+     */
     expect(options.mask_all_element_attributes).toBeUndefined()
   })
 
