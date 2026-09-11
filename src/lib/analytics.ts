@@ -143,6 +143,10 @@ export interface EventMap {
   // amount, an instrument or a nominee.
   bulk_import_template_downloaded: Record<string, never>
   bulk_import_completed: { rows_clean: number; rows_rejected: number }
+  // D-025 step H3 ("Add anyway" on Possible duplicate rows), METRICS_PLAN.md
+  // line 325. No properties by design: a row value or count here would be
+  // exactly the leak the whole property-discipline rule guards against.
+  bulk_import_duplicate_overridden: Record<string, never>
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {

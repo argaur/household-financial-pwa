@@ -163,7 +163,7 @@ describe('ImportReviewScreen', () => {
     const { container } = render(<ImportReviewScreen buckets={buckets()} ledgerName="Current" onCommit={vi.fn()} />)
     const summaries = container.querySelectorAll('summary')
     summaries.forEach((summary) => expect(summary.className).toMatch(/min-h-11/))
-    const cta = screen.getByRole('button', { name: /add/i })
+    const cta = screen.getByRole('button', { name: /add 1 holding to current/i })
     expect(cta.className).toMatch(/min-h-11/)
   })
 

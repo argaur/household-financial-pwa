@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { BucketedRow, BucketedRows, ImportBucket } from '@/lib/import-bucketing'
 import { cn } from '@/lib/utils'
+import { track } from '@/lib/analytics'
 
 /**
  * D-025 step I8 — the bulk-import review screen. `SPEC.md` §I4 and
@@ -29,14 +30,33 @@ import { cn } from '@/lib/utils'
  * uses for its own destructive confirm (`confirmingDelete`): the copy shows
  * BEFORE `onLeave` is ever called, never after, so there is no path from
  * clicking "Cancel import" straight to a discard.
+ *
+ * H3 — "Add anyway" on Possible duplicate rows. A duplicate row is not
+ * broken (SPEC.md/METRICS_PLAN.md's rationale: the ledger already holds
+ * that instrument for that member, regardless of amount), so unlike Needs
+ * attention or Skipped there is nothing to fix by re-uploading — the same
+ * file re-run against the same ledger gets the same verdict. Each Possible
+ * duplicate row gets an "Add anyway" button that promotes it into the
+ * commit set. Promotion is tracked as a `Set` of row keys local to this
+ * component, not by moving the row to another bucket: the row stays visible
+ * under Possible duplicate, marked "Added" with an "Undo" button, so the
+ * user always sees where it came from and can reverse the decision without
+ * hunting for it after it jumps sections. The primary CTA's count and
+ * `onCommit` both add promoted rows to the Ready bucket. `Undo` clears the
+ * promotion silently; it never re-fires the analytics event, and there is
+ * no "un-override" event (METRICS_PLAN.md defines none).
  */
 
 export interface ImportReviewScreenProps {
   buckets: BucketedRows
   /** Named on the primary CTA — SPEC.md §I4 "Primary CTA". */
   ledgerName: string
-  /** Fired with the Ready bucket's rows only. This component does not write anything itself. */
-  onCommit: (readyRows: BucketedRow[]) => void
+  /**
+   * Fired with the Ready bucket's rows plus any Possible duplicate rows the
+   * user promoted via "Add anyway" (H3) — never Needs-attention or Skipped.
+   * This component does not write anything itself.
+   */
+  onCommit: (rowsToCommit: BucketedRow[]) => void
   /**
    * Fired once the user confirms leaving the screen. Renders the "Cancel
    * import" affordance and its confirm step when provided; omit to hide the
@@ -62,7 +82,21 @@ const BUCKET_TITLES: Record<ImportBucket, string> = {
 
 const currency = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
 
-function RowBlock({ row }: { row: BucketedRow }) {
+/** Stable identity for a row within a review session — used both as a React list key and as the promotion-set key. */
+function rowKey(row: BucketedRow): string {
+  return `${row.member.id}-${row.rowNumber}`
+}
+
+function RowBlock({
+  row,
+  isPromoted,
+  onTogglePromote,
+}: {
+  row: BucketedRow
+  /** Present only for Possible duplicate rows — undefined elsewhere hides the affordance entirely. */
+  isPromoted?: boolean
+  onTogglePromote?: () => void
+}) {
   return (
     <div data-testid="import-review-row" className="min-w-0 space-y-1 border-b border-border-soft p-3 last:border-b-0">
       <div className="min-w-0 flex flex-col gap-0.5">
@@ -83,11 +117,48 @@ function RowBlock({ row }: { row: BucketedRow }) {
           ))}
         </div>
       )}
+      {onTogglePromote && (
+        <div className="min-w-0 flex items-center gap-2">
+          {isPromoted ? (
+            <>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-caption font-medium text-muted-foreground">
+                Added
+              </span>
+              <button
+                type="button"
+                onClick={onTogglePromote}
+                className="min-h-11 min-w-0 rounded-md border px-3 py-1 text-caption font-medium text-muted-foreground"
+              >
+                Undo
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onTogglePromote}
+              className="min-h-11 min-w-0 rounded-md border px-3 py-1 text-caption font-medium"
+            >
+              Add anyway
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-function BucketSection({ bucket, rows }: { bucket: ImportBucket; rows: BucketedRow[] }) {
+function BucketSection({
+  bucket,
+  rows,
+  promotedKeys,
+  onTogglePromote,
+}: {
+  bucket: ImportBucket
+  rows: BucketedRow[]
+  /** Only meaningful for the Possible duplicate bucket — omitted elsewhere. */
+  promotedKeys?: Set<string>
+  onTogglePromote?: (row: BucketedRow) => void
+}) {
   return (
     <details open={bucket === 'ready'} className="min-w-0 rounded-lg border bg-card">
       <summary className="flex min-h-11 min-w-0 cursor-pointer list-none items-center justify-between gap-2 p-3">
@@ -100,7 +171,16 @@ function BucketSection({ bucket, rows }: { bucket: ImportBucket; rows: BucketedR
         {rows.length === 0 ? (
           <p className="p-3 text-caption text-muted-foreground">No rows in this bucket.</p>
         ) : (
-          rows.map((row) => <RowBlock key={`${row.member.id}-${row.rowNumber}`} row={row} />)
+          rows.map((row) => (
+            <RowBlock
+              key={rowKey(row)}
+              row={row}
+              isPromoted={bucket === 'possibleDuplicate' ? promotedKeys?.has(rowKey(row)) : undefined}
+              onTogglePromote={
+                bucket === 'possibleDuplicate' && onTogglePromote ? () => onTogglePromote(row) : undefined
+              }
+            />
+          ))
         )}
       </div>
     </details>
@@ -109,9 +189,27 @@ function BucketSection({ bucket, rows }: { bucket: ImportBucket; rows: BucketedR
 
 export function ImportReviewScreen({ buckets, ledgerName, onCommit, onLeave, onDownloadRejects }: ImportReviewScreenProps) {
   const [confirmingLeave, setConfirmingLeave] = useState(false)
-  const readyCount = buckets.ready.length
+  const [promotedKeys, setPromotedKeys] = useState<Set<string>>(new Set())
+
+  const promotedRows = buckets.possibleDuplicate.filter((row) => promotedKeys.has(rowKey(row)))
+  const readyCount = buckets.ready.length + promotedRows.length
   const ctaLabel = `Add ${readyCount} holding${readyCount === 1 ? '' : 's'} to ${ledgerName}`
   const rejectedCount = buckets.needsAttention.length + buckets.possibleDuplicate.length + buckets.skipped.length
+
+  const handleTogglePromote = (row: BucketedRow) => {
+    const key = rowKey(row)
+    setPromotedKeys((previous) => {
+      const next = new Set(previous)
+      if (next.has(key)) {
+        // Undo — no analytics event. METRICS_PLAN.md defines no "un-override" event.
+        next.delete(key)
+      } else {
+        next.add(key)
+        track('bulk_import_duplicate_overridden', {})
+      }
+      return next
+    })
+  }
 
   return (
     <section className="min-w-0 space-y-3">
@@ -152,14 +250,20 @@ export function ImportReviewScreen({ buckets, ledgerName, onCommit, onLeave, onD
       )}
 
       {BUCKET_ORDER.map((bucket) => (
-        <BucketSection key={bucket} bucket={bucket} rows={buckets[bucket]} />
+        <BucketSection
+          key={bucket}
+          bucket={bucket}
+          rows={buckets[bucket]}
+          promotedKeys={bucket === 'possibleDuplicate' ? promotedKeys : undefined}
+          onTogglePromote={bucket === 'possibleDuplicate' ? handleTogglePromote : undefined}
+        />
       ))}
 
       <div className="flex flex-col gap-2 md:flex-row md:items-center">
         <button
           type="button"
           disabled={readyCount === 0}
-          onClick={() => onCommit(buckets.ready)}
+          onClick={() => onCommit([...buckets.ready, ...promotedRows])}
           className={cn(
             'min-h-11 w-full min-w-0 rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground',
             'disabled:cursor-not-allowed disabled:opacity-50',
