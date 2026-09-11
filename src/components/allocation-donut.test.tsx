@@ -60,6 +60,36 @@ describe('AllocationDonut', () => {
     expect(screen.getByText('₹10,000')).toBeInTheDocument()
   })
 
+  // 2026-09-11 regression guard. The donut and its legend were the one place
+  // in the app still painting hard-coded LIGHT-theme hexes, so in dark mode
+  // every arc and dot was the wrong colour while the rest of the surface had
+  // followed the theme. Both now reference the per-theme CSS variables that
+  // globals.css already defines. Asserting the exact reference is the point:
+  // any hex creeping back into ASSET_HEX fails here.
+  describe('asset colours follow the theme', () => {
+    it('paints each arc from its per-theme asset variable, not a fixed hex', () => {
+      const { container } = renderDonut({ state: 'populated', allocation, totalValue: 10000 })
+
+      const fills = Array.from(container.querySelectorAll('.recharts-pie-sector path')).map((p) =>
+        p.getAttribute('fill'),
+      )
+      expect(fills).toEqual(['hsl(var(--c-equity))', 'hsl(var(--c-debt))', 'hsl(var(--c-gold))'])
+      expect(fills.some((f) => f?.startsWith('#'))).toBe(false)
+    })
+
+    it('paints each legend dot from the same variable as its arc', () => {
+      const { container } = renderDonut({ state: 'populated', allocation, totalValue: 10000 })
+
+      const dots = Array.from(container.querySelectorAll('li span.rounded-full')) as HTMLElement[]
+      expect(dots).toHaveLength(3)
+      expect(dots.map((d) => d.style.backgroundColor)).toEqual([
+        'hsl(var(--c-equity))',
+        'hsl(var(--c-debt))',
+        'hsl(var(--c-gold))',
+      ])
+    })
+  })
+
   // D-016 Slice 5 / SPEC.md §S6 — the reserve treatment gets its own
   // assertions, deliberately not folded into the 0-holdings ghost-state test
   // above: they cover different states and would mask each other.
@@ -73,9 +103,14 @@ describe('AllocationDonut', () => {
 
       const pattern = hatchPattern(container)
       expect(pattern).not.toBeNull()
-      // Folio geometry: 5x5 tile, rotated 45°, teal ground, one paper rule.
+      // Folio geometry: 5x5 tile, rotated 45°, teal ground, one surface rule.
       expect(pattern!.getAttribute('patternTransform')).toBe('rotate(45)')
-      expect(pattern!.querySelector('rect')?.getAttribute('fill')).toBe('#2E7D8C')
+      // Was the literal '#2E7D8C' until 2026-09-11. That hex was the LIGHT
+      // value of --c-ef, so the hatch painted a light-theme teal in dark mode.
+      // It now references the per-theme variable, which is the whole point of
+      // the fix — asserting a hex again would re-pin the bug.
+      expect(pattern!.querySelector('rect')?.getAttribute('fill')).toBe('hsl(var(--c-ef))')
+      expect(pattern!.querySelector('line')?.getAttribute('stroke')).toBe('hsl(var(--card))')
 
       // Exactly one arc carries the hatch: the ₹1,200 reserve inside debt.
       expect(hatchedSectors(container, pattern!.id)).toHaveLength(1)
