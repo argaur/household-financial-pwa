@@ -751,6 +751,23 @@ Every step is test-first. A failing test lands before the implementation it desc
   **Fix:** reuse `localDateStamp` from `src/lib/import-filename.ts`. Verify with a test that pins a fixed instant in the 00:00-05:30 IST window and asserts the local date, which is the only window where the bug is observable.
 
 - [ ] **I5. Parser: the two India-specific traps** `[model: opus]`. Failing tests first, both named now so neither is rediscovered late. **Excel date serials are formatted from local date parts and `toISOString()` appears nowhere in the parser**: a serial for 1 January under an IST offset must produce 1 January, not 31 December. **Lakh grouping parses**: "1,50,000" is 150000. **Shorthand is rejected with a clear message, never guessed**: "1.5L" produces a rejection, because a wrong guess about money is worse than a clear refusal. Opus: these are correctness traps where the wrong implementation passes casual testing and silently corrupts amounts.
+- [ ] **I-spec-4. D-025 decision 8 describes the date trap inaccurately** `[model: sonnet]`. **Found 2026-09-11 during I5, by probing the pinned build rather than reasoning from the document. Documentation fix only; the code is already correct.**
+
+  **What D-025 decision 8 says:** the trap is a `Date` at **local** midnight which `toISOString()` then pushes back a day.
+
+  **What xlsx 0.20.3 actually does**, verified by writing a workbook holding 1 Jan 2026 and reading it back under two process timezones:
+
+  | read option | result |
+  |---|---|
+  | `cellDates: false` (default) | `{ t: 'n', v: 46023 }` — a raw 1900-system serial. No `Date`, no timezone anywhere |
+  | `cellDates: true` | `{ t: 'd', v: Date }` at **UTC midnight** — identical under `TZ=UTC` and `TZ=EST5EDT` |
+
+  **Why the difference matters rather than being pedantry.** If the cell arrives at *UTC* midnight, then under IST `toISOString()` returns the **correct** day and reading *local* parts is what breaks — under a negative (western) offset. That is the exact opposite of the failure D-025 describes. Both are real day-shifts, but they sit on **opposite sides of UTC**, so a fix written to the document's framing could be wrong in the other direction.
+
+  **How I5 resolved it:** by removing the ambiguity instead of choosing a side. The parser consumes **serials** and converts them with integer arithmetic, constructing no `Date` at all, which is correct under every offset including UTC and satisfies §I6.9 structurally. `PARSER_READ_OPTIONS.cellDates === false` is pinned by test so the defensive `Date` branch is never live.
+
+  **Action:** amend D-025 decision 8 to describe the real mechanism, so a future reader does not "fix" a correct parser toward the wrong framing. **No code change.**
+
 - [ ] **I6. Validation message builder names the column and the reason, never the value** `[model: sonnet]`. Failing test first over the message builder with a fixture value chosen to be unmistakable if echoed. "Current value is not a number I can read" is allowed; echoing the cell contents is not, because these messages are the most likely thing to end up in a Sentry breadcrumb or a screenshot.
 - [ ] **I7. Bucketing, including conservative duplicate detection** `[model: sonnet]`. Failing tests first: rows land in Ready, Needs attention, Possible duplicate, or Skipped, derived at parse time and living only in component state, no table and no persisted draft. A row is Possible duplicate when the target ledger already holds a decrypted holding with the same instrument slug and the same `member_id`, compared after the vault is unlocked, which is the only place both sides exist in plaintext. **Fuzzy instrument matching may only ever suggest a candidate for explicit confirmation, never auto-resolve.** Both agents said this independently.
 - [ ] **I8. Review screen** `[model: sonnet]`. Failing tests first: four collapsible sections in fixed order with Ready expanded and the rest collapsed with counts visible; one column below `md:` with each row a stacked block and its reason beneath it (a four-column row table at 390px is the failure mode to avoid); `min-w-0` on every bucket section and row block so a long instrument name wraps rather than widening the page; every touch target at least 44px; the primary CTA carries the count and the ledger name and commits the Ready bucket only. `SPEC.md` §I4 and `DATA_MODEL.md` note 16: the review screen is the feature, the upload control is not.
@@ -895,6 +912,16 @@ Every I-step keeps its original tag from P4 except the two flagged here. Neither
 - **I10, I12, I13 stay `opus`.** A new authenticated array endpoint, an absence-of-persistence proof, and a telemetry-scrubbing audit are judgment-heavy, not mechanical, and none is a good fit for the codex lane's "no design decision left" eligibility bar.
 
 Each chunk is one commit, vertical: behaviour plus tests plus analytics events where applicable. Same chunk contract as both plans above.
+
+### Standing repository items found during P6 execution (NOT scoped to `d024-d025-ai-import`, and not on its pre-merge list)
+
+These predate this branch and must not gate its merge. They are recorded here only because this is where they were found; **their proper home is `app/CLAUDE.md`'s "Known gaps" list**, which this execution did not edit by design.
+
+- **`npm run lint` has never run since the ESLint 9 upgrade. Nothing in this repository is linted.** Reproduced 2026-09-11: ESLint **9.39.4** is installed, the script is a bare `eslint .`, and **no `eslint.config.(js|mjs|cjs)` exists in `app/`**. ESLint 9 dropped `.eslintrc.*` support, so the command exits with "couldn't find an eslint.config.js file".
+
+  **Blast radius, checked rather than assumed — and smaller than it first appeared.** `scripts/predeploy-check.sh` does **not** invoke lint, typecheck, or the test suite (its only `lint`/`test` matches are a comment and a `test.invalid` payload string). So no deploy gate was silently swallowing a failure: lint was never wired into the deploy path at all. This is a **dormant** quality gate, not a **bypassed** one. The distinction matters, because "a gate has been failing unnoticed across an encryption cycle, a redesign and three promotions" would be a far more serious claim, and it is not the true one.
+
+  **Fix:** add a flat `eslint.config.js`. Expect a backlog of findings on first run, since no file in this repository has ever been linted under the current toolchain.
 
 ## P6. Model tally
 
