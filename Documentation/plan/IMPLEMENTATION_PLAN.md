@@ -770,6 +770,14 @@ Every step is test-first. A failing test lands before the implementation it desc
 
 - [ ] **I6. Validation message builder names the column and the reason, never the value** `[model: sonnet]`. Failing test first over the message builder with a fixture value chosen to be unmistakable if echoed. "Current value is not a number I can read" is allowed; echoing the cell contents is not, because these messages are the most likely thing to end up in a Sentry breadcrumb or a screenshot.
 - [ ] **I7. Bucketing, including conservative duplicate detection** `[model: sonnet]`. Failing tests first: rows land in Ready, Needs attention, Possible duplicate, or Skipped, derived at parse time and living only in component state, no table and no persisted draft. A row is Possible duplicate when the target ledger already holds a decrypted holding with the same instrument slug and the same `member_id`, compared after the vault is unlocked, which is the only place both sides exist in plaintext. **Fuzzy instrument matching may only ever suggest a candidate for explicit confirmation, never auto-resolve.** Both agents said this independently.
+- [ ] **I-vis-1. The review screen's collapsible sections are native `<details>`/`<summary>`, which will not match the mint/brass design system** `[model: sonnet]`. **Found 2026-09-11 during I8. Visual only. Blocked on the same wall as D-022/D-023, not on a decision.**
+
+  I8 used native `<details>`/`<summary>` because `src/components/ui/` has no Collapsible or Accordion primitive. That is a real advantage, not laziness: native disclosure carries keyboard and assistive-technology support for free, which is why the screen's axe scan passes with no hand-wired ARIA.
+
+  **But the default disclosure triangle and its focus styling belong to the browser, not to this product's design language.** The mint/brass system (D-016 Slice 5) governs every other surface. So this is a **deferred visual decision, not an avoided one** — it will be obvious the first time a human looks at the screen.
+
+  **Why it is not actionable yet:** nobody can look at it. This is the same tooling wall as D-022 and D-023 — the Chrome extension available to these sessions floors `window.innerWidth` near 630px, an iframe workaround is blocked by the site's own CSP, and CSS `zoom` moves neither `window.innerWidth` nor `matchMedia`. **Pair this with the first real-device pass**; do not build a custom Collapsible speculatively before anyone has seen the screen render.
+
 - [ ] **I-spec-5. Duplicate detection ignores amounts, which may make "Possible duplicate" the default path for top-ups** `[model: sonnet]`. **Found 2026-09-11 during I7. Needs Gaurav's product call. Not blocking; a one-line change either way.**
 
   **The rule as built:** a row is a Possible duplicate when the target ledger already holds a decrypted holding with the **same instrument and the same member**, regardless of amounts. So a row whose invested and current values differ from the existing holding is still flagged.
@@ -778,7 +786,9 @@ Every step is test-first. A failing test lands before the implementation it desc
 
   **The cost, which needs a decision rather than more reasoning.** A household topping up SIPs it already holds will see **every one of those rows** land in Possible duplicate. If most real imports are top-ups rather than first-time entry, that bucket becomes the default path and the feature reads as obstructive — the opposite of what a bulk importer is for. The failure is not incorrect, it is annoying, which is the kind that survives review and then gets abandoned in use.
 
-  **The decision:** should near-identical amounts demote a match out of Possible duplicate into Ready, or should the bucket stay maximally cautious? A one-line change to `bucketOneRow`'s duplicate predicate in `src/lib/import-bucketing.ts` either way. **Best answered against a real import**, which makes it a natural companion to V1's cross-tool pass rather than a desk decision.
+  **RESOLVED 2026-09-11 — Gaurav's call, relayed in-session: keep it as built. Flag on instrument plus member only; amounts do not participate. No code change.**
+
+  The cost recorded above is accepted deliberately, not overlooked: a household topping up existing SIPs will see those rows in Possible duplicate, and that is the intended conservative behaviour. **If real use shows that bucket swallowing most of a typical import, revisit it then** — `bucketOneRow`'s predicate in `src/lib/import-bucketing.ts` is a one-line change, and V1's pass against a real file is the natural place to notice.
 
   **Related and the same shape:** I-spec-3 (the kind-relevance heuristic). Both are reasonable defaults chosen where the spec was silent, and both want observation rather than argument.
 
