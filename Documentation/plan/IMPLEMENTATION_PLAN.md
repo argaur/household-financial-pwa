@@ -996,6 +996,28 @@ These predate this branch and must not gate its merge. They are recorded here on
 
   **A red suite with zero real assertion failures is the thing that trains people to re-run until green**, which is how a genuine failure eventually gets waved through. Worth fixing deliberately, by someone who can reproduce it under load.
 
+### Track H: the import host (new scope, 2026-09-11, not in P1-P6)
+
+Chunk I finished complete-as-specified and **unusable**: every piece built and verified, no page assembling them. The plan never made the host a numbered step, so no step built it, and each step correctly left a seam rather than inventing scope. Track H closes that.
+
+- [x] **H1. Read an uploaded workbook into `RawImportRow[]`** `[model: opus]`. The missing producer. Opus for the sheet-to-member trap, not for the file handling.
+- [ ] **H2. Upload drop zone** `[model: sonnet]`. Drag plus file button, one file at a time, `.xlsx` only (`SPEC.md` §I4).
+- [ ] **H3. The host surface**, assembling disclosure → template download → upload → parse → bucket → review → commit `[model: sonnet]`.
+- [ ] **H4. Entry point and the three dormant seams** `[model: sonnet]`: template download wiring (I4), rejects download wiring (I9), telemetry call sites (I14). **Entry point is specified, not a choice** — `SPEC.md` §I4: "a secondary action on the ledger's holdings view, next to the existing add affordance, naming the active ledger. Not in the FAB, not in the nav."
+- [ ] **H5. Pin coverage for the drop zone and the download trigger** `[model: sonnet]`, the two `SPEC.md` §I6.1 surfaces I15 could not cover because they did not exist.
+
+- [ ] **H-risk-1. Member ORDER is an unenforceable contract in the import round trip** `[model: opus]`. **Found 2026-09-11 during H1. Needs a decision BEFORE H2/H3 wire a member list in.**
+
+  **The mechanism.** `sanitizeSheetName` (I3) truncates at 31 characters and disambiguates collisions with ` (2)`, ` (3)` **by position in the member list**. H1 therefore rebuilds the sheet-to-member map by recomputing that forward mapping over the members in order — the only approach that works, since the transform is not invertible.
+
+  **The gap: the file records no member order.** Nothing in the workbook says which member owned which tab. Identity is *recomputed*, not *recorded*. If any caller ever passes a differently-ordered member list than the template was built from, two members whose names collide after truncation are **silently swapped**, and one person's holdings file against the other. No error, entirely plausible amounts, nothing to notice.
+
+  **Why it is safe today and still worth closing.** There is one member source (`GET /api/family-members`) with one stable order, so the contract holds in practice. But it is held by convention across a file that leaves the app, gets edited in Excel, and comes back — possibly days later, possibly after a member was added, renamed or removed. **A member added between download and upload shifts the collision disambiguation.**
+
+  **The fix belongs in I3, not here:** have the template *record* identity rather than have the reader recompute it — a member id in a hidden cell (the template already has a hidden slug column, so the pattern exists) or a workbook custom property. Then H1 reads identity instead of deriving it, and order stops mattering.
+
+  **Decide before H2/H3**, because those wire the member list in and would bake the recomputation in as the permanent contract.
+
 ## P6. Model tally
 
 Applied with the `model-router` skill against the finished plan.
