@@ -719,7 +719,11 @@ Every step is test-first. A failing test lands before the implementation it desc
 
   **The second-order risk, which is the real one.** Cell comments are now the *sole* guidance channel. Comment fidelity across real Excel, Google Sheets and LibreOffice cannot be proven by a generator-written fixture — it is exactly the closed loop **V1** exists to break. V1 consequently carries more weight than when it was written: **if comments do not survive a Google Sheets round-trip, the template has no kind-awareness at all.** V1 should check comment survival explicitly, not only dates and lakh grouping.
 
-  **Decisions needed:** (a) amend `SPEC.md`/D-025 to drop "shading", or accept the template is comment-only; (b) whether to keep the best-effort `cell.s = { fill: ... }` line in `src/lib/import-template.ts`. It is documented in place as a probable no-op and would start working if CE ever gained support, but it is code that reads as though it shades and does not.
+  **Decision (b) RESOLVED 2026-09-11 — Gaurav's call, relayed by an in-session agent: keep the `cell.s = { fill: ... }` line, commented, as a placeholder in case SheetJS's paid tier is ever added.** No code change results; this ratifies what I3 already shipped. The existing comment above it already states it is a probable no-op under the Community Edition build, which is what stops it being mistaken for working shading.
+
+  **Decision (a) still open:** amend `SPEC.md` §I3 and D-025 decision 3 to drop "shading", or accept in the documents that the template is comment-only. Until that is done, two design documents describe a capability the build cannot deliver.
+
+  **Provenance note:** (b) arrived relayed by an in-session agent rather than from Gaurav directly. Acceptable here because it preserves existing code and authorizes nothing destructive. It is **not** a precedent for anything that writes to production or touches the sealed data path.
 
 - [ ] **I-spec-3. The per-instrument kind-relevance rule is unspecified** `[model: sonnet]`. **Found 2026-09-11 during I3. Needs confirmation against real content. Not blocking Track I.**
 
