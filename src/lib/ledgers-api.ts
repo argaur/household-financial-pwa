@@ -107,17 +107,62 @@ export const ledgerGoalSchema = z.object({
 export type LedgerGoal = z.infer<typeof ledgerGoalSchema>
 
 /**
+ * Mirrors `MAX_SUGGESTION_ALLOCATIONS` in server/lib/ai-suggestion-output.ts.
+ * Repeated rather than imported: `server/` is not part of the browser bundle,
+ * and the two ceilings are the same number for the same reason (a suggestion
+ * names a handful of library slugs, never a portfolio).
+ */
+export const MAX_SUGGESTION_ALLOCATIONS = 12
+
+/**
+ * What an applied AI suggestion left behind on the ledger it created.
+ *
+ * WHY THIS AND NOT {@link LedgerGoal} (M3c, the question the step asked):
+ * a goal is `{ label, targetAmountInr, targetYear, monthlyCapacityInr }`, and
+ * a counsel suggestion has none of those. Writing one would mean inventing a
+ * target amount and a target year the user never gave, which is the same class
+ * of mistake as guessing a `memberId` — so the suggestion gets its own optional
+ * key beside `goal` instead of being bent into it. A ledger may hold either,
+ * both, or neither.
+ *
+ * Slugs and weights only. The model's prose (`reasoning`) and the fixed
+ * `caveat` are NOT kept: DATA_MODEL.md's "cards live in browser state only"
+ * line is about the card, and what survives Apply is the mix the user chose to
+ * act on, not the model's words about it. Rupee figures cannot appear here at
+ * all — there is no field for one, the same structural guarantee
+ * `AiSuggestionAllocation` gives the card (SPEC.md §G6.5).
+ *
+ * Like `goal`, this rides inside the ledger's own ciphertext, so the server can
+ * neither read nor bound it and the ceilings below are the only ones there are.
+ */
+export const ledgerSuggestionSchema = z.object({
+  kind: z.enum(['goal_plan', 'counsel']),
+  allocations: z
+    .array(
+      z.object({
+        slug: z.string().trim().min(1).max(100),
+        weightPct: z.number().min(0).max(100),
+      }),
+    )
+    .min(1)
+    .max(MAX_SUGGESTION_ALLOCATIONS),
+})
+export type LedgerSuggestion = z.infer<typeof ledgerSuggestionSchema>
+
+/**
  * What a ledger's envelope carries.
  *
  * `goal` is optional and its absence is a normal, expected read: every ledger
  * written before D-024, and every ledger a user creates by hand after it, is a
  * bare `{ name }`. That is exactly why the row `version` does NOT bump for this
  * widening — there is no old shape to migrate away from, only a key that may or
- * may not be there.
+ * may not be there. `suggestion` (M3c) is the same shape of widening and gets
+ * the same treatment for the same reason.
  */
 const ledgerPayloadSchema = z.object({
   name: z.string().trim().min(1).max(MAX_LEDGER_NAME_CHARS),
   goal: ledgerGoalSchema.optional(),
+  suggestion: ledgerSuggestionSchema.optional(),
 })
 type LedgerPayload = z.infer<typeof ledgerPayloadSchema>
 
@@ -140,6 +185,11 @@ export interface Ledger {
    * shape every pre-D-024 row has.
    */
   goal?: LedgerGoal
+  /**
+   * Absent unless this ledger was created by applying an AI suggestion (M3c).
+   * Absent is the shape every hand-made and every pre-M3c ledger has.
+   */
+  suggestion?: LedgerSuggestion
   ciphertext: string | null
   iv: string | null
   alg: string | null
@@ -244,7 +294,12 @@ function describeFailure(error: unknown): string {
  * worse, a `null` a caller would have to distinguish from "absent".
  */
 function assemble(wire: LedgerWire, payload: LedgerPayload): Ledger {
-  return { ...wire, name: payload.name, ...(payload.goal ? { goal: payload.goal } : {}) }
+  return {
+    ...wire,
+    name: payload.name,
+    ...(payload.goal ? { goal: payload.goal } : {}),
+    ...(payload.suggestion ? { suggestion: payload.suggestion } : {}),
+  }
 }
 
 /**
@@ -303,6 +358,41 @@ export async function createBlankLedger(token: string | null, name: string, goal
 }
 
 /**
+ * M3c — what "Apply" on an AI suggestion writes.
+ *
+ * A new ledger, EMPTY OF HOLDINGS, with the suggested mix sealed onto it as
+ * context. It is `createBlankLedger` with a second sealed key, and that is the
+ * whole of it by decision, not by omission:
+ *
+ * An `AiSuggestionAllocation` is `{ slug, weightPct }` and names no member.
+ * Every holding needs a `memberId`, which `POST /api/ledgers` verifies against
+ * the caller's household, and a household has several members. Turning a
+ * suggestion into holdings would therefore mean choosing a member, which would
+ * silently attribute the rest of the household's money to that one person. So
+ * the `holdings` array here is `[]`, always, and the user records the holdings
+ * themselves against the people they actually belong to.
+ *
+ * The name is sealed by `postLedger` exactly like every other non-baseline
+ * ledger's (D-020) — there is no second path and no plaintext-name shortcut for
+ * an AI-created ledger.
+ *
+ * `origin` stays `'manual'`, because the server decides `origin` and never
+ * accepts it from a client (server/lib/ledgers.ts: "nor claim a ledger came
+ * from the AI planner"). The `'ai_suggestion'` value in {@link LEDGER_ORIGINS}
+ * is unreachable until a server route sets it; marking this ledger as
+ * AI-derived is what the sealed `suggestion` key does instead, and it does it
+ * somewhere the server cannot read.
+ */
+export async function createSuggestionLedger(
+  token: string | null,
+  name: string,
+  suggestion: LedgerSuggestion,
+): Promise<Ledger> {
+  const vault = await openVault()
+  return postLedger(token, vault, name, 'blank', [], undefined, suggestion)
+}
+
+/**
  * Copy the household's Current holdings into a new ledger.
  *
  * `sourceHoldings` are the already-decrypted rows the caller is displaying;
@@ -351,17 +441,23 @@ async function postLedger(
   source: 'blank' | 'copy',
   holdings: LedgerHoldingWrite[],
   goal?: LedgerGoal,
+  suggestion?: LedgerSuggestion,
 ): Promise<Ledger> {
   const trimmed = name.trim()
   if (trimmed.length === 0 || trimmed.length > MAX_LEDGER_NAME_CHARS) {
     throw new LedgersApiError(400, 'invalid_ledger_name')
   }
 
-  let payload: LedgerPayload = { name: trimmed }
+  const payload: LedgerPayload = { name: trimmed }
   if (goal !== undefined) {
     const parsed = ledgerGoalSchema.safeParse(goal)
     if (!parsed.success) throw new LedgersApiError(400, 'invalid_ledger_goal')
-    payload = { name: trimmed, goal: parsed.data }
+    payload.goal = parsed.data
+  }
+  if (suggestion !== undefined) {
+    const parsed = ledgerSuggestionSchema.safeParse(suggestion)
+    if (!parsed.success) throw new LedgersApiError(400, 'invalid_ledger_suggestion')
+    payload.suggestion = parsed.data
   }
 
   const id = newRowId()

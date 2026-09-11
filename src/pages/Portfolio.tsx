@@ -10,6 +10,7 @@ import { ProjectionPanel, type ProjectionPanelState } from '@/components/project
 import { LedgerTable } from '@/components/ledger-table'
 import {
   AiSuggestionCard,
+  type AiSuggestionAllocation,
   type AiSuggestionKind,
   type AiSuggestionTarget,
 } from '@/components/ai-suggestion-card'
@@ -17,7 +18,8 @@ import { track } from '@/lib/analytics'
 import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
 import { listHoldings, type Holding } from '@/lib/holdings-api'
-import { listLedgers, type Ledger } from '@/lib/ledgers-api'
+import { createSuggestionLedger, listLedgers, MAX_LEDGER_NAME_CHARS, type Ledger } from '@/lib/ledgers-api'
+import { describeCreateError } from '@/lib/ledger-create-error'
 import {
   getAiSuggestionsUsage,
   postCounselSuggestion,
@@ -53,6 +55,8 @@ interface AiSuggestionSlotProps {
   totalValueInr: number
   onApply: () => void
   onDismiss: () => void
+  /** True while M3c's Apply is creating the new ledger, so the card's own buttons lock. */
+  applying?: boolean
 }
 
 /**
@@ -81,10 +85,12 @@ export function AiSuggestionSlot({
   totalValueInr,
   onApply,
   onDismiss,
+  applying = false,
 }: AiSuggestionSlotProps) {
   if (suggestion) {
     return (
       <AiSuggestionCard
+        submitting={applying}
         kind={suggestion.kind}
         target={suggestion.target}
         allocations={suggestion.suggestion.allocations}
@@ -116,6 +122,30 @@ function upsertHolding(prev: Holding[], holding: Holding): Holding[] {
 const currency = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
 function formatInr(value: string): string {
   return `₹${currency.format(Number(value))}`
+}
+
+/**
+ * M3c — the outcome of the last Apply, shown on the page rather than in a
+ * toast or a dialog. `ReviewLedgerAction` closes its own dialog the moment
+ * Apply is pressed, so by the time the create resolves there is nowhere else
+ * for a message to live.
+ */
+type ApplyNotice = { status: 'created'; ledgerName: string } | { status: 'failed'; message: string }
+
+/** What a ledger created by Apply is called. Short, dated, and 60 characters is plenty. */
+const SUGGESTION_LEDGER_LABEL: Record<AiSuggestionKind, string> = {
+  goal_plan: 'AI plan',
+  counsel: 'AI review',
+}
+
+function suggestionLedgerName(kind: AiSuggestionKind, now: Date = new Date()): string {
+  const date = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  return `${SUGGESTION_LEDGER_LABEL[kind]}, ${date}`.slice(0, MAX_LEDGER_NAME_CHARS)
+}
+
+/** COPY_DECK.md "Card allocation row", reused so the mix reads the same before and after Apply. */
+function allocationLabel(name: string, weightPct: number): string {
+  return `${name} · ${weightPct} percent`
 }
 
 // Copy: Documentation/design/COPY_DECK.md — "Portfolio Tab". Layout:
@@ -151,6 +181,15 @@ export function Portfolio() {
   // "already dismissed" memory beyond that, matching the consent step's own
   // never-remembered discipline (D-025, SPEC.md G4).
   const [activeSuggestion, setActiveSuggestion] = useState<ActiveAiSuggestion | null>(null)
+  // M3c — Apply's own write state. `applyNotice` is the only thing on the page
+  // that reports what Apply did, success or failure.
+  const [applying, setApplying] = useState(false)
+  const [applyNotice, setApplyNotice] = useState<ApplyNotice | null>(null)
+  // The last suggestion a counsel review returned, kept so a FAILED apply can
+  // put the card back. `ReviewLedgerAction` holds the suggestion in its own
+  // state and closes its dialog on Apply, so without this a create that failed
+  // would drop the user's suggestion on the floor with nothing to retry from.
+  const lastReviewSuggestionRef = useRef<ActiveAiSuggestion | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null)
   // Sheet content is position:fixed and taller than the viewport; some mobile
@@ -276,28 +315,57 @@ export function Portfolio() {
     // ai-suggestion-card.tsx's module doc); switching tabs must not carry it
     // over onto a different ledger's compare-strip slot.
     setActiveSuggestion(null)
+    setApplyNotice(null)
     setActiveLedgerId(id)
   }
 
   /**
-   * M3 — the minimum honest behaviour for both of the card's actions.
+   * M3c — what Apply writes: ONE NEW LEDGER, EMPTY OF HOLDINGS, with the
+   * suggested mix sealed onto it as context (`createSuggestionLedger`).
    *
-   * No mutation of holdings is wired here. `onApply`'s write semantics
-   * (rewrite allocations? open a confirm? create a ledger?) are not
-   * specified in SPEC.md or DECISIONS_LOG.md anywhere this session could
-   * find -- see the M3 report. What IS settled (D-024 decision 3: "nothing
-   * changes until Apply is tapped") is that a tap must not be silently
-   * inert, so both actions clear the suggestion and return the slot to the
-   * compare strip; a later step defines what, if anything, Apply writes.
-   * `AiSuggestionCard` fires its own `ai_suggestion_applied` /
-   * `ai_suggestion_dismissed` analytics -- nothing duplicates that here.
+   * Current is never touched, and neither is any other existing ledger. No
+   * holding is created, by decision rather than omission: an allocation is
+   * `{ slug, weightPct }` with no member on it, and picking one would silently
+   * attribute the rest of the household's money to that person. See
+   * `createSuggestionLedger`'s own doc.
+   *
+   * The 4-ledger cap is not re-implemented here. `ledgers-api.ts` raises
+   * `LedgerCapReachedError` on the route's 409, and `describeCreateError`
+   * (`src/lib/ledger-create-error.ts`) is the same function the manual
+   * "+ New ledger" modal uses, so the cap reads identically either way.
+   *
+   * `AiSuggestionCard` fires its own `ai_suggestion_applied`; `ledger_created`
+   * is tracked here because a ledger genuinely was created, with `source:
+   * 'blank'`, which is what it is.
    */
-  function handleApplySuggestion() {
-    setActiveSuggestion(null)
+  async function applySuggestion(kind: AiSuggestionKind, allocations: AiSuggestionAllocation[]) {
+    if (applying) return
+    setApplying(true)
+    setApplyNotice(null)
+    const name = suggestionLedgerName(kind)
+    try {
+      const token = await getToken()
+      const ledger = await createSuggestionLedger(token, name, { kind, allocations })
+      track('ledger_created', { source: 'blank' })
+      setLedgers((prev) => [...prev, ledger])
+      // Set directly rather than through handleSelectLedger: this is not a tab
+      // click, so it must not fire `ledger_switched`.
+      setActiveLedgerId(ledger.id)
+      setActiveSuggestion(null)
+      setApplyNotice({ status: 'created', ledgerName: ledger.name ?? name })
+    } catch (err) {
+      // Nothing was created, so the suggestion must come back rather than
+      // vanish with the dialog that raised it.
+      setActiveSuggestion((prev) => prev ?? lastReviewSuggestionRef.current)
+      setApplyNotice({ status: 'failed', message: describeCreateError(err) })
+    } finally {
+      setApplying(false)
+    }
   }
 
   function handleDismissSuggestion() {
     setActiveSuggestion(null)
+    setApplyNotice(null)
   }
 
   /**
@@ -341,6 +409,13 @@ export function Portfolio() {
       throw new Error(response.status)
     }
     setAiUsage((prev) => (prev ? { ...prev, ...response.usage } : prev))
+    // M3c — kept so a failed Apply can put this card back on the page (see
+    // `lastReviewSuggestionRef`). Browser state only, never persisted.
+    lastReviewSuggestionRef.current = {
+      kind: 'counsel',
+      target: isBaselineActive ? 'current' : 'ledger',
+      suggestion: response.suggestion,
+    }
     return response.suggestion
   }
 
@@ -447,9 +522,79 @@ export function Portfolio() {
             ledgerHoldingsReady={ledgerHoldingsState === 'loaded'}
             instrumentNamesBySlug={instrumentNamesBySlug}
             totalValueInr={totalCurrentValue}
-            onApply={handleApplySuggestion}
+            applying={applying}
+            onApply={() => {
+              if (activeSuggestion) {
+                void applySuggestion(activeSuggestion.kind, activeSuggestion.suggestion.allocations)
+              }
+            }}
             onDismiss={handleDismissSuggestion}
           />
+        )}
+
+        {/* M3c — what Apply actually did. Plain text on the page, never a
+            toast: the dialog a suggestion was applied from has already closed
+            by the time the create resolves. The success copy has one job, to
+            stop a user opening an empty ledger and concluding the feature is
+            broken, so it says the plan is empty in as many words. */}
+        {applyNotice && (
+          <div
+            data-testid="apply-suggestion-notice"
+            role="status"
+            className={`rounded-lg border p-4 space-y-1 ${
+              applyNotice.status === 'created' ? 'border-brass-soft bg-brass/5' : 'border-destructive/40'
+            }`}
+          >
+            {applyNotice.status === 'created' ? (
+              <>
+                <p className="text-body font-medium">New plan created: "{applyNotice.ledgerName}".</p>
+                <p className="text-caption text-muted-foreground">
+                  It is empty. Nothing was added to Current, and nothing was added here.
+                </p>
+                <p className="text-caption text-muted-foreground">
+                  The suggested mix is saved with this plan, so you can see what it proposed.
+                </p>
+                <p className="text-caption text-muted-foreground">
+                  Add the holdings yourself, and pick who each one belongs to.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-body text-destructive">{applyNotice.message}</p>
+                <p className="text-caption text-muted-foreground">
+                  Nothing was created. Your suggestion is still on this page.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* M3c — the mix an applied suggestion left on this ledger. Slugs and
+            weights only, never a rupee figure (SPEC.md G6.5): the names come
+            from the instrument catalog and the percentages are what the user
+            chose to act on. It is shown because a plan that says a suggestion
+            is "saved with it" and then shows nothing is indistinguishable from
+            a broken one. */}
+        {state === 'loaded' && activeLedger?.suggestion && (
+          <section
+            data-testid="ledger-suggestion-note"
+            aria-labelledby="ledger-suggestion-heading"
+            className="rounded-lg border bg-card p-4 space-y-2"
+          >
+            <h2 id="ledger-suggestion-heading" className="text-body font-semibold">
+              The mix this plan came from
+            </h2>
+            <p className="text-caption text-muted-foreground">
+              This is what the suggestion proposed. Nothing here was recorded for you.
+            </p>
+            <ul className="space-y-1">
+              {activeLedger.suggestion.allocations.map((allocation) => (
+                <li key={allocation.slug} className="text-caption text-foreground">
+                  {allocationLabel(instrumentNamesBySlug[allocation.slug] ?? allocation.slug, allocation.weightPct)}
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {/* E6 (D-024) shell — lives in the ledger view, below the compare
@@ -484,7 +629,7 @@ export function Portfolio() {
             instrumentNamesBySlug={instrumentNamesBySlug}
             totalValueInr={totalCurrentValue}
             onReview={handleReviewLedger}
-            onApply={() => handleApplySuggestion()}
+            onApply={(allocations) => void applySuggestion('counsel', allocations)}
           />
         )}
 

@@ -10,13 +10,15 @@ import {
   createBlankLedger,
   createLedgerFromCurrent,
   ledgerGoalSchema,
-  LedgerCapReachedError,
-  LedgerCopyError,
   MAX_GOAL_LABEL_CHARS,
   MAX_LEDGER_NAME_CHARS,
   type Ledger,
   type LedgerGoal,
 } from '@/lib/ledgers-api'
+// The cap and copy-failure sentences are shared with M3c's Apply path
+// (src/pages/Portfolio.tsx) so the 4-ledger cap reads identically whichever
+// button reached it. See src/lib/ledger-create-error.ts.
+import { describeCreateError } from '@/lib/ledger-create-error'
 import type { Holding } from '@/lib/holdings-api'
 import { computeAllocation } from '@/lib/allocation'
 import { AiConsentStep } from './ai-consent-step'
@@ -327,16 +329,6 @@ export function NewLedgerModal({
     } finally {
       setAiSubmitting(false)
     }
-  }
-
-  function describeCreateError(err: unknown): string {
-    if (err instanceof LedgerCapReachedError) {
-      return 'You already have 4 ledgers, the most this household can hold. Delete one to create another.'
-    }
-    if (err instanceof LedgerCopyError) {
-      return 'The copy could not be made, so nothing was changed. Try again, or start empty instead.'
-    }
-    return 'Something went wrong. Please try again.'
   }
 
   async function handleSubmit(e: React.FormEvent) {
