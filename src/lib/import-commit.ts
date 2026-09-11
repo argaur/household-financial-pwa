@@ -35,11 +35,12 @@
  * hide a real contract disagreement rather than surface it.
  */
 
-import type { BucketedRow, ResolvedRow } from './import-bucketing'
+import type { BucketedRow, BucketedRows, ResolvedRow } from './import-bucketing'
 import type { Instrument } from './instruments-api'
 import { LIBRARY_SECTIONS } from './library-sections'
 import { HOLDINGS_TABLE, type AssetClass, type HoldingPayload } from './holdings-api'
 import { newRowId, openVault, sealRow, type SealedEnvelope } from './encrypted-rows'
+import { track } from './analytics'
 
 export interface CommitImportInput {
   token: string | null
@@ -185,4 +186,25 @@ export async function commitImportBatch(input: CommitImportInput): Promise<Commi
     input.readyRows.map((row) => sealReadyRow(vault, row, input.instruments)),
   )
   return postBatch(input.token, input.ledgerId, holdings)
+}
+
+/**
+ * D-025 step I14 — fires `bulk_import_completed` (METRICS_PLAN.md D-016
+ * table, feature 7 row) with row COUNTS only: `rows_clean` is the Ready
+ * bucket actually committed, `rows_rejected` is everything that did not make
+ * it (Needs attention + Possible duplicate + Skipped). Never a member name,
+ * an amount, an instrument or a nominee — see METRICS_PLAN.md's
+ * property-discipline note.
+ *
+ * Deliberately NOT called from `commitImportBatch` above.
+ * `import-telemetry-scrubbing.test.ts` (I13) pins that the full
+ * parse/review/rejects/commit flow fires zero analytics events today; that
+ * pin is not weakened here. This function is the seam a future host calls
+ * once, after `commitImportBatch` resolves successfully, with the same
+ * `BucketedRows` the review screen (I8) was rendered from.
+ */
+export function trackImportCompleted(buckets: BucketedRows): void {
+  const rowsClean = buckets.ready.length
+  const rowsRejected = buckets.needsAttention.length + buckets.possibleDuplicate.length + buckets.skipped.length
+  track('bulk_import_completed', { rows_clean: rowsClean, rows_rejected: rowsRejected })
 }

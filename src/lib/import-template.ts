@@ -27,6 +27,7 @@
 import type { Instrument } from './instruments-api'
 import { LIBRARY_SECTIONS } from './library-sections'
 import { loadSpreadsheetParser } from './spreadsheet-parser-loader'
+import { track } from './analytics'
 
 /**
  * Local type aliases reached via `typeof import('xlsx')` rather than
@@ -287,4 +288,22 @@ export async function buildImportTemplate(members: TemplateMember[], instruments
   }
 
   return wb
+}
+
+/**
+ * D-025 step I14 — fires `bulk_import_template_downloaded`
+ * (METRICS_PLAN.md D-016 table, feature 7 row). Deliberately NOT called from
+ * `buildImportTemplate` above: building the workbook and actually saving it
+ * to disk are two different moments — this module's own tests build a
+ * workbook repeatedly without ever downloading one, and firing a
+ * "downloaded" event on every build would misreport what happened. The
+ * event belongs at the point the file is actually written to disk, which is
+ * `XLSX.writeFile` on this module's output — the same not-yet-built host
+ * surface `import-rejects.ts`'s module doc names for its own rejects
+ * download. This function is the seam that host calls once the write
+ * succeeds. No properties: the template carries no household data at the
+ * point of download, only the fact that one happened.
+ */
+export function trackImportTemplateDownloaded(): void {
+  track('bulk_import_template_downloaded', {})
 }

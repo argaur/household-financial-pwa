@@ -134,6 +134,15 @@ export interface EventMap {
   // a ledger name, a member name, or a row count, all of which describe
   // what a household owns.
   pii_disclosure_shown: { surface: 'bulk_import' | 'privacy' }
+  // D-025 step I14 (bulk holdings import telemetry, METRICS_PLAN.md D-016
+  // table row for feature 7). No properties on the template-download event —
+  // the workbook carries no data yet at that point, only the fact that one
+  // was generated for download. `bulk_import_completed` carries row COUNTS
+  // only, per the property-discipline rule above and the I13 PostHog audit
+  // (src/lib/import-telemetry-scrubbing.test.ts): never a member name, an
+  // amount, an instrument or a nominee.
+  bulk_import_template_downloaded: Record<string, never>
+  bulk_import_completed: { rows_clean: number; rows_rejected: number }
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {
