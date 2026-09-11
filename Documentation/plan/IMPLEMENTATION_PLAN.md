@@ -1006,6 +1006,26 @@ Chunk I finished complete-as-specified and **unusable**: every piece built and v
 - [ ] **H4. Entry point and the three dormant seams** `[model: sonnet]`: template download wiring (I4), rejects download wiring (I9), telemetry call sites (I14). **Entry point is specified, not a choice** — `SPEC.md` §I4: "a secondary action on the ledger's holdings view, next to the existing add affordance, naming the active ledger. Not in the FAB, not in the nav."
 - [ ] **H5. Pin coverage for the drop zone and the download trigger** `[model: sonnet]`, the two `SPEC.md` §I6.1 surfaces I15 could not cover because they did not exist.
 
+- [ ] **H-gap-2. The "Possible duplicate" bucket is a dead end, so a top-up cannot be imported at all** `[model: opus]`. **Found 2026-09-11 while scoping H3. NEEDS A PRODUCT DECISION BEFORE H3 BUILDS THE HOST. The most consequential defect found in this cycle.**
+
+  **The trap, in four facts that are each individually reasonable:**
+  1. The review screen's primary CTA commits `buckets.ready` **only** (`SPEC.md` §I4, "Primary CTA"; `import-review-screen.tsx:162`).
+  2. A row is Possible duplicate when the target ledger already holds the same instrument for the same member, **regardless of amount** — I-spec-5, confirmed deliberate.
+  3. The stated repair path is "download the rejects, fix in Excel, re-upload" (`SPEC.md` §I4, "Row rows").
+  4. **No "Add anyway" affordance exists** anywhere — not in I8, not in `SPEC.md` §I4's panel table, nowhere in the codebase.
+
+  **Why those four combine into a dead end.** A duplicate row is not *broken*, so there is nothing to fix in Excel. Re-uploading the identical row re-runs the identical check against the identical ledger and produces the identical verdict. **The fix loop cannot terminate**, because the flag describes the ledger's existing contents, not a defect in the row.
+
+  **The consequence is the feature's main repeat use case.** Per I-spec-5, **every** top-up to an instrument a member already holds lands in this bucket. A household adding to SIPs it already owns — the most likely reason to bulk-import a second time — has no path through the feature at all. First-time import works; the second one silently cannot.
+
+  **`METRICS_PLAN.md` anticipated exactly this and nothing else did.** Line 325 defines `bulk_import_duplicate_overridden`, *"User taps 'Add anyway' on a Possible duplicate row."* The affordance was intended. It is specified **only** in the metrics table, so no plan step built it — and the event that would have exposed the gap is one of the seven in H-gap-1 that were never implemented.
+
+  **Three independent gaps had to line up for this to stay invisible:** the plan's I14 named three events where `METRICS_PLAN.md` specifies ten; `check_events.py` structurally cannot compare spec to registry; and `SPEC.md` §I4's panel table never mentions an override.
+
+  **The decision, which was NOT taken during execution:** either (a) add an "Add anyway" per-row affordance on Possible duplicate rows, promoting a row into the commit set and firing `bulk_import_duplicate_overridden` — which is what the metrics plan implies and what makes top-ups importable; or (b) accept the bucket as terminal and say so in the copy, so a user is told the row will not be imported and why, rather than being sent round a loop that cannot close. **(b) is defensible only if top-ups are genuinely out of scope for v1**, which contradicts `METRICS_PLAN.md` criterion 4 (line 175), measuring "bulk import for a **subsequent** addition".
+
+  Inventing the affordance during execution was declined: it changes what the commit set means, and the copy in either direction is a product voice decision.
+
 - [ ] **H-gap-1. Seven of D-025's ten analytics events were never implemented, and no check could have caught it** `[model: sonnet]`. **Found 2026-09-11 during H2. Fold into H3/H4, which own the surfaces that fire them.**
 
   **`METRICS_PLAN.md` specifies ten events for this feature. Three exist**: `pii_disclosure_shown` (I4), `bulk_import_template_downloaded` and `bulk_import_completed` (I14). **Seven do not** (lines 320-326): `bulk_import_started`, `bulk_import_file_rejected` (`reason`: wrong_type / unreadable / wrong_shape / empty / too_many_rows), `bulk_import_review_shown` (`rows_ready`, `rows_attention`, `rows_duplicate`, `rows_skipped`), `bulk_import_rejects_downloaded` (`rows_rejected`), `bulk_import_abandoned` (`stage`: disclosure / upload / review), `bulk_import_duplicate_overridden`, `bulk_import_failed` (`reason`: batch_error / ledger_full / forbidden).
