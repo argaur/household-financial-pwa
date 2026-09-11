@@ -128,6 +128,12 @@ export interface EventMap {
   // the household's plans cap, this ledger's edits cap, or the global
   // monthly breaker. No count, no household id, no ledger id.
   ai_cap_reached: { cap_type: 'plans' | 'edits' | 'global' }
+  // D-025 step I4 (bulk holdings import) and D-014 step 13 (the /privacy
+  // page's own plaintext-download exception). `surface` is the only
+  // property, per METRICS_PLAN.md's D-016 table row for this event — never
+  // a ledger name, a member name, or a row count, all of which describe
+  // what a household owns.
+  pii_disclosure_shown: { surface: 'bulk_import' | 'privacy' }
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {
