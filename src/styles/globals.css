@@ -96,11 +96,41 @@
   }
 
   .dark {
-    /* ── Backgrounds — vault interior ────────────────────────── */
-    --background:  144 17%  6%;   /* #0C110E */
-    --card:        137 16%  9%;   /* #131A15 */
-    --popover:     137 16%  9%;
-    --panel:       140 17%  7%;   /* #0F1511 */
+    /* ── Backgrounds — vault interior, immersive (2026-09-11) ──
+       Reassignment only. Every value below already existed in the
+       approved folio's dark palette (Documentation/design/concept/
+       vittam-mint-folio.html); none is new. What changed is which
+       role each one plays.
+
+       Before this pass the room was #0C110E and the plates were
+       #131A15, so the landing hero and every card read as a green
+       box laid over a near-black base. Gaurav's note, 2026-09-11:
+       the mid-green plate was meant to BE the material, not sit on
+       top of a different one. So the folio's mint tint (#16281F,
+       previously --accent) is promoted to the page ground, and the
+       plates take the same value — one continuous surface, top to
+       bottom, header included. Hierarchy is now carried by the
+       hairline border and the recessed --panel step, not by a jump
+       from black to green.
+
+       Knock-ons, both forced by raising the ground:
+         --accent      moves up to the old --border value, or every
+                       hover/highlight would land on the same colour
+                       as the surface it sits on.
+         --border-soft collapses onto --border. Its old #1B241E is
+                       now DARKER than the ground, so it would read
+                       as a dark seam instead of a soft divider, and
+                       the palette holds no value between #16281F
+                       and #26312A to take its place. One divider
+                       weight in dark, two still in light. Used in
+                       exactly one place: ledger-table row rules.
+
+       Light mode is untouched — currency paper never had the
+       black-base problem this fixes.                              */
+    --background:  150 29% 12%;   /* #16281F  vault room (folio --mint-tint) */
+    --card:        150 29% 12%;   /* #16281F  same material, no floating plate */
+    --popover:     150 29% 12%;
+    --panel:       140 17%  7%;   /* #0F1511  recessed, unchanged */
 
     /* ── Foregrounds ─────────────────────────────────────────── */
     --foreground:          111 16% 92%;   /* #E7EDE6 */
@@ -119,7 +149,9 @@
     --muted-foreground:     134  8% 59%;   /* #8FA093 */
 
     /* ── Accent ──────────────────────────────────────────────── */
-    --accent:            150 29% 12%;   /* #16281F */
+    --accent:            142 13% 17%;   /* #26312A  hover/highlight lift — see the
+                                           --background note above; #16281F is the
+                                           room now, so the lift moves up a step */
     --accent-foreground: 154 51% 55%;
 
     /* ── Brass — native dark value, same scoped-use rule as light */
@@ -136,7 +168,8 @@
 
     /* ── Borders / Inputs / Ring ─────────────────────────────── */
     --border:      142 13% 17%;   /* #26312A */
-    --border-soft: 140 14% 12%;   /* #1B241E */
+    --border-soft: 142 13% 17%;   /* #26312A  collapsed onto --border — see the
+                                     --background note above */
     --input:       142 13% 17%;
     --ring:       154 51% 55%;
 

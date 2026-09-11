@@ -81,11 +81,18 @@
   }
 
   .dark {
-    /* ── Backgrounds — vault interior ────────────────────────── */
-    --background:  144 17%  6%;   /* #0C110E */
-    --card:        137 16%  9%;   /* #131A15 */
-    --popover:     137 16%  9%;
-    --panel:       140 17%  7%;   /* #0F1511 */
+    /* ── Backgrounds — vault interior, immersive (2026-09-11) ──
+       Reassignment only, no new values. The folio's mint tint is
+       promoted from --accent to the page ground so the whole dark
+       viewport is one continuous surface instead of green plates
+       laid over a near-black base. Knock-ons: --accent moves up to
+       the old --border value, --border-soft collapses onto --border
+       (its #1B241E is now darker than the ground). Full reasoning in
+       src/styles/globals.css, the live copy.                        */
+    --background:  150 29% 12%;   /* #16281F  vault room (folio --mint-tint) */
+    --card:        150 29% 12%;   /* #16281F  same material, no floating plate */
+    --popover:     150 29% 12%;
+    --panel:       140 17%  7%;   /* #0F1511  recessed, unchanged */
 
     /* ── Foregrounds ─────────────────────────────────────────── */
     --foreground:          111 16% 92%;   /* #E7EDE6 */
@@ -104,7 +111,7 @@
     --muted-foreground:     134  8% 59%;   /* #8FA093 */
 
     /* ── Accent ──────────────────────────────────────────────── */
-    --accent:            150 29% 12%;   /* #16281F */
+    --accent:            142 13% 17%;   /* #26312A  hover/highlight lift */
     --accent-foreground: 154 51% 55%;
 
     /* ── Brass — native dark value, same scoped-use rule as light */
@@ -118,7 +125,7 @@
 
     /* ── Borders / Inputs / Ring ─────────────────────────────── */
     --border:      142 13% 17%;   /* #26312A */
-    --border-soft: 140 14% 12%;   /* #1B241E */
+    --border-soft: 142 13% 17%;   /* #26312A  collapsed onto --border */
     --input:       142 13% 17%;
     --ring:       154 51% 55%;
 

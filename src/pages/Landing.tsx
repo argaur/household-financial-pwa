@@ -92,8 +92,18 @@ export function Landing() {
             inside is the same copy in the same order — only its frame moved.
 
             `border-2` over the primitive's default hairline is the "weighty
-            border" the plate calls for; the padding is the inset. */}
-        <VaultFrame className="relative overflow-hidden border-2 bg-card px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-14">
+            border" the plate calls for; the padding is the inset.
+
+            Dark mode un-plates it (2026-09-11). `bg-card` is the same colour
+            as the room in dark now, so the fill was already gone — what was
+            left was a 2px rounded outline still fencing the hero off as a
+            box, which is the thing Gaurav asked to remove. Dropping the
+            border, the shadow and the hover lift in dark leaves the folio's
+            own `.cover`: no frame, guilloché bleeding off the top edge,
+            straight onto the page ground. Light mode keeps the plate — on
+            currency paper the engraved certificate is the point, and the
+            step from #F0F3EE to #FAFCF8 never read as an overlay. */}
+        <VaultFrame className="relative overflow-hidden border-2 bg-card px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-14 dark:border-transparent dark:shadow-none dark:hover:translate-y-0 dark:hover:shadow-none">
           <GuillocheMotif
             rings={30}
             className="absolute left-1/2 -top-[150px] h-[420px] w-[420px] max-w-none -translate-x-1/2 md:-top-[190px] md:h-[560px] md:w-[560px]"
