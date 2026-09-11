@@ -923,6 +923,16 @@ These predate this branch and must not gate its merge. They are recorded here on
 
   **Fix:** add a flat `eslint.config.js`. Expect a backlog of findings on first run, since no file in this repository has ever been linted under the current toolchain.
 
+- **One unidentified intermittent test failure, observed once at commit `785dac7` (I6).** The first full-suite run at that tree reported **1 failed / 1845 passed**; **six** subsequent runs were clean at **1846**. The worker's own run had also reported 1846/0, so the discrepancy is real and was caught only by re-running independently.
+
+  **The failing test's identity is unrecoverable.** That run used `--reporter=dot | tail -8`, which preserves the counts and discards the failure block. That was a dev-manager error, not a worker one; later steps capture full output to a file and tail the summary from it, so a future failure leaves a name.
+
+  **Not attributable to I6.** That step swapped three string literals for a function call and added a pure-function test file, introducing no async, timing or shared state. The likelier mechanism is **cumulative suite load** — the tree grew 113 → 122 files this session, several of them `@testing-library` files using `findBy*` against a 5s default timeout, and the failing run happened while builds and `npm install` were running alongside the suite.
+
+  **Do not read the six clean runs as a clearance.** They establish only that the failure is not deterministic. They do not establish a rate, and every one was on a single idle machine with a warm cache — conditions plausibly *incapable* of reproducing a load-sensitive timeout. **Not reproduced is not verified stable**, and CI is slower and more contended than the dev box.
+
+  **If it recurs:** capture full reporter output, and suspect timeout-bound `findBy*` assertions in the Track M/I component tests before suspecting logic.
+
 ## P6. Model tally
 
 Applied with the `model-router` skill against the finished plan.
