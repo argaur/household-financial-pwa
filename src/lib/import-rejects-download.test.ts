@@ -158,8 +158,9 @@ describe('buildRejectsWorkbook', () => {
     expect(reasonCell).toContain('Amount invested')
     expect(reasonCell).not.toContain('lots of money')
     // The raw, unparseable cell value is still carried in the Amount invested
-    // column itself (index 3 = column D) so it round-trips for fixing.
-    expect(ws['D2']?.v).toBe('lots of money')
+    // column itself (index 4 = column E, one right of where it sat before H1b
+    // inserted Member id) so it round-trips for fixing.
+    expect(ws['E2']?.v).toBe('lots of money')
   })
 
   it('carries a Skipped row (blank, untouched) with its reason', async () => {

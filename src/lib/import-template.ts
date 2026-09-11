@@ -47,9 +47,29 @@ export interface TemplateMember {
   name: string
 }
 
-/** D-025 decision 2's twelve columns, in the order the decision lists them. Column A (slug) is hidden. */
+/**
+ * D-025 decision 2's twelve columns, in the order the decision lists them,
+ * plus H1b's `Member id`.
+ *
+ * Columns A (slug) and B (member id) are both hidden: they are the two
+ * machine-readable columns, deliberately adjacent so a user who unhides one
+ * sees the pair rather than a stray id in the middle of readable data.
+ *
+ * WHY `Member id` EXISTS (H1b). `sanitizeSheetName` truncates at 31 characters
+ * and disambiguates a collision with " (2)" BY POSITION in the member list, so
+ * before this column the workbook recorded no member identity at all — a
+ * reader had to recompute the forward mapping and was therefore at the mercy of
+ * the caller passing members in the same order the template was built from. A
+ * member added, renamed or removed between download and upload silently swapped
+ * two colliding members' holdings, with plausible amounts and no error. The id
+ * is now RECORDED per row, so identity survives reordering, renaming, and a
+ * round trip through Excel, Google Sheets or LibreOffice (which is why this is
+ * a table column rather than a workbook custom property or a single stray cell
+ * — see `import-workbook-read.ts` for the reader half).
+ */
 export const TEMPLATE_HEADERS = [
   'Slug',
+  'Member id',
   'Asset class',
   'Instrument',
   'Amount invested',
@@ -63,19 +83,21 @@ export const TEMPLATE_HEADERS = [
   'Notes',
 ] as const
 
+/** Indices derived from `TEMPLATE_HEADERS`, never hand-numbered, so inserting a column moves every consumer with it. */
 const COL = {
-  slug: 0,
-  assetClass: 1,
-  instrument: 2,
-  investedAmount: 3,
-  currentValue: 4,
-  units: 5,
-  monthlySip: 6,
-  startDate: 7,
-  maturityDate: 8,
-  nominee: 9,
-  emergencyFund: 10,
-  notes: 11,
+  slug: TEMPLATE_HEADERS.indexOf('Slug'),
+  memberId: TEMPLATE_HEADERS.indexOf('Member id'),
+  assetClass: TEMPLATE_HEADERS.indexOf('Asset class'),
+  instrument: TEMPLATE_HEADERS.indexOf('Instrument'),
+  investedAmount: TEMPLATE_HEADERS.indexOf('Amount invested'),
+  currentValue: TEMPLATE_HEADERS.indexOf('Current value'),
+  units: TEMPLATE_HEADERS.indexOf('Units'),
+  monthlySip: TEMPLATE_HEADERS.indexOf('Monthly SIP'),
+  startDate: TEMPLATE_HEADERS.indexOf('Start date'),
+  maturityDate: TEMPLATE_HEADERS.indexOf('Maturity date'),
+  nominee: TEMPLATE_HEADERS.indexOf('Nominee'),
+  emergencyFund: TEMPLATE_HEADERS.indexOf('Emergency fund'),
+  notes: TEMPLATE_HEADERS.indexOf('Notes'),
 } as const
 
 /** Light shading fill, applied best-effort to a "less common for this instrument" cell. See `applyGuidance`. */
@@ -231,12 +253,16 @@ function applyGuidance(ws: WorkSheet, XLSX: XLSXModule, rowIndex: number, guidan
   cell.s = { fill: GUIDANCE_FILL }
 }
 
-function buildMemberSheet(XLSX: XLSXModule, orderedInstruments: Instrument[]): WorkSheet {
+function buildMemberSheet(XLSX: XLSXModule, orderedInstruments: Instrument[], member: TemplateMember): WorkSheet {
   const rows: unknown[][] = [[...TEMPLATE_HEADERS]]
 
   for (const instrument of orderedInstruments) {
     const row: unknown[] = []
     row[COL.slug] = instrument.slug
+    // Per row, not once per sheet: a row deleted, copied or moved in Excel
+    // carries its member with it, and the rejects file (I9) round-trips the
+    // same way without needing a second place to record identity.
+    row[COL.memberId] = member.id
     row[COL.assetClass] = assetClassLabel(instrument.category)
     row[COL.instrument] = instrument.name
     row[COL.investedAmount] = null
@@ -252,7 +278,8 @@ function buildMemberSheet(XLSX: XLSXModule, orderedInstruments: Instrument[]): W
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows)
-  ws['!cols'] = [{ hidden: true }]
+  // Both machine-readable columns hidden: A (slug) and B (member id).
+  ws['!cols'] = [{ hidden: true }, { hidden: true }]
 
   orderedInstruments.forEach((instrument, index) => {
     const rowIndex = index + 1 // row 0 is the header
@@ -282,7 +309,7 @@ export async function buildImportTemplate(members: TemplateMember[], instruments
   const takenSheetNames = new Set<string>()
 
   for (const member of members) {
-    const ws = buildMemberSheet(XLSX, orderedInstruments)
+    const ws = buildMemberSheet(XLSX, orderedInstruments, member)
     const sheetName = sanitizeSheetName(member.name, takenSheetNames)
     XLSX.utils.book_append_sheet(wb, ws, sheetName)
   }

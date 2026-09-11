@@ -45,18 +45,20 @@ type WorkBook = ReturnType<XLSXModule['utils']['book_new']>
 export const REJECTS_REASON_HEADER = 'Reason'
 export const REJECTS_HEADERS = [...TEMPLATE_HEADERS, REJECTS_REASON_HEADER] as const
 
+/** Indices derived from `TEMPLATE_HEADERS`, never hand-numbered: H1b inserted a column and every index after it moved. */
 const COL = {
-  slug: 0,
-  instrument: 2,
-  investedAmount: 3,
-  currentValue: 4,
-  units: 5,
-  monthlySip: 6,
-  startDate: 7,
-  maturityDate: 8,
-  nominee: 9,
-  emergencyFund: 10,
-  notes: 11,
+  slug: TEMPLATE_HEADERS.indexOf('Slug'),
+  memberId: TEMPLATE_HEADERS.indexOf('Member id'),
+  instrument: TEMPLATE_HEADERS.indexOf('Instrument'),
+  investedAmount: TEMPLATE_HEADERS.indexOf('Amount invested'),
+  currentValue: TEMPLATE_HEADERS.indexOf('Current value'),
+  units: TEMPLATE_HEADERS.indexOf('Units'),
+  monthlySip: TEMPLATE_HEADERS.indexOf('Monthly SIP'),
+  startDate: TEMPLATE_HEADERS.indexOf('Start date'),
+  maturityDate: TEMPLATE_HEADERS.indexOf('Maturity date'),
+  nominee: TEMPLATE_HEADERS.indexOf('Nominee'),
+  emergencyFund: TEMPLATE_HEADERS.indexOf('Emergency fund'),
+  notes: TEMPLATE_HEADERS.indexOf('Notes'),
   reason: TEMPLATE_HEADERS.length,
 } as const
 
@@ -143,6 +145,11 @@ export async function buildRejectsWorkbook(rawRows: RawImportRow[], buckets: Buc
 
       const sheetRow: unknown[] = []
       sheetRow[COL.slug] = raw.slug ?? null
+      // H1b: identity travels with the row, so a fixed-and-reuploaded rejects
+      // file is read back against the right member even if the member list has
+      // been reordered in between. Taken from the raw row's own member, which
+      // is the member this sheet is being built for.
+      sheetRow[COL.memberId] = raw.member.id
       sheetRow[COL.instrument] = raw.instrumentName ?? null
       sheetRow[COL.investedAmount] = raw.investedAmount ?? null
       sheetRow[COL.currentValue] = raw.currentValue ?? null

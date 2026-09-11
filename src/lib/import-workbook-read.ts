@@ -31,13 +31,19 @@
  * set, and key a map by what comes out. `sanitizeSheetName` is imported, never
  * reimplemented, so the writer and the reader cannot drift.
  *
- * The one hazard this cannot remove: the caller must pass the members in the
- * same order the template was built from. Order is the disambiguator, so a
- * reordered list genuinely does remap colliding names. The app's member list
- * comes from one source with one stable order (`GET /api/family-members`, by
- * creation), which is why this is a documented caller contract rather than
- * something this module can enforce — there is nothing in the FILE that records
- * the order used.
+ * H1b CLOSED THE ONE HAZARD THE REPLAY COULD NOT REMOVE. The replay is correct
+ * only if the caller passes members in the same order the template was built
+ * from — order is the disambiguator, so a member added, renamed or removed
+ * between download and upload silently swapped two colliding members' rows.
+ * The template now RECORDS identity instead: a hidden `Member id` column per
+ * row (`import-template.ts`). This reader PREFERS that id and only falls back
+ * to the replayed name map when the column is absent or blank, which is a
+ * workbook built before H1b.
+ *
+ * A recorded id that matches no supplied member does NOT fall back to the name
+ * map — that sheet is unrecognised. A wrong-but-plausible match is precisely
+ * the failure being closed, and the file disagreeing with the member list is
+ * the loudest possible signal that a name-shaped guess would be wrong.
  * ---------------------------------------------------------------------------
  *
  * State only. Nothing here writes to localStorage, sessionStorage, IndexedDB,
@@ -117,8 +123,10 @@ export interface ImportWorkbookReadResult {
  * already tracks its `taken` set that way — so a user who retypes a tab name in
  * a different case still lands on the right member.
  *
- * `members` MUST be in the same order `buildImportTemplate` was given. See the
- * module doc.
+ * FALLBACK ONLY since H1b: `readImportWorkbook` reaches this map only for a
+ * workbook with no recorded `Member id`, i.e. a template downloaded before that
+ * column existed. On that path `members` MUST still be in the same order
+ * `buildImportTemplate` was given. See the module doc.
  */
 export function buildSheetNameToMemberMap(members: TemplateMember[]): Map<string, TemplateMember> {
   const taken = new Set<string>()
@@ -154,38 +162,103 @@ function isEmptyCell(value: CellValue): boolean {
   return false
 }
 
-/** Column index by header text, so a reorder of `TEMPLATE_HEADERS` moves both the writer and this reader together. */
-const COL = {
-  slug: TEMPLATE_HEADERS.indexOf('Slug'),
-  instrument: TEMPLATE_HEADERS.indexOf('Instrument'),
-  investedAmount: TEMPLATE_HEADERS.indexOf('Amount invested'),
-  currentValue: TEMPLATE_HEADERS.indexOf('Current value'),
-  units: TEMPLATE_HEADERS.indexOf('Units'),
-  monthlySip: TEMPLATE_HEADERS.indexOf('Monthly SIP'),
-  startDate: TEMPLATE_HEADERS.indexOf('Start date'),
-  maturityDate: TEMPLATE_HEADERS.indexOf('Maturity date'),
-  nominee: TEMPLATE_HEADERS.indexOf('Nominee'),
-  emergencyFund: TEMPLATE_HEADERS.indexOf('Emergency fund'),
-  notes: TEMPLATE_HEADERS.indexOf('Notes'),
-} as const
-
 /**
- * Whether a sheet's first row is the template's header row.
- *
- * A PREFIX match, not an exact one, and that is deliberate: SPEC.md §I8.1's
- * fix loop is "download the rejects, fix in Excel, re-upload", and
- * `import-rejects.ts` writes `TEMPLATE_HEADERS` plus a trailing "Reason"
- * column. Requiring exactly twelve headers would refuse the file this feature
- * itself produced. Trailing columns beyond the twelve are read by nothing.
+ * The header layout a sheet was written in. `memberId` is `-1` for a workbook
+ * built before H1b added that column — every other index shifts by one between
+ * the two layouts, which is exactly why the layout is resolved per sheet rather
+ * than assumed.
  */
-function hasTemplateHeaders(XLSX: XLSXModule, sheet: WorkSheet): boolean {
-  return TEMPLATE_HEADERS.every((header, column) => {
+interface ColumnLayout {
+  slug: number
+  memberId: number
+  instrument: number
+  investedAmount: number
+  currentValue: number
+  units: number
+  monthlySip: number
+  startDate: number
+  maturityDate: number
+  nominee: number
+  emergencyFund: number
+  notes: number
+}
+
+/** The pre-H1b twelve columns, in their original order. Derived, never hand-typed, so it cannot drift. */
+const LEGACY_TEMPLATE_HEADERS = TEMPLATE_HEADERS.filter((header) => header !== 'Member id')
+
+function layoutFor(headers: readonly string[]): ColumnLayout {
+  const at = (header: string): number => headers.indexOf(header)
+  return {
+    slug: at('Slug'),
+    memberId: at('Member id'),
+    instrument: at('Instrument'),
+    investedAmount: at('Amount invested'),
+    currentValue: at('Current value'),
+    units: at('Units'),
+    monthlySip: at('Monthly SIP'),
+    startDate: at('Start date'),
+    maturityDate: at('Maturity date'),
+    nominee: at('Nominee'),
+    emergencyFund: at('Emergency fund'),
+    notes: at('Notes'),
+  }
+}
+
+const CURRENT_LAYOUT = layoutFor(TEMPLATE_HEADERS)
+const LEGACY_LAYOUT = layoutFor(LEGACY_TEMPLATE_HEADERS)
+
+function matchesHeaders(XLSX: XLSXModule, sheet: WorkSheet, headers: readonly string[]): boolean {
+  return headers.every((header, column) => {
     const value = cellValue(XLSX, sheet, 0, column)
     return typeof value === 'string' && value.trim().toLowerCase() === header.toLowerCase()
   })
 }
 
-function readSheetRows(XLSX: XLSXModule, sheet: WorkSheet, member: TemplateMember): RawImportRow[] {
+/**
+ * The column layout of a sheet's first row, or `null` when it is not a template
+ * header row at all.
+ *
+ * A PREFIX match, not an exact one, and that is deliberate: SPEC.md §I8.1's
+ * fix loop is "download the rejects, fix in Excel, re-upload", and
+ * `import-rejects.ts` writes `TEMPLATE_HEADERS` plus a trailing "Reason"
+ * column. Requiring exactly the template's headers would refuse the file this
+ * feature itself produced. Trailing columns beyond them are read by nothing.
+ *
+ * The legacy layout is tried second, so any template downloaded before H1b
+ * still reads — with `memberId` at `-1`, which is what routes it to the
+ * sheet-name fallback below.
+ */
+function resolveColumnLayout(XLSX: XLSXModule, sheet: WorkSheet): ColumnLayout | null {
+  if (matchesHeaders(XLSX, sheet, TEMPLATE_HEADERS)) return CURRENT_LAYOUT
+  if (matchesHeaders(XLSX, sheet, LEGACY_TEMPLATE_HEADERS)) return LEGACY_LAYOUT
+  return null
+}
+
+/**
+ * The member id recorded in a sheet, or `null` when the column is absent or
+ * every data row leaves it blank. The first non-blank wins: a user who deleted
+ * or reordered rows in Excel still has the id on whatever rows remain.
+ */
+function recordedMemberId(XLSX: XLSXModule, sheet: WorkSheet, layout: ColumnLayout): string | null {
+  if (layout.memberId < 0) return null
+  const ref = (sheet as Record<string, unknown>)['!ref']
+  if (typeof ref !== 'string') return null
+  const range = XLSX.utils.decode_range(ref)
+
+  for (let r = range.s.r + 1; r <= range.e.r; r += 1) {
+    const value = cellValue(XLSX, sheet, r, layout.memberId)
+    if (typeof value === 'string' && value.trim() !== '') return value.trim()
+    if (typeof value === 'number') return String(value)
+  }
+  return null
+}
+
+function readSheetRows(
+  XLSX: XLSXModule,
+  sheet: WorkSheet,
+  member: TemplateMember,
+  COL: ColumnLayout,
+): RawImportRow[] {
   const ref = (sheet as Record<string, unknown>)['!ref']
   if (typeof ref !== 'string') return []
   const range = XLSX.utils.decode_range(ref)
@@ -303,6 +376,7 @@ export async function readImportWorkbook(
   }
 
   const bySheetName = buildSheetNameToMemberMap(members)
+  const byMemberId = new Map(members.map((member) => [member.id, member]))
   const rows: RawImportRow[] = []
   const unrecognisedSheets: string[] = []
   const seenMemberIds = new Set<string>()
@@ -310,17 +384,51 @@ export async function readImportWorkbook(
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName]
-    if (!sheet || !hasTemplateHeaders(XLSX, sheet)) continue
+    if (!sheet) continue
+    const layout = resolveColumnLayout(XLSX, sheet)
+    if (!layout) continue
     templateShapedSheets += 1
 
-    const member = bySheetName.get(sheetName.trim().toLowerCase())
+    // H1b: the RECORDED id wins over the recomputed sheet-name map.
+    const recordedId = recordedMemberId(XLSX, sheet, layout)
+    let member: TemplateMember | undefined
+    if (recordedId !== null) {
+      member = byMemberId.get(recordedId)
+      // A recorded id that names nobody in `members` makes this sheet
+      // unrecognised, full stop. Falling back to the name map here would be
+      // the exact failure H1b closes: the file SAYS whose it is, the answer
+      // disagrees with the supplied list, and a name-shaped second guess
+      // would be wrong-but-plausible rather than absent.
+      if (!member) {
+        unrecognisedSheets.push(sheetName)
+        continue
+      }
+    } else {
+      // No id recorded: a pre-H1b template, or one whose id column was
+      // cleared. Fall back to the forward sheet-name map, with all of the
+      // order-dependence documented at the top of this module.
+      member = bySheetName.get(sheetName.trim().toLowerCase())
+    }
+
     if (!member) {
       unrecognisedSheets.push(sheetName)
       continue
     }
 
+    // ONE SHEET PER MEMBER. The name map gave this for free (sheet names are
+    // unique in a workbook, and the map holds one name per member), and
+    // preferring a recorded id would otherwise lose it: a user who duplicates
+    // a tab in Excel as a scratch copy would have every row imported twice,
+    // silently doubling that member's holdings. The first sheet wins and the
+    // copy is reported, which is the same fix-and-reupload loop a renamed tab
+    // already uses.
+    if (seenMemberIds.has(member.id)) {
+      unrecognisedSheets.push(sheetName)
+      continue
+    }
+
     seenMemberIds.add(member.id)
-    rows.push(...readSheetRows(XLSX, sheet, member))
+    rows.push(...readSheetRows(XLSX, sheet, member, layout))
   }
 
   if (templateShapedSheets === 0) {

@@ -6,7 +6,8 @@ import {
   readImportWorkbook,
 } from './import-workbook-read'
 import { TEMPLATE_HEADERS, buildImportTemplate, type TemplateMember } from './import-template'
-import { bucketImportRows } from './import-bucketing'
+import { bucketImportRows, type RawImportRow } from './import-bucketing'
+import { buildRejectsWorkbook } from './import-rejects'
 import { PARSER_READ_OPTIONS, parseDateCell } from './import-parser'
 import { loadSpreadsheetParser } from './spreadsheet-parser-loader'
 import type { Instrument } from './instruments-api'
@@ -264,6 +265,29 @@ describe('the lossy-sheet-name trap, end to end', () => {
     expect(youngerRow?.member.id).toBe('m-younger')
   })
 
+  it('maps two truncation-colliding members correctly even when the member list is REORDERED', async () => {
+    // H1b: identity is RECORDED in the file (the hidden "Member id" column),
+    // not recomputed from member order. Against the recompute-only reader this
+    // fails, and the failure is the exact harm: the elder's money lands on the
+    // younger.
+    const elder: TemplateMember = { id: 'm-elder', name: 'Bartholomew Fitzwilliam Ashcroft the Elder' }
+    const younger: TemplateMember = { id: 'm-younger', name: 'Bartholomew Fitzwilliam Ashcroft the Younger' }
+
+    const wb = await buildImportTemplate([elder, younger], INSTRUMENTS)
+    await setCell(wb.Sheets[wb.SheetNames[0]] as AnySheet, 1, col('Amount invested'), 111111)
+    await setCell(wb.Sheets[wb.SheetNames[0]] as AnySheet, 1, col('Current value'), 111111)
+    await setCell(wb.Sheets[wb.SheetNames[1]] as AnySheet, 1, col('Amount invested'), 222222)
+    await setCell(wb.Sheets[wb.SheetNames[1]] as AnySheet, 1, col('Current value'), 222222)
+    const bytes = await toArrayBuffer(wb)
+
+    // The caller hands the reader the SAME members in the OPPOSITE order.
+    const result = await readImportWorkbook(bytes, [younger, elder])
+
+    expect(result.unrecognisedSheets).toEqual([])
+    expect(result.rows.find((row) => row.investedAmount === 111111)?.member.id).toBe('m-elder')
+    expect(result.rows.find((row) => row.investedAmount === 222222)?.member.id).toBe('m-younger')
+  })
+
   it('still maps correctly when the members are passed in the same order the template used', async () => {
     // Order is the disambiguator, so this is the pin that a caller handing the
     // reader a differently-ordered member list is the one real hazard left.
@@ -282,14 +306,24 @@ describe('the lossy-sheet-name trap, end to end', () => {
 // ---------------------------------------------------------------------------
 
 describe('a sheet that matches no member', () => {
-  it('is reported, never guessed at and never silently dropped', async () => {
+  /** Blanks the Member id column on every data row, i.e. a template built before H1b. */
+  async function clearMemberIds(sheet: AnySheet): Promise<void> {
+    const XLSX = await xlsx()
+    const range = XLSX.utils.decode_range(sheet['!ref'] as string)
+    for (let r = range.s.r + 1; r <= range.e.r; r += 1) {
+      delete sheet[XLSX.utils.encode_cell({ r, c: col('Member id') })]
+    }
+  }
+
+  it('a RENAMED tab is recovered by its recorded member id (H1b), not reported as unrecognised', async () => {
     const members: TemplateMember[] = [
       { id: 'm-gaurav', name: 'Gaurav' },
       { id: 'm-rinku', name: 'Rinku' },
     ]
     const wb = await buildImportTemplate(members, INSTRUMENTS)
 
-    // The user renamed the second tab in Excel.
+    // The user renamed the second tab in Excel. Before H1b this lost the sheet
+    // entirely; now the file itself still says whose it is.
     const XLSX = await xlsx()
     wb.Sheets['Rinku ka sheet'] = wb.Sheets['Rinku']
     delete wb.Sheets['Rinku']
@@ -300,11 +334,58 @@ describe('a sheet that matches no member', () => {
 
     const result = await readImportWorkbook(await toArrayBuffer(wb), members)
 
+    expect(result.unrecognisedSheets).toEqual([])
+    expect(result.missingMembers).toEqual([])
+    expect(result.rows.find((row) => row.investedAmount === 777777)?.member.id).toBe('m-rinku')
+  })
+
+  it('a renamed tab with NO recorded id is still reported, never guessed at and never silently dropped', async () => {
+    const members: TemplateMember[] = [
+      { id: 'm-gaurav', name: 'Gaurav' },
+      { id: 'm-rinku', name: 'Rinku' },
+    ]
+    const wb = await buildImportTemplate(members, INSTRUMENTS)
+
+    wb.Sheets['Rinku ka sheet'] = wb.Sheets['Rinku']
+    delete wb.Sheets['Rinku']
+    wb.SheetNames[1] = 'Rinku ka sheet'
+    await clearMemberIds(wb.Sheets['Rinku ka sheet'] as AnySheet)
+    await setCell(wb.Sheets['Rinku ka sheet'] as AnySheet, 1, col('Amount invested'), 777777)
+    await setCell(wb.Sheets['Rinku ka sheet'] as AnySheet, 1, col('Current value'), 777777)
+
+    const result = await readImportWorkbook(await toArrayBuffer(wb), members)
+
     expect(result.unrecognisedSheets).toEqual(['Rinku ka sheet'])
     // Nothing from the renamed sheet is imported, and nothing is attributed
     // to Rinku by proximity or by order.
     expect(result.rows.every((row) => row.member.id === 'm-gaurav')).toBe(true)
     expect(result.rows.some((row) => row.investedAmount === 777777)).toBe(false)
+  })
+
+  it('a recorded id that names NO supplied member is unrecognised, never name-matched as a second guess', async () => {
+    const members: TemplateMember[] = [{ id: 'm-gaurav', name: 'Gaurav' }]
+    // Built for a member who has since been deleted from the household, but
+    // the tab is still called "Gaurav" — the name would match, the id does not.
+    const wb = await buildImportTemplate([{ id: 'm-deleted', name: 'Gaurav' }], INSTRUMENTS)
+    await setCell(wb.Sheets['Gaurav'] as AnySheet, 1, col('Amount invested'), 888888)
+    await setCell(wb.Sheets['Gaurav'] as AnySheet, 1, col('Current value'), 888888)
+
+    const result = await readImportWorkbook(await toArrayBuffer(wb), members)
+
+    expect(result.unrecognisedSheets).toEqual(['Gaurav'])
+    expect(result.rows).toEqual([])
+    expect(result.missingMembers.map((member) => member.id)).toEqual(['m-gaurav'])
+  })
+
+  it('a DUPLICATED tab does not import a member\'s rows twice — the first sheet wins, the copy is reported', async () => {
+    const members: TemplateMember[] = [{ id: 'm-gaurav', name: 'Gaurav' }]
+    const wb = await buildImportTemplate(members, INSTRUMENTS)
+    wb.Sheets['Gaurav (2)'] = wb.Sheets['Gaurav']
+    wb.SheetNames.push('Gaurav (2)')
+
+    const result = await readImportWorkbook(await toArrayBuffer(wb), members)
+    expect(result.rows).toHaveLength(INSTRUMENTS.length)
+    expect(result.unrecognisedSheets).toEqual(['Gaurav (2)'])
   })
 
   it('does not throw when at least one sheet is still a member sheet', async () => {
@@ -384,7 +465,7 @@ describe('a file that is not the import template', () => {
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([
       [...TEMPLATE_HEADERS, 'Reason'],
-      ['equity-flexi-cap-fund', 'Equity', 'Flexi Cap Fund', 400000, 450000, null, null, null, null, null, false, null, 'Amount invested is required.'],
+      ['equity-flexi-cap-fund', 'm1', 'Equity', 'Flexi Cap Fund', 400000, 450000, null, null, null, null, null, false, null, 'Amount invested is required.'],
     ])
     XLSX.utils.book_append_sheet(wb, ws, 'Gaurav')
 
@@ -394,6 +475,97 @@ describe('a file that is not the import template', () => {
     expect(result.rows).toHaveLength(1)
     expect(result.rows[0].investedAmount).toBe(400000)
     expect(result.rows[0].slug).toBe('equity-flexi-cap-fund')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// H1b: recorded identity, and the pre-H1b workbook that has none
+// ---------------------------------------------------------------------------
+
+describe('the recorded Member id column', () => {
+  const LEGACY_HEADERS = TEMPLATE_HEADERS.filter((header) => header !== 'Member id')
+
+  it('is a real column in the template, hidden alongside Slug', () => {
+    expect([...TEMPLATE_HEADERS]).toContain('Member id')
+    expect(TEMPLATE_HEADERS.indexOf('Member id')).toBe(TEMPLATE_HEADERS.indexOf('Slug') + 1)
+  })
+
+  it('falls back to the sheet-name map for a pre-H1b workbook with no Member id column at all', async () => {
+    const XLSX = await xlsx()
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([
+      [...LEGACY_HEADERS],
+      ['equity-flexi-cap-fund', 'Equity', 'Flexi Cap Fund', 400000, 450000, null, null, null, null, null, false, 'old file'],
+    ])
+    XLSX.utils.book_append_sheet(wb, ws, 'Gaurav')
+
+    const result = await readImportWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer, [
+      { id: 'm1', name: 'Gaurav' },
+    ])
+
+    expect(result.unrecognisedSheets).toEqual([])
+    expect(result.rows).toHaveLength(1)
+    // The legacy layout is read at ITS OWN column positions, not the new ones:
+    // every column after Slug sits one to the left in that file.
+    expect(result.rows[0].member.id).toBe('m1')
+    expect(result.rows[0].slug).toBe('equity-flexi-cap-fund')
+    expect(result.rows[0].instrumentName).toBe('Flexi Cap Fund')
+    expect(result.rows[0].investedAmount).toBe(400000)
+    expect(result.rows[0].currentValue).toBe(450000)
+    expect(result.rows[0].notes).toBe('old file')
+  })
+
+  it('falls back to the sheet-name map when the column is present but blank on every row', async () => {
+    const XLSX = await xlsx()
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([
+      [...TEMPLATE_HEADERS],
+      ['equity-flexi-cap-fund', '   ', 'Equity', 'Flexi Cap Fund', 400000, 450000, null, null, null, null, null, false, null],
+    ])
+    XLSX.utils.book_append_sheet(wb, ws, 'Gaurav')
+
+    const result = await readImportWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer, [
+      { id: 'm1', name: 'Gaurav' },
+    ])
+    expect(result.unrecognisedSheets).toEqual([])
+    expect(result.rows[0].member.id).toBe('m1')
+  })
+})
+
+describe('the rejects workbook round trip keeps identity', () => {
+  it('re-reads a rejects file against the right member even with the member list reordered', async () => {
+    const elder: TemplateMember = { id: 'm-elder', name: 'Bartholomew Fitzwilliam Ashcroft the Elder' }
+    const younger: TemplateMember = { id: 'm-younger', name: 'Bartholomew Fitzwilliam Ashcroft the Younger' }
+
+    // Both members have one unparseable amount, so both land in needsAttention.
+    const rawRows: RawImportRow[] = [elder, younger].map((member, index) => ({
+      member,
+      rowNumber: index + 2,
+      slug: INSTRUMENTS[0].slug,
+      instrumentName: INSTRUMENTS[0].name,
+      investedAmount: member.id === 'm-elder' ? 'lots of money' : 'even more money',
+      currentValue: 55000,
+      units: null,
+      monthlySip: null,
+      startDate: null,
+      maturityDate: null,
+      nominee: null,
+      emergencyFund: false,
+      notes: null,
+    }))
+    const buckets = bucketImportRows({ rows: rawRows, instruments: INSTRUMENTS, existingHoldings: [] })
+    expect(buckets.needsAttention).toHaveLength(2)
+
+    const rejects = await buildRejectsWorkbook(rawRows, buckets)
+    const XLSX = await xlsx()
+    const bytes = XLSX.write(rejects, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+
+    // Reordered on the way back in, exactly the H1b hazard.
+    const result = await readImportWorkbook(bytes, [younger, elder])
+
+    expect(result.unrecognisedSheets).toEqual([])
+    expect(result.rows.find((row) => row.investedAmount === 'lots of money')?.member.id).toBe('m-elder')
+    expect(result.rows.find((row) => row.investedAmount === 'even more money')?.member.id).toBe('m-younger')
   })
 })
 

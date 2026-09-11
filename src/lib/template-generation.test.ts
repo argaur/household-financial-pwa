@@ -206,13 +206,14 @@ describe('buildImportTemplate', () => {
     }
   })
 
-  it('writes the exact twelve D-025 decision-2 columns in order', async () => {
+  it('writes the exact D-025 decision-2 columns in order, plus H1b\'s Member id', async () => {
     const wb = await buildImportTemplate(MEMBERS, THIRTY_INSTRUMENTS)
     const ws = wb.Sheets['Gaurav']
     const headerRow = TEMPLATE_HEADERS.map((_, col) => ws[String.fromCharCode(65 + col) + '1']?.v)
     expect(headerRow).toEqual([...TEMPLATE_HEADERS])
     expect(TEMPLATE_HEADERS).toEqual([
       'Slug',
+      'Member id',
       'Asset class',
       'Instrument',
       'Amount invested',
@@ -237,12 +238,27 @@ describe('buildImportTemplate', () => {
     expect((slugCell.v as string).length).toBeGreaterThan(0)
   })
 
+  it('hides the Member id column and writes the member\'s own id into every row of that member\'s sheet (H1b)', async () => {
+    const wb = await buildImportTemplate(MEMBERS, THIRTY_INSTRUMENTS)
+    expect(TEMPLATE_HEADERS.indexOf('Member id')).toBe(1)
+
+    for (const [sheetName, expectedId] of [['Gaurav', 'm1'], ['Rinku', 'm2']] as const) {
+      const ws = wb.Sheets[sheetName]
+      expect(ws['!cols']?.[1]?.hidden).toBe(true)
+      expect(ws['B1'].v).toBe('Member id')
+      for (let r = 2; r <= 31; r += 1) {
+        expect(ws[`B${r}`]?.v).toBe(expectedId)
+      }
+    }
+  })
+
   it('groups rows by asset class using the Asset class column', async () => {
     const wb = await buildImportTemplate(MEMBERS, THIRTY_INSTRUMENTS)
     const ws = wb.Sheets['Gaurav']
     const assetClassValues: string[] = []
     for (let r = 2; r <= 31; r += 1) {
-      assetClassValues.push(ws[`B${r}`]?.v as string)
+      // Column C = index 2 = Asset class, since H1b inserted Member id at B.
+      assetClassValues.push(ws[`C${r}`]?.v as string)
     }
     // Once a group changes, it must never repeat an earlier group further down.
     const seen = new Set<string>()
@@ -261,7 +277,7 @@ describe('buildImportTemplate', () => {
     const ws = wb.Sheets['Gaurav']
     // Row 2 is Direct Stocks (equity, alphabetically first: "Direct Stocks" < "Equity Mutual..." < "Filler...").
     expect(ws['A2'].v).toBe('equity-direct-stocks')
-    const maturityCell = ws['I2'] // column I = index 8 = Maturity date
+    const maturityCell = ws['J2'] // column J = index 9 = Maturity date (H1b shifted it one right)
     expect(maturityCell.c?.[0]?.t).toMatch(/maturity/i)
     expect(ws['!dataValidations']).toBeUndefined()
   })
@@ -269,8 +285,9 @@ describe('buildImportTemplate', () => {
   it('leaves the amount/current-value cells blank and editable, never prefilled with a value or formula', async () => {
     const wb = await buildImportTemplate(MEMBERS, THIRTY_INSTRUMENTS)
     const ws = wb.Sheets['Gaurav']
-    expect(ws['D2']).toBeUndefined() // Amount invested, blank
-    expect(ws['E2']).toBeUndefined() // Current value, blank
+    // Columns E/F = indices 4/5, one right of where they sat before H1b.
+    expect(ws['E2']).toBeUndefined() // Amount invested, blank
+    expect(ws['F2']).toBeUndefined() // Current value, blank
   })
 
   it('sanitizes and disambiguates member sheet names across the whole build', async () => {
