@@ -103,8 +103,33 @@ const CHUNK_A_FILES: string[] = [
   'src/components/new-ledger-modal.tsx',
 ]
 
-/** Chunk I: bulk Excel import. Filled by plan step I15. */
-const CHUNK_I_FILES: string[] = []
+/**
+ * Chunk I: bulk Excel import. Filled by plan step I15. SPEC.md §I6.1 names
+ * five surfaces: the template download button, the upload drop zone, the
+ * primary commit CTA, the rejects download button, and the bucket header
+ * rows.
+ *
+ * FOUR of those five are covered here, across TWO files. The primary commit
+ * CTA, the rejects download button and the bucket header rows all live in
+ * `import-review-screen.tsx` (I8); the template download button's confirm
+ * action lives in `pii-disclosure-step.tsx` (I4).
+ *
+ * ONE of the five CANNOT be covered yet: the upload drop zone was never
+ * built. Nor was the import host page (SPEC.md §I4: "a secondary action on
+ * the ledger's holdings view") that will eventually carry the download
+ * TRIGGER, as opposed to the confirm step covered here.
+ *
+ * **Whoever builds that host page inherits this requirement**, and nothing
+ * else in the codebase will remind them: add the drop zone and the download
+ * trigger to `CHUNK_I_FILES` below, with anchors, in the same commit that
+ * creates them.
+ *
+ * Every other Chunk I file (`import-bucketing.ts`, `import-rejects.ts`,
+ * `import-template.ts`, `import-parser.ts`, `import-commit.ts`,
+ * `import-filename.ts`, `import-validation-messages.ts`) is pure TS with no
+ * JSX and renders no markup, so none of them get an entry here.
+ */
+const CHUNK_I_FILES: string[] = ['src/components/import-review-screen.tsx', 'src/components/pii-disclosure-step.tsx']
 
 /**
  * Chunk C: counsel cards, same proxy, second schema. C3's "Review this
@@ -141,6 +166,8 @@ const RESPONSIVE_ANCHORS: Record<string, string[]> = {
   'src/components/ai-suggestion-card.tsx': ['md:flex-row', 'md:justify-end', 'md:w-auto'],
   'src/components/review-ledger-action.tsx': ['md:w-auto'],
   'src/components/new-ledger-modal.tsx': ['md:w-auto'],
+  'src/components/import-review-screen.tsx': ['md:flex-row', 'md:w-auto'],
+  'src/components/pii-disclosure-step.tsx': ['md:flex-row', 'md:justify-end', 'md:w-auto'],
   // ai-cap-notice.tsx renders markup but carries no md: class today (no
   // responsive layout in it yet), so it has no anchor to name -- see the
   // module doc: "Files that render no markup are deliberately absent from
