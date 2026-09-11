@@ -95,6 +95,12 @@ const CHUNK_A_FILES: string[] = [
   'src/components/ai-consent-step.tsx',
   'src/components/ai-suggestion-card.tsx',
   'src/components/ai-cap-notice.tsx',
+  // Step M5: M2 wired the goal step's AI button, consent step, result view
+  // and cap notice into the + New ledger modal itself, so this host now
+  // renders substantial new markup too (`src/lib/ai-suggestions-api.ts` is
+  // the same chunk's pure-TS fetch helper and renders nothing, so it is
+  // deliberately not listed here or in RESPONSIVE_ANCHORS below).
+  'src/components/new-ledger-modal.tsx',
 ]
 
 /** Chunk I: bulk Excel import. Filled by plan step I15. */
@@ -134,6 +140,7 @@ const RESPONSIVE_ANCHORS: Record<string, string[]> = {
   'src/components/ai-consent-step.tsx': ['md:w-auto'],
   'src/components/ai-suggestion-card.tsx': ['md:flex-row', 'md:justify-end', 'md:w-auto'],
   'src/components/review-ledger-action.tsx': ['md:w-auto'],
+  'src/components/new-ledger-modal.tsx': ['md:w-auto'],
   // ai-cap-notice.tsx renders markup but carries no md: class today (no
   // responsive layout in it yet), so it has no anchor to name -- see the
   // module doc: "Files that render no markup are deliberately absent from
