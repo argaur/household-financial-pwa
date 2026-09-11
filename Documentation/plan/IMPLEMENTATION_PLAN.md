@@ -984,7 +984,17 @@ These predate this branch and must not gate its merge. They are recorded here on
 
   **Do not read the six clean runs as a clearance.** They establish only that the failure is not deterministic. They do not establish a rate, and every one was on a single idle machine with a warm cache — conditions plausibly *incapable* of reproducing a load-sensitive timeout. **Not reproduced is not verified stable**, and CI is slower and more contended than the dev box.
 
-  **If it recurs:** capture full reporter output, and suspect timeout-bound `findBy*` assertions in the Track M/I component tests before suspecting logic.
+  **IDENTIFIED 2026-09-11 during I14, and my earlier attribution above was WRONG.** I guessed timeout-bound `findBy*` assertions in the *component* tests, because that is where the suite had grown. The load hypothesis was right; the location was not.
+
+  **The real mechanism: a mock-hoisting race across the server integration tests.** The observed failure is `No "households" export is defined on the "../drizzle/schema.js" mock`, in a **different `server/*.integration.test.ts` file each time**, with **zero assertion failures**, and **each failing file passes cleanly in isolation**. That signature is a shared-module race, not a logic defect.
+
+  **Eight files use the same pattern**, each calling `vi.mock('../drizzle/schema.js', async (importOriginal) => ...)`: `account-deletion`, `ai-suggestions`, `family-members`, `holdings`, `holdings-batch`, `ledgers`, `projection-settings`, `protection`. **Step I10 added `holdings-batch`, taking the surface from seven files to eight** — Track I did not cause this (it was first seen at I6, when there were seven) but did widen it.
+
+  **The rate is unknown and environment-dependent, which is the important part.** Observed once in seven runs during I6; **twice in three** during I14's own pass, on a machine doing other work; and **zero in two** on my own quiet-machine runs immediately afterwards. Rates that inconsistent point at contention rather than a fixed probability. **CI is the slow, contended, unwatched environment**, so it is where this will bite hardest.
+
+  **Deliberately NOT fixed, and the reason matters.** The obvious fix is a vitest execution-model change (pool, isolation or sequencing), not an edit to eight files, since the mock factories are already per-file and what is shared is the module registry under parallel workers. Changing how all 131 files execute, at the end of a long session, to fix a flake **I could not reproduce on demand and therefore could not verify a fix against**, would be worse than a precise description. There is also a subtler risk: this flake is currently the only signal that these eight files interact at all. Suppressing it by serialising them would leave whatever ordering assumption sits underneath intact, and trade a flaky honest suite for a green silent one.
+
+  **A red suite with zero real assertion failures is the thing that trains people to re-run until green**, which is how a genuine failure eventually gets waved through. Worth fixing deliberately, by someone who can reproduce it under load.
 
 ## P6. Model tally
 
