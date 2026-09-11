@@ -777,7 +777,29 @@ The `codex/*` tags are left in place below as the record of what was planned and
 - [ ] **M1. Failing test: mount the cap-exhausted states on the ledger view** `[model: codex/terra/medium]`. The lowest-stakes of the four unmounted pieces: no live provider dependency, no consent copy. This is the council's proposed validation spike — after it lands, check whether `SPEC.md` §G6.1's `md:` breakpoint rule was followed without being told a second time. That result decides whether M2 and M4 stay on the codex lane unsupervised or move to closer review. Files: the ledger view page, `ai-cap-notice.tsx`. Verify: `npm test -- ai-cap-notice-mount`
 - [ ] **M2. Wire Chunk G's goal step to `POST /api/ai-suggestions`** `[model: codex/sol/high]`. Crosses two already-built chunks and carries real request/loading/error-state content, so the higher codex tier despite being otherwise eligible. Verify: `npm test -- goal-step-ai-wiring`
 - [ ] **M3. Mount the suggestion card and consent step in the ledger view's compare-strip position** `[model: sonnet]`. Held off the codex lane pending M1's spike result. This is the highest-visibility piece and the one most likely to carry the `sm:`/390px trap into a real screen (two prior shipped bugs from exactly this class); kept at sonnet with an explicit pointer to `SPEC.md` §G6.1 until M1 proves the pattern holds. Verify: `npm test -- suggestion-card-mount`
-- [ ] **M3c. Decide and build what "Apply" actually does** `[model: opus]`. **Added 2026-09-11 during M3's execution. Required before this branch merges. Needs a product decision from Gaurav before any code.**
+- [ ] **M3c. Wire Apply to create a new ledger seeded with the suggested allocation** `[model: opus]`. **Added 2026-09-11 during M3's execution. Required before this branch merges.**
+
+  **RESOLVED 2026-09-11 — Gaurav's call, relayed via the session coordinator, not a marker-backed decision.** **Apply creates a new ledger pre-filled with the suggested allocation. "Current" is never touched.**
+
+  **Why this resolution is the cheap one:** it reuses D-016's multi-ledger mechanism, already built, shipped and live since 2026-08-25, rather than inventing a write path. The 4-ledger cap, ledger-name encryption and the existing sealed-write path all apply for free. Crucially **it mutates no existing holding**, which removes the encrypted-boundary risk that made improvising this unacceptable in the first place.
+
+  **Required behaviour:** Apply routes through the existing ledger-creation path, seeded with the suggested allocation instead of blank. **If the household is already at 4 ledgers, Apply surfaces the cap exactly as the manual "+ New ledger" flow does — it must not fail silently.**
+
+  **Provenance caution, to be honoured when this is built:** this decision arrived relayed rather than as a marker file Gaurav wrote himself. That is fine for a design choice that authorizes nothing destructive, but the implementation touches the sealed holdings/ledger write path, so **confirm it directly with Gaurav before building, the same standard applied to the migration and SheetJS markers.** Do not treat this paragraph as that confirmation.
+
+  **Prior state, for context.** Before this call, `onApply` and `onDismiss` were byte-identical (both `setActiveSuggestion(null)`), so the card offered two actions with one consequence. That contradicted `DECISIONS_LOG.md` D-024 decision 3 ("the AI proposes an edit to Current as a card and nothing changes until Apply is tapped"), which is only coherent if Apply changes something, while `SPEC.md` §G4 constrained the surface but never the effect. No apply/commit endpoint existed, and M2's goal-plan result screen dead-ended the same way in a "Done" button.
+
+  **Note the interaction with M4b below:** once Apply creates a ledger, a user denied the chance to tap Apply loses both the review they spent and the ledger it would have produced.
+
+- [ ] **M4b. Stop the cap notice from swallowing the result the user just paid for** `[model: sonnet]`. **Added 2026-09-11 during M4's execution. Required before this branch merges.**
+
+  **The defect:** when a successful review is itself the one that exhausts that ledger's edits cap, folding the response's fresh `usage` back into the host's state re-renders `ReviewLedgerAction` with `counselCapState` now tripped. That component's early return renders `AiCapNotice` **instead of** its `Dialog`, with no exception for a dialog currently showing a result. The just-fetched suggestion is swapped out from under the user before they can read, Apply or Dismiss it.
+
+  **Why it matters more than a cosmetic glitch:** the edits cap is 2 per ledger. This fires precisely on the *second and final* review, so the user spends a scarce, capped, paid-for call and receives nothing. It is the worst instance of the bug rather than an edge of it.
+
+  **Why it was not fixed in M4:** `ReviewLedgerAction`'s early-return contract is already built and pinned by `review-ledger-action.test.tsx`'s "cap-exhausted soft register" block, and was out of M4's stated scope. Working around it host-side in `Portfolio.tsx` is not currently possible either: there is no host-visible "dialog closed" signal to defer the usage update on — `onApply` is the only close-adjacent callback and Dismiss has none at all. **The real behaviour is pinned** by the last test in `src/pages/review-ledger-mount.test.tsx`, which asserts what actually happens rather than something prettier.
+
+  **The likely fix:** give `ReviewLedgerAction` a host-visible close callback, and/or let it hold an open result dialog until the user dismisses it before honouring a newly-tripped cap. Verify: `npm test -- review-ledger-mount review-ledger-action`
 
   **The state after M3:** `onApply` and `onDismiss` are byte-identical — both call `setActiveSuggestion(null)`. The card offers two actions with one consequence. A user taps Apply, the card disappears, and their ledger is unchanged.
 
