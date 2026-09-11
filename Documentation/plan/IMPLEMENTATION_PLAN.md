@@ -914,6 +914,28 @@ The `codex/*` tags are left in place below as the record of what was planned and
 
   **Required behaviour:** Apply routes through the existing ledger-creation path, seeded with the suggested allocation instead of blank. **If the household is already at 4 ledgers, Apply surfaces the cap exactly as the manual "+ New ledger" flow does — it must not fail silently.**
 
+  **UNBLOCKED 2026-09-11**: marker `consent-m3c-apply-ledger` (`apply-creates-new-ledger-v1`) verified on disk. The provenance caution below is satisfied.
+
+  **STILL BLOCKED ON A SECOND, DIFFERENT QUESTION, found 2026-09-11 while scoping the build: which member owns the holdings in the new ledger?**
+
+  Three facts collide, and no artifact resolves them:
+  - An AI suggestion is `{ slug, weightPct }` — **no amounts and no member**.
+  - **Every holding requires a `memberId`**, and `POST /api/holdings-batch` (I10) validates every one of them for tenancy.
+  - A household has several members, and the source ledger's holdings are split across them.
+
+  **The amounts half is solved and precedented.** `ai-suggestion-card.tsx` already splits the ledger's own decrypted total across the suggested weights through Chunk E's engine at `horizonYears: 0`, so the rupee figures are computed locally and never come from the model. The same approach applies here.
+
+  **The member half has no defensible default**, and the options produce materially different artifacts:
+  - assign every suggested holding to one member — but this product has no "primary member" concept, and picking one silently attributes the rest of the household's money to that person, the same class of defect as H1b's sheet-mapping bug;
+  - distribute proportionally to each member's existing share — but the suggested slugs need not correspond to anything they currently hold;
+  - create the ledger with the goal recorded and **no holdings**, leaving the user to populate it, which is coherent but makes "pre-filled with the suggested allocation" untrue.
+
+  `SPEC.md` §G4 says only "Apply and Dismiss are the only actions". Nothing anywhere states what the created ledger contains.
+
+  **RESOLVED 2026-09-11 — Gaurav's call, relayed in-session: the new ledger is created EMPTY OF HOLDINGS**, with the goal/suggestion recorded as context, exactly like building any new ledger from scratch. The user populates it by hand afterwards. **Member attribution is never guessed**, and this sidesteps the amounts question entirely, since there is nothing to split into holdings.
+
+  **This changes what "pre-filled" means, and the copy must not lie about it.** The earlier phrasing of this item said Apply creates a ledger "pre-filled with the suggested allocation". Under this resolution it does not: it creates an **empty** ledger carrying the suggestion as context. Any copy on or after the Apply action must say so plainly, or a user will tap Apply, open the new ledger, find nothing in it, and reasonably conclude the feature is broken. **That is the specific failure this resolution introduces, and it is a copy problem, not a logic one.**
+
   **Provenance caution, to be honoured when this is built:** this decision arrived relayed rather than as a marker file Gaurav wrote himself. That is fine for a design choice that authorizes nothing destructive, but the implementation touches the sealed holdings/ledger write path, so **confirm it directly with Gaurav before building, the same standard applied to the migration and SheetJS markers.** Do not treat this paragraph as that confirmation.
 
   **Prior state, for context.** Before this call, `onApply` and `onDismiss` were byte-identical (both `setActiveSuggestion(null)`), so the card offered two actions with one consequence. That contradicted `DECISIONS_LOG.md` D-024 decision 3 ("the AI proposes an edit to Current as a card and nothing changes until Apply is tapped"), which is only coherent if Apply changes something, while `SPEC.md` §G4 constrained the surface but never the effect. No apply/commit endpoint existed, and M2's goal-plan result screen dead-ended the same way in a "Done" button.
