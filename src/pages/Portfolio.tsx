@@ -13,6 +13,8 @@ import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
 import { listHoldings, type Holding } from '@/lib/holdings-api'
 import { listLedgers, type Ledger } from '@/lib/ledgers-api'
+import { getAiSuggestionsUsage, type AiSuggestionsUsage } from '@/lib/ai-suggestions-api'
+import { AiCapNotice, counselCapState } from '@/components/ai-cap-notice'
 
 type State = 'loading' | 'loaded' | 'error'
 
@@ -47,6 +49,12 @@ export function Portfolio() {
   // Current. Idle while the Current tab is active.
   const [ledgerHoldings, setLedgerHoldings] = useState<Holding[]>([])
   const [ledgerHoldingsState, setLedgerHoldingsState] = useState<State | 'idle'>('idle')
+  // M1 (D-024/D-025) — the active ledger's AI usage counters, so the
+  // cap-exhausted notice can stand in for the not-yet-mounted "Review this
+  // ledger" affordance (M4). A failed fetch must never break the ledger view
+  // -- it just means no cap applies as far as this page can tell, so it
+  // falls back to null rather than surfacing an error state of its own.
+  const [aiUsage, setAiUsage] = useState<AiSuggestionsUsage | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null)
   // Sheet content is position:fixed and taller than the viewport; some mobile
@@ -120,6 +128,34 @@ export function Portfolio() {
     }
   }, [activeLedgerId, isBaselineActive, getToken])
 
+  // M1 — refetches the counters whenever the active ledger changes, since
+  // `editsCap`/`editsUsed` are per-ledger (DATA_MODEL.md). Same
+  // cancelled-guard pattern as the effects above: a slow response for a
+  // ledger the user has since tabbed away from must not land. A rejection is
+  // swallowed to null rather than an error state -- this counter is
+  // advisory only and must never be able to break the ledger view.
+  useEffect(() => {
+    if (!activeLedgerId) {
+      setAiUsage(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const token = await getToken()
+        const usage = await getAiSuggestionsUsage(token, activeLedgerId)
+        if (cancelled) return
+        setAiUsage(usage)
+      } catch {
+        if (cancelled) return
+        setAiUsage(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeLedgerId, getToken])
+
   function closeSheet() {
     setSheetOpen(false)
     setEditingHolding(null)
@@ -179,6 +215,11 @@ export function Portfolio() {
   const displayedReady = state === 'loaded' && (isBaselineActive || ledgerHoldingsState === 'loaded')
   const displayedLoading = state === 'loaded' && !isBaselineActive && ledgerHoldingsState === 'loading'
   const displayedError = state === 'loaded' && !isBaselineActive && ledgerHoldingsState === 'error'
+
+  // M1 — this ledger's own edits cap first, then the global breaker
+  // (`counselCapState`'s own contract), null while usage hasn't loaded or
+  // failed to load, in which case no notice renders at all.
+  const counselCap = aiUsage ? counselCapState(aiUsage) : null
 
   const totalCurrentValue = displayedHoldings.reduce((sum, h) => sum + Number(h.currentValue), 0)
   const groupedByMember = members
@@ -245,6 +286,13 @@ export function Portfolio() {
             ledgerId={activeLedgerId}
           />
         )}
+
+        {/* M1 (D-024/D-025) — stands in for the not-yet-mounted "Review this
+            ledger" affordance (M4) IN PLACE, per SPEC.md G4's "Cap-exhausted"
+            row: never in addition to it, never a toast. Applies to any
+            ledger, baseline included, same scope as the projection panel
+            above. */}
+        {state === 'loaded' && activeLedgerId && counselCap && <AiCapNotice state={counselCap} />}
 
         {displayedLoading && (
           <div className="space-y-3">
