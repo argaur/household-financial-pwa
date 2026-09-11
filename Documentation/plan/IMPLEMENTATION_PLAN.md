@@ -1006,6 +1006,18 @@ Chunk I finished complete-as-specified and **unusable**: every piece built and v
 - [ ] **H4. Entry point and the three dormant seams** `[model: sonnet]`: template download wiring (I4), rejects download wiring (I9), telemetry call sites (I14). **Entry point is specified, not a choice** — `SPEC.md` §I4: "a secondary action on the ledger's holdings view, next to the existing add affordance, naming the active ledger. Not in the FAB, not in the nav."
 - [ ] **H5. Pin coverage for the drop zone and the download trigger** `[model: sonnet]`, the two `SPEC.md` §I6.1 surfaces I15 could not cover because they did not exist.
 
+- [ ] **H-gap-1. Seven of D-025's ten analytics events were never implemented, and no check could have caught it** `[model: sonnet]`. **Found 2026-09-11 during H2. Fold into H3/H4, which own the surfaces that fire them.**
+
+  **`METRICS_PLAN.md` specifies ten events for this feature. Three exist**: `pii_disclosure_shown` (I4), `bulk_import_template_downloaded` and `bulk_import_completed` (I14). **Seven do not** (lines 320-326): `bulk_import_started`, `bulk_import_file_rejected` (`reason`: wrong_type / unreadable / wrong_shape / empty / too_many_rows), `bulk_import_review_shown` (`rows_ready`, `rows_attention`, `rows_duplicate`, `rows_skipped`), `bulk_import_rejects_downloaded` (`rows_rejected`), `bulk_import_abandoned` (`stage`: disclosure / upload / review), `bulk_import_duplicate_overridden`, `bulk_import_failed` (`reason`: batch_error / ledger_full / forbidden).
+
+  **This was not I14's error.** The plan's I14 step names exactly three events and says "all three are already defined in `METRICS_PLAN.md`" — which is true. `METRICS_PLAN.md` line 314 lists three *reused* names; lines 320-326 are a separate table of *new* names the plan step never references. **I14 implemented its step faithfully; the plan step under-specifies the spec.**
+
+  **The cost is the measurement the feature is judged by.** `METRICS_PLAN.md` line 336 defines an import funnel — `started` → `template_downloaded` → `review_shown` → `completed`. Two of its four stages do not exist. Line 337's "where imports die" breakdown reads `bulk_import_abandoned.stage`, which does not exist either. **The feature currently cannot answer "do people finish an import, and if not, where do they stop?"**
+
+  **No automated check could have caught this, and that is worth understanding rather than fixing.** `scripts/check_events.py` was read directly: it flags a `track()` call whose name is unregistered, and flags raw PostHog SDK calls. That is all. There is **no registered-but-never-fired check**, and **the script never reads `METRICS_PLAN.md`**. So all three of these pass silently: an event specified but never registered (these seven), an event registered but never fired (I14's two), and by extension any drift between the spec and the registry.
+
+  `app/CLAUDE.md` states the convention this depends on — *"Events: `METRICS_PLAN.md` ↔ analytics registry, same commit"* — and it is **human discipline, enforced by nothing**. Do not build a `METRICS_PLAN.md` parser in response; spec-to-registry completeness is a review step, and the useful change is knowing that "`check_events.py` passed" says nothing about completeness.
+
 - [ ] **H-risk-1. Member ORDER is an unenforceable contract in the import round trip** `[model: opus]`. **Found 2026-09-11 during H1. Needs a decision BEFORE H2/H3 wire a member list in.**
 
   **The mechanism.** `sanitizeSheetName` (I3) truncates at 31 characters and disambiguates collisions with ` (2)`, ` (3)` **by position in the member list**. H1 therefore rebuilds the sheet-to-member map by recomputing that forward mapping over the members in order — the only approach that works, since the transform is not invertible.
