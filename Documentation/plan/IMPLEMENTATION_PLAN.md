@@ -1,6 +1,7 @@
 # Implementation Plan — Household Financial Planning PWA
 
 **Status:** approved ("Plan approved" gate passed 2026-07-10 — Gaurav authorized autonomous decision-making for this session; no ambiguity required escalation)
+**Codex lane, P6 addendum only:** `codex-lane: yes`, opted in 2026-09-10 per Gaurav's instruction and a `/council` run (`collab-runs/2026-09-10-ai-layer-plan/exchange.json`). Applies only to steps in P6 tagged `codex/<tier>/<effort>`; every other tag in this document predates the opt-in and stands as written.
 **Inputs:** `SOLUTION_BRIEF.md`, `SPEC.md`, `DATA_MODEL.md`, `COMPONENT_SHOWCASE.md`, `METRICS_PLAN.md`, `DECISIONS_LOG.md`, design tokens
 **Rule:** Slices ordered hardest-unknown-first after Slice 0. Default feature-list ordering is a trap.
 
@@ -719,6 +720,58 @@ Every step is test-first. A failing test lands before the implementation it desc
 5. **Chunk C**, counsel cards on the same proxy.
 6. **Chunk I**, Excel import. Independent of 2 through 5; sequenced here by default, safely parallelisable after Chunk E.
 7. **Chunk V**, manual verification. Last, mandatory, and explicitly not satisfiable by the test suite.
+
+## P6. Addendum — mounting the AI layer, scoped migration application, and a codex-lane pilot (2026-09-10)
+
+**Status:** approved 2026-09-10, in-session. Written after `/council` (`collab-runs/2026-09-10-ai-layer-plan/exchange.json`, one blind round plus one rebuttal round, all four contested claims resolved, no items left open).
+
+**Why this addendum exists.** Chunks R, A, and C are complete and committed (`4943486`, `b803b7c`, `7580f5c`, `3d6c698`). `SPEC.md` §G3, line 329, records a real gap in this plan, not a skipped step: the consent step, suggestion card, cap-exhausted states, and "Review this ledger" button are all built and tested, but nothing mounts them on any screen, and Chunk G's goal step is never wired to `POST /api/ai-suggestions`. This blocks Chunk V's V2, which the plan itself calls mandatory and not substitutable by the test suite.
+
+**Sequencing, per the council decision.** Two independent tracks run in parallel: Track M mounts the AI layer, Track I is the existing, unchanged Chunk I (bulk Excel import). They do not block each other; Chunk I has no dependency on the AI layer per this plan's own P5. Track G, a short gated migration step, runs ahead of Track M's live check only, not ahead of Track M's code, since Track M's own tests run against the in-memory model regardless of migration state. Chunk V's V2 (the live Anthropic call) moves up: it runs as soon as Track M is verified locally and Track G's migrations are live, rather than sitting last. This reflects the council's converged view that Gaurav's own attended time for a live production check is the scarcer resource, not coding capacity, so that window should be scheduled early rather than deferred.
+
+### Track G: scoped migration application
+
+Migrations `0006` and `0007` do not need to travel bundled with `0008`. They add schema that no *deployed* code reads. `0008` (`households.ai_plans_created`) is the one that matters once mounted code starts reading it, so it stays held separately.
+
+**Correction, 2026-09-10 (dev-manager execution):** an earlier version of this paragraph described both migrations as "Chunk R's two tables". That is wrong. `0007` alone is Chunk R (`ai_call_reservations`, `ai_global_usage`). **`0006` is Chunk E's** migration: the `ledger_projection_settings` table plus three `instruments` rate columns (`assumed_annual_rate_pct`, `rate_source`, `assumed_rate_as_of`). G-a's grep pattern below covers only `0007`'s objects and never tests `0006` at all; `0006` was verified separately during execution and is also clean on `main`.
+
+- [x] **G-a. Verify by direct grep that no shipped code path reads any column added by migrations 0006 or 0007, before touching the database** `[model: sonnet]`. This check is the evidence the risk-scoping above rests on, not an assumption. Verify: `grep -rln "ai_call_reservations\|ai_global_usage" src server --include=*.ts --include=*.tsx`
+
+  **Correction, 2026-09-10 (dev-manager execution): the `Verify:` line above only passes when run against `main`, not against the branch it executes from.** "Shipped" here means *deployed*, and production runs `main`. Run from `d024-d025-ai-import`, the grep returns 8 files, because Chunk R's own committed-but-unmerged code is what it catches. The check as intended must be run against the deployed tree, e.g. `git grep -l "ai_call_reservations\|ai_global_usage" origin/main -- 'src/*.ts' 'src/*.tsx' 'server/*.ts'`, which returns empty. Verified this way on 2026-09-10: neither migration's objects appear on `origin/main`, and `server/routes/ai-suggestions.ts` and `server/routes/projection-settings.ts` do not exist there at all.
+- [x] **G-b. Apply migrations 0006 and 0007 to production, verify with `npm run db:probe`** `[model: sonnet]`. Requires Gaurav's own direct go-ahead in the session this runs, not an instruction relayed by a prior checkpoint — this project's standing rule, held correctly twice already this session. Verify: `npm run db:probe`
+
+  **Correction, 2026-09-11 (dev-manager execution, run `20260910-1137`): this step was half-done before it started, and the command it names would have over-applied.** Two findings, both from asking the database rather than the repository:
+
+  1. **`0006` was already applied to production on 2026-09-09.** The live ledger held 7 rows (`0000`–`0006`), and `ledger_projection_settings` plus all three `instruments` rate columns were already present. Only `0007` was actually pending. This is the `_journal.json`-vs-`__drizzle_migrations` distinction this project already learned once on 2026-08-04, hitting again: the repository cannot answer "did it land".
+  2. **`npm run db:migrate` applies *every* pending migration, so running it here would have applied `0008` as well** — the migration G-c explicitly holds and which no consent marker covers. The plan's own `Verify:` line points at `db:probe`, but its `Apply` verb implies `db:migrate`, and that command cannot be scoped to a target revision.
+
+  **What was actually run:** drizzle's own migrator (`drizzle-orm/neon-http/migrator`) against a scratch *copy* of `drizzle/migrations` with `0008` removed from the copy's journal. The repository's migration tree was never modified, and the hash algorithm was proven first by reproducing all 7 already-applied hashes exactly (`sha256` of raw file content, 7/7 matched, 0 unmatched ledger rows). Result: ledger at 8 rows, `ai_call_reservations` and `ai_global_usage` present with all 3 expected indexes, row counts unchanged (households 2, family_members 4, holdings 6, protection 1, household_keys 2) so zero data loss.
+
+  **Standing note for whoever applies `0008`:** do not use a bare `npm run db:migrate` unless every pending migration is intended. There is no `--to <tag>` flag.
+- [x] **G-c. Migration 0008 stays held**, applied only immediately before Chunk A's provider call is unblocked (i.e. right before the Anthropic key is wired into the code). Not a step; a checkpoint gating Track M's later steps.
+
+  **Confirmed held, 2026-09-11:** verified positively rather than by omission — `0008`'s hash is absent from `drizzle.__drizzle_migrations`, and `households.ai_plans_created` does not exist as a column. The `db:probe` "mismatch" line (8 applied vs 9 in journal) is now exactly this one held migration and is the expected state, not a defect.
+
+### Track M: mount the AI layer (new scope; not in the original P1–P5 plan)
+
+- [ ] **M1. Failing test: mount the cap-exhausted states on the ledger view** `[model: codex/terra/medium]`. The lowest-stakes of the four unmounted pieces: no live provider dependency, no consent copy. This is the council's proposed validation spike — after it lands, check whether `SPEC.md` §G6.1's `md:` breakpoint rule was followed without being told a second time. That result decides whether M2 and M4 stay on the codex lane unsupervised or move to closer review. Files: the ledger view page, `ai-cap-notice.tsx`. Verify: `npm test -- ai-cap-notice-mount`
+- [ ] **M2. Wire Chunk G's goal step to `POST /api/ai-suggestions`** `[model: codex/sol/high]`. Crosses two already-built chunks and carries real request/loading/error-state content, so the higher codex tier despite being otherwise eligible. Verify: `npm test -- goal-step-ai-wiring`
+- [ ] **M3. Mount the suggestion card and consent step in the ledger view's compare-strip position** `[model: sonnet]`. Held off the codex lane pending M1's spike result. This is the highest-visibility piece and the one most likely to carry the `sm:`/390px trap into a real screen (two prior shipped bugs from exactly this class); kept at sonnet with an explicit pointer to `SPEC.md` §G6.1 until M1 proves the pattern holds. Verify: `npm test -- suggestion-card-mount`
+- [ ] **M4. Mount "Review this ledger" and wire it to the counsel path** `[model: codex/terra/medium]`. Same shape and stakes as M1; dispatch once M1's spike result is read. Verify: `npm test -- review-ledger-mount`
+- [ ] **M5. Re-run the full G3 pipeline suite plus an E11-style class-string pin against every newly mounted class** `[model: sonnet]`. Re-verification step, not trusted from worker self-report, matching this project's standing practice. Verify: `npm run typecheck && npm test`
+
+### Track V, reordered
+
+- **V2 moves up**, runs as soon as Track M is locally verified and Track G's migrations are live, not last. Still needs the Anthropic key switched from unwired to wired in code, which stays Gaurav's own direct action, same as the migration gate.
+- **V1 and V3 are unchanged** from P4 and have no dependency on Track M; V1 can run whenever Track I is ready for a cross-tool pass.
+
+### Chunk I, unchanged, two re-tag candidates flagged for Gaurav's call
+
+Every I-step keeps its original tag from P4 except the two flagged here. Neither has been changed; both are flagged for a decision.
+
+- **I1, I2 stay `opus`.** Both touch `vite.config.ts` and precache configuration and add a new dependency (SheetJS) — a new dependency is one of model-router's six codex-ineligibility conditions on its own, so these are not codex candidates regardless of how well-specified they are.
+- **I5 (the two India-specific parsing traps) is flagged as a candidate for `codex/sol/high` instead of `opus`.** It is unusually well-specified for a correctness-critical step: the plan already names the exact test cases (date serial under IST, lakh-grouping, shorthand rejection), touches no auth/secrets/deps/config, and has a single-command verify. It is also exactly the kind of step where a wrong implementation looks right in casual testing, which is why it was opus-tagged originally. Left as `opus` here; re-tag only on Gaurav's explicit call.
+- **I10, I12, I13 stay `opus`.** A new authenticated array endpoint, an absence-of-persistence proof, and a telemetry-scrubbing audit are judgment-heavy, not mechanical, and none is a good fit for the codex lane's "no design decision left" eligibility bar.
 
 Each chunk is one commit, vertical: behaviour plus tests plus analytics events where applicable. Same chunk contract as both plans above.
 
