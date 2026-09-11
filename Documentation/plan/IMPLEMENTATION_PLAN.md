@@ -754,6 +754,26 @@ Migrations `0006` and `0007` do not need to travel bundled with `0008`. They add
 
 ### Track M: mount the AI layer (new scope; not in the original P1–P5 plan)
 
+**The codex-lane pilot ran and failed, 2026-09-11 (run `20260910-1137`). Result: the lane cannot execute on this machine, and the `codex/*` tags below were not honoured.**
+
+Two dispatches, both through `dev-manager-codex-step.sh` into a script-created worktree under `.worktrees/codex/`, both returning **exit 32 `NO_CHANGES` with zero files touched**:
+
+| Step | Model | Effort | Result |
+|---|---|---|---|
+| M1 | `gpt-5.6-terra` | medium | wrote nothing; reported a read-only sandbox |
+| M2 | `gpt-5.6-sol` | high | wrote nothing; reported all shell execution rejected |
+
+**The diagnosis is environmental, not configuration, model or quota.** No auth, 401, 429 or quota language appeared in either run. `--permission edit` was passed correctly and the wrapper did invoke `codex exec -s workspace-write -C <worktree>`; the target was a genuine secondary worktree, never the main tree. The decisive symptom is from the Sol run: Codex reported that **even a read-only shell command (`Get-Location`) was rejected before execution**. That is stronger than "the sandbox blocks writes" — the shell/subprocess layer itself fails to launch. This matches the known Windows defect `codex-delegate.sh`'s own header documents (`CreateProcessAsUserW failed`, spawning subprocesses under the sandboxed token on this OS), which that header already warns should be met by restructuring the call rather than retrying.
+
+**Consequences, decided in-session:**
+
+- **M1 and M2 were built on `sonnet` instead, and independently verified.** Both are committed.
+- **M4 is downgraded from `codex/terra/medium` to `sonnet` for this run**, since terra is the exact configuration that already failed at M1.
+- **The spike question M1 was created to answer — whether the codex lane honours `SPEC.md` §G6.1's `md:` rule unbidden — remains unanswered.** No Codex process ever read a file, so the pilot produced no evidence about output quality in either direction. Anyone re-running this pilot starts from zero, not from a negative result.
+- **Do not re-attempt the edit lane on this machine until the sandbox invocation is fixed.** A third model would burn quota to reconfirm the same environment defect.
+
+The `codex/*` tags are left in place below as the record of what was planned and consented to, rather than rewritten to match what happened.
+
 - [ ] **M1. Failing test: mount the cap-exhausted states on the ledger view** `[model: codex/terra/medium]`. The lowest-stakes of the four unmounted pieces: no live provider dependency, no consent copy. This is the council's proposed validation spike — after it lands, check whether `SPEC.md` §G6.1's `md:` breakpoint rule was followed without being told a second time. That result decides whether M2 and M4 stay on the codex lane unsupervised or move to closer review. Files: the ledger view page, `ai-cap-notice.tsx`. Verify: `npm test -- ai-cap-notice-mount`
 - [ ] **M2. Wire Chunk G's goal step to `POST /api/ai-suggestions`** `[model: codex/sol/high]`. Crosses two already-built chunks and carries real request/loading/error-state content, so the higher codex tier despite being otherwise eligible. Verify: `npm test -- goal-step-ai-wiring`
 - [ ] **M3. Mount the suggestion card and consent step in the ledger view's compare-strip position** `[model: sonnet]`. Held off the codex lane pending M1's spike result. This is the highest-visibility piece and the one most likely to carry the `sm:`/390px trap into a real screen (two prior shipped bugs from exactly this class); kept at sonnet with an explicit pointer to `SPEC.md` §G6.1 until M1 proves the pattern holds. Verify: `npm test -- suggestion-card-mount`
@@ -764,7 +784,9 @@ Migrations `0006` and `0007` do not need to travel bundled with `0008`. They add
   **Why it matters more than it looks:** this is user-facing copy stating something false on a privacy-consent screen, which is the one surface in this feature where an inaccurate number undermines the point of the screen. It is contained — the server's own `cap_reached` response is still honoured, so nothing can over-spend, and the wrongness is cosmetic rather than a cap bypass — but it must not ship.
 
   **The work:** pass real usage down from `ledger-tab-strip.tsx` / `Portfolio.tsx` into `NewLedgerModal`, and decide what the goal path should display before any ledger exists (the household's plans counter is the right source; `editsUsed`/`editsCap` are per-ledger and do not apply). Verify: `npm test -- goal-step-ai-wiring`
-- [ ] **M4. Mount "Review this ledger" and wire it to the counsel path** `[model: codex/terra/medium]`. Same shape and stakes as M1; dispatch once M1's spike result is read. Verify: `npm test -- review-ledger-mount`
+- [ ] **M4. Mount "Review this ledger" and wire it to the counsel path** `[model: codex/terra/medium]` — **downgraded to `sonnet` for run `20260910-1137`**, see the codex-lane result above. Same shape and stakes as M1; dispatch once M1's spike result is read. Verify: `npm test -- review-ledger-mount`
+
+  **M4 also closes M1's deliberate gap.** `SPEC.md` §G4 requires the cap notice to replace the action's own affordance **in place**. M1 mounted the notice while the "Review this ledger" button did not yet exist, so on commit `b9216eb` the notice renders standing in for nothing. M4 must make the button and the notice mutually exclusive in the same slot. **This branch must not merge with both, or neither, rendering together.**
 - [ ] **M5. Re-run the full G3 pipeline suite plus an E11-style class-string pin against every newly mounted class** `[model: sonnet]`. Re-verification step, not trusted from worker self-report, matching this project's standing practice. Verify: `npm run typecheck && npm test`
 
 ### Track V, reordered
