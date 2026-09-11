@@ -18,8 +18,14 @@ import { listFamilyMembers, type FamilyMember } from '@/lib/family-members-api'
 import { listInstruments, type Instrument } from '@/lib/instruments-api'
 import { listHoldings, type Holding } from '@/lib/holdings-api'
 import { listLedgers, type Ledger } from '@/lib/ledgers-api'
-import { getAiSuggestionsUsage, type AiSuggestionsUsage, type AiSuggestion } from '@/lib/ai-suggestions-api'
-import { AiCapNotice, counselCapState } from '@/components/ai-cap-notice'
+import {
+  getAiSuggestionsUsage,
+  postCounselSuggestion,
+  type AiSuggestionsUsage,
+  type AiSuggestion,
+} from '@/lib/ai-suggestions-api'
+import { ReviewLedgerAction, type ReviewLedgerSuggestion } from '@/components/review-ledger-action'
+import { computeAllocation } from '@/lib/allocation'
 
 /**
  * M3 (D-024/D-025) — the state shape M4 (the "Review this ledger" counsel
@@ -294,6 +300,50 @@ export function Portfolio() {
     setActiveSuggestion(null)
   }
 
+  /**
+   * M4 — `ReviewLedgerAction`'s `onReview` seam: the real counsel POST.
+   * Builds the same two request pieces `NewLedgerModal`'s goal step already
+   * builds for `goal_plan` (`currentMix` via `computeAllocation`, reused
+   * rather than a second allocation loop), plus `holdingSlugs` — the
+   * deduplicated library slugs behind the active ledger's own holdings,
+   * looked up the same way the card grid below already resolves a holding's
+   * instrument.
+   *
+   * A non-`'ok'` status (cap_reached/duplicate/failed) throws, same contract
+   * `ReviewLedgerAction` already expects of this seam (its own module doc):
+   * it catches into its generic, amount-free error state. On success, the
+   * response's own `usage` is folded into `aiUsage` in place so the
+   * remaining-reviews count doesn't go stale until the next ledger switch
+   * refetches it for real.
+   */
+  async function handleReviewLedger(): Promise<ReviewLedgerSuggestion> {
+    if (!activeLedgerId) throw new Error('no active ledger')
+    const token = await getToken()
+    const currentMix = computeAllocation(displayedHoldings).allocation.map((slice) => ({
+      assetClass: slice.assetClass,
+      weightPct: slice.percentage,
+    }))
+    const holdingSlugs = Array.from(
+      new Set(
+        displayedHoldings
+          .map((h) => instruments.find((i) => i.id === h.instrumentId)?.slug)
+          .filter((slug): slug is string => Boolean(slug)),
+      ),
+    )
+    const response = await postCounselSuggestion(token, {
+      kind: 'counsel',
+      idempotencyKey: crypto.randomUUID(),
+      ledgerId: activeLedgerId,
+      currentMix,
+      holdingSlugs,
+    })
+    if (response.status !== 'ok') {
+      throw new Error(response.status)
+    }
+    setAiUsage((prev) => (prev ? { ...prev, ...response.usage } : prev))
+    return response.suggestion
+  }
+
   function handleSaved(holding: Holding) {
     if (isBaselineActive) {
       setHoldings((prev) => upsertHolding(prev, holding))
@@ -330,11 +380,6 @@ export function Portfolio() {
   const displayedReady = state === 'loaded' && (isBaselineActive || ledgerHoldingsState === 'loaded')
   const displayedLoading = state === 'loaded' && !isBaselineActive && ledgerHoldingsState === 'loading'
   const displayedError = state === 'loaded' && !isBaselineActive && ledgerHoldingsState === 'error'
-
-  // M1 — this ledger's own edits cap first, then the global breaker
-  // (`counselCapState`'s own contract), null while usage hasn't loaded or
-  // failed to load, in which case no notice renders at all.
-  const counselCap = aiUsage ? counselCapState(aiUsage) : null
 
   const totalCurrentValue = displayedHoldings.reduce((sum, h) => sum + Number(h.currentValue), 0)
   const groupedByMember = members
@@ -424,12 +469,24 @@ export function Portfolio() {
           />
         )}
 
-        {/* M1 (D-024/D-025) — stands in for the not-yet-mounted "Review this
-            ledger" affordance (M4) IN PLACE, per SPEC.md G4's "Cap-exhausted"
-            row: never in addition to it, never a toast. Applies to any
-            ledger, baseline included, same scope as the projection panel
-            above. */}
-        {state === 'loaded' && activeLedgerId && counselCap && <AiCapNotice state={counselCap} />}
+        {/* M4 (D-024/D-025) — "Review this ledger". `ReviewLedgerAction` owns
+            its own cap-exhausted notice (SPEC.md G4's "Cap-exhausted" row:
+            IN PLACE of the button, never in addition to it, never a toast),
+            so this is the only render of that notice on the page -- M1's
+            standalone placeholder line is gone. Applies to any ledger,
+            baseline included, same scope as the projection panel above.
+            Waits on `aiUsage` itself (not just `state`/`activeLedgerId`):
+            the component requires a real usage prop, never fetches its own. */}
+        {state === 'loaded' && activeLedgerId && aiUsage && (
+          <ReviewLedgerAction
+            usage={aiUsage}
+            target={isBaselineActive ? 'current' : 'ledger'}
+            instrumentNamesBySlug={instrumentNamesBySlug}
+            totalValueInr={totalCurrentValue}
+            onReview={handleReviewLedger}
+            onApply={() => handleApplySuggestion()}
+          />
+        )}
 
         {displayedLoading && (
           <div className="space-y-3">

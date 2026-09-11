@@ -119,3 +119,57 @@ export async function postGoalPlanSuggestion(
   }
   return body
 }
+
+/**
+ * The browser half of `POST /api/ai-suggestions`, `kind: "counsel"` (D-024
+ * Chunk C, step M4; `server/routes/ai-suggestions.ts`, `SPEC.md` §G3). Mirrors
+ * `server/lib/ai-suggestion-request.ts`'s `counselRequestSchema`: a ledger id
+ * (ownership checked server-side, never here), banded percentages-only
+ * `currentMix`, and a deduplicated list of library `holdingSlugs` — no free
+ * text, no household data, same discipline as the goal-plan request.
+ */
+export interface CounselSuggestionRequest {
+  kind: 'counsel'
+  idempotencyKey: string
+  ledgerId: string
+  currentMix: { assetClass: string; weightPct: number }[]
+  holdingSlugs: string[]
+}
+
+/**
+ * `POST /api/ai-suggestions`, `kind: "counsel"`.
+ *
+ * Deliberately does **not** go through `encryptedFetch`, for exactly the
+ * reason `postGoalPlanSuggestion`'s own doc comment gives: that helper throws
+ * on any non-2xx response and discards the body except an `error` key, but
+ * this route's meaningful outcomes — `cap_reached` (409), `duplicate` (409),
+ * `failed` (502/503) — are all structured JSON bodies on a non-2xx status.
+ * The caller (`ReviewLedgerAction`'s host, `Portfolio.tsx`) needs to read
+ * `status`/`capType` off those the same way it reads a 200, so the body is
+ * read regardless of HTTP status here too. Authorization and `cache:
+ * 'no-store'` plumbing match `encryptedFetch` and `postGoalPlanSuggestion`
+ * exactly.
+ *
+ * A genuinely malformed response (no body, not JSON) throws
+ * `AiSuggestionsApiError`, which the caller treats as its generic error
+ * state — same contract as `postGoalPlanSuggestion`.
+ */
+export async function postCounselSuggestion(
+  token: string | null,
+  request: CounselSuggestionRequest,
+): Promise<AiSuggestionPostResult> {
+  const res = await fetch('/api/ai-suggestions', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(request),
+  })
+  const body = (await res.json().catch(() => null)) as AiSuggestionPostResult | null
+  if (!body || typeof body.status !== 'string') {
+    throw fail(res.status, 'Unexpected response')
+  }
+  return body
+}
