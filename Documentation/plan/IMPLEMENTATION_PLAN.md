@@ -734,6 +734,22 @@ Every step is test-first. A failing test lands before the implementation it desc
   **Why it needs checking rather than accepting:** a heuristic that mis-flags a commonly-used field actively misleads, which is worse than no guidance on a template whose whole job is guidance. It should be reviewed against the real 30-instrument content during I4 or the Phase 5 review.
 
 - [ ] **I4. PII disclosure as a step before the download** `[model: sonnet]`. Failing tests first: a step, not a checkbox beside the button; it states what the file will contain and that the file is outside the app's protection once saved; **it discloses that a browser extension with file access is outside Vittam's trust boundary** (disclose, do not engineer around it); `pii_disclosure_shown` fires with `surface`. The file name carries the ledger name and the date so a stale download is identifiable by its name.
+- [ ] **I-bug-1. `exportFilename` stamps a UTC date, so an IST export can be named with yesterday's date** `[model: sonnet]`. **Pre-existing defect found 2026-09-11 during I4. Not a Track I regression. Not blocking.**
+
+  **The defect, narrowly.** `src/lib/export.ts:116`:
+
+  ```ts
+  const date = exportedAt.toISOString().slice(0, 10)
+  ```
+
+  `toISOString()` reports UTC. Under IST (+05:30), any export taken between 00:00 and 05:30 local time renders the **previous** day, so a file exported at 02:00 on 12 September is named `household-financial-plan-2026-09-11.json`.
+
+  **Scope it precisely — most of this file is correct.** `export.ts:84` (`exportedAt: input.exportedAt.toISOString()`) is a *timestamp field* and is right: ISO timestamps should be UTC. **Only the file-name date stamp is wrong.** Do not "fix" line 84.
+
+  **Why it is recorded here rather than fixed in place.** It is outside Chunk I's scope and predates this branch. But it is the *same defect class* that D-025 decision 8 and step I5 exist to defend against, and I4's own `src/lib/import-filename.ts` deliberately takes the other approach (local `getFullYear`/`getMonth`/`getDate`). Two filename builders in one repo now disagree about how to stamp a date, and only one of them is right. Left unrecorded, that inconsistency invites someone to "align" them toward the wrong one.
+
+  **Fix:** reuse `localDateStamp` from `src/lib/import-filename.ts`. Verify with a test that pins a fixed instant in the 00:00-05:30 IST window and asserts the local date, which is the only window where the bug is observable.
+
 - [ ] **I5. Parser: the two India-specific traps** `[model: opus]`. Failing tests first, both named now so neither is rediscovered late. **Excel date serials are formatted from local date parts and `toISOString()` appears nowhere in the parser**: a serial for 1 January under an IST offset must produce 1 January, not 31 December. **Lakh grouping parses**: "1,50,000" is 150000. **Shorthand is rejected with a clear message, never guessed**: "1.5L" produces a rejection, because a wrong guess about money is worse than a clear refusal. Opus: these are correctness traps where the wrong implementation passes casual testing and silently corrupts amounts.
 - [ ] **I6. Validation message builder names the column and the reason, never the value** `[model: sonnet]`. Failing test first over the message builder with a fixture value chosen to be unmistakable if echoed. "Current value is not a number I can read" is allowed; echoing the cell contents is not, because these messages are the most likely thing to end up in a Sentry breadcrumb or a screenshot.
 - [ ] **I7. Bucketing, including conservative duplicate detection** `[model: sonnet]`. Failing tests first: rows land in Ready, Needs attention, Possible duplicate, or Skipped, derived at parse time and living only in component state, no table and no persisted draft. A row is Possible duplicate when the target ledger already holds a decrypted holding with the same instrument slug and the same `member_id`, compared after the vault is unlocked, which is the only place both sides exist in plaintext. **Fuzzy instrument matching may only ever suggest a candidate for explicit confirmation, never auto-resolve.** Both agents said this independently.
