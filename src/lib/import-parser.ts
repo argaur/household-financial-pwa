@@ -62,6 +62,8 @@
  * ---------------------------------------------------------------------------
  */
 
+import { buildValidationMessage, type ValidationRejectionCode } from './import-validation-messages'
+
 /**
  * The SheetJS read options the upload step must use, so date cells arrive as
  * timezone-free serials. Spread into the `XLSX.read` call alongside `type`.
@@ -72,7 +74,7 @@ export const PARSER_READ_OPTIONS = { cellDates: false } as const
 /** Anything `XLSX.utils.sheet_to_json` can hand back for a single cell. */
 export type CellValue = string | number | boolean | Date | null | undefined
 
-export type RejectionCode = 'shorthand_amount' | 'unreadable_amount' | 'unreadable_date'
+export type RejectionCode = ValidationRejectionCode
 
 export interface ParseRejection {
   ok: false
@@ -181,9 +183,6 @@ function daysFromCivil(year: number, month: number, day: number): number {
   return era * 146097 + dayOfEra - 719468
 }
 
-const UNREADABLE_DATE = (column: string): string =>
-  `${column} is not a date I can read. Use a real date cell, or type the date as YYYY-MM-DD.`
-
 /**
  * One date cell -> `YYYY-MM-DD`, or `null` for a blank cell, or a rejection.
  * A blank cell is not an error: the template prefills every date column empty
@@ -194,23 +193,29 @@ export function parseDateCell(raw: CellValue, column: string): ParseResult<strin
 
   if (typeof raw === 'number') {
     const formatted = excelSerialToISODate(raw)
-    return formatted === null ? reject('unreadable_date', column, UNREADABLE_DATE(column)) : { ok: true, value: formatted }
+    return formatted === null
+      ? reject('unreadable_date', column, buildValidationMessage('unreadable_date', column))
+      : { ok: true, value: formatted }
   }
 
   if (raw instanceof Date) {
     const formatted = localDatePartsToISODate(raw)
-    return formatted === null ? reject('unreadable_date', column, UNREADABLE_DATE(column)) : { ok: true, value: formatted }
+    return formatted === null
+      ? reject('unreadable_date', column, buildValidationMessage('unreadable_date', column))
+      : { ok: true, value: formatted }
   }
 
   if (typeof raw === 'string') {
     const trimmed = raw.trim()
     if (trimmed === '') return { ok: true, value: null }
     const formatted = parseISODateText(trimmed)
-    return formatted === null ? reject('unreadable_date', column, UNREADABLE_DATE(column)) : { ok: true, value: formatted }
+    return formatted === null
+      ? reject('unreadable_date', column, buildValidationMessage('unreadable_date', column))
+      : { ok: true, value: formatted }
   }
 
   // A boolean, or anything else a cell should never hold in a date column.
-  return reject('unreadable_date', column, UNREADABLE_DATE(column))
+  return reject('unreadable_date', column, buildValidationMessage('unreadable_date', column))
 }
 
 // ---------------------------------------------------------------------------
@@ -267,12 +272,6 @@ const SHORTHAND_SUFFIXES = new Set([
   'billions',
 ])
 
-const SHORTHAND_MESSAGE = (column: string): string =>
-  `${column} uses a shorthand amount. Enter the full number in rupees instead, for example 150000 or 1,50,000.`
-
-const UNREADABLE_AMOUNT = (column: string): string =>
-  `${column} is not a number I can read. Enter digits in rupees, with or without commas, for example 150000 or 1,50,000.`
-
 /**
  * One amount cell -> a number, or `null` for a blank cell, or a rejection.
  * Never coerces: a value that is not unambiguously a plain rupee amount comes
@@ -284,12 +283,12 @@ export function parseAmountCell(raw: CellValue, column: string): ParseResult<num
   if (typeof raw === 'number') {
     return Number.isFinite(raw)
       ? { ok: true, value: raw }
-      : reject('unreadable_amount', column, UNREADABLE_AMOUNT(column))
+      : reject('unreadable_amount', column, buildValidationMessage('unreadable_amount', column))
   }
 
   if (typeof raw !== 'string') {
     // A boolean, a Date, anything else. Not an amount, and not guessable.
-    return reject('unreadable_amount', column, UNREADABLE_AMOUNT(column))
+    return reject('unreadable_amount', column, buildValidationMessage('unreadable_amount', column))
   }
 
   // Normalise the invisible characters spreadsheets love: NBSP and narrow NBSP.
@@ -302,9 +301,9 @@ export function parseAmountCell(raw: CellValue, column: string): ParseResult<num
   if (suffixMatch !== null) {
     const suffix = suffixMatch[2].toLowerCase().replace(/\./g, '')
     if (SHORTHAND_SUFFIXES.has(suffix)) {
-      return reject('shorthand_amount', column, SHORTHAND_MESSAGE(column))
+      return reject('shorthand_amount', column, buildValidationMessage('shorthand_amount', column))
     }
-    return reject('unreadable_amount', column, UNREADABLE_AMOUNT(column))
+    return reject('unreadable_amount', column, buildValidationMessage('unreadable_amount', column))
   }
 
   const sign = withoutCurrency.startsWith('-') ? -1 : 1
@@ -312,12 +311,12 @@ export function parseAmountCell(raw: CellValue, column: string): ParseResult<num
 
   const grouped = WESTERN_GROUPED.test(digits) || INDIAN_GROUPED.test(digits)
   if (!grouped && !UNGROUPED.test(digits)) {
-    return reject('unreadable_amount', column, UNREADABLE_AMOUNT(column))
+    return reject('unreadable_amount', column, buildValidationMessage('unreadable_amount', column))
   }
 
   const value = Number(digits.replace(/,/g, ''))
   if (!Number.isFinite(value)) {
-    return reject('unreadable_amount', column, UNREADABLE_AMOUNT(column))
+    return reject('unreadable_amount', column, buildValidationMessage('unreadable_amount', column))
   }
   return { ok: true, value: sign * value }
 }
