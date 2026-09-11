@@ -8,6 +8,7 @@ import { householdKeysRoutes } from './routes/household-keys.js'
 import { familyMembersRoutes } from './routes/family-members.js'
 import { instrumentsRoutes } from './routes/instruments.js'
 import { holdingsRoutes } from './routes/holdings.js'
+import { holdingsBatchRoutes } from './routes/holdings-batch.js'
 import { ledgersRoutes } from './routes/ledgers.js'
 import { projectionSettingsRoutes } from './routes/projection-settings.js'
 import { aiSuggestionsRoutes } from './routes/ai-suggestions.js'
@@ -64,6 +65,9 @@ app.route('/household-keys', householdKeysRoutes)
 app.route('/family-members', familyMembersRoutes)
 app.route('/instruments', instrumentsRoutes)
 app.route('/holdings', holdingsRoutes)
+// Single path segment — `/api/holdings/batch` would 404 at the platform before
+// Hono saw it. See server/routes/holdings-batch.ts.
+app.route('/holdings-batch', holdingsBatchRoutes)
 app.route('/ledgers', ledgersRoutes)
 // Single path segment — see server/routes/projection-settings.ts for why.
 app.route('/projection-settings', projectionSettingsRoutes)
