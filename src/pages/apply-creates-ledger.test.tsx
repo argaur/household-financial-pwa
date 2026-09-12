@@ -298,8 +298,12 @@ describe('Portfolio — Apply on an AI suggestion creates a new, empty ledger (M
   })
 })
 
+function spyOnOnLine(value: boolean) {
+  return vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(value)
+}
+
 describe('Portfolio — Apply respects the offline write guard (SPEC.md §7)', () => {
-  let onLineSpy: ReturnType<typeof vi.spyOn> | null = null
+  let onLineSpy: ReturnType<typeof spyOnOnLine> | null = null
 
   beforeEach(() => {
     listFamilyMembers.mockReset()
@@ -341,7 +345,7 @@ describe('Portfolio — Apply respects the offline write guard (SPEC.md §7)', (
   })
 
   it('disables Apply and shows the offline message on the result card while offline, and never calls createSuggestionLedger', async () => {
-    onLineSpy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false) as never
+    onLineSpy = spyOnOnLine(false)
 
     render(
       <MemoryRouter>
@@ -362,7 +366,7 @@ describe('Portfolio — Apply respects the offline write guard (SPEC.md §7)', (
   })
 
   it('re-enables Apply, and lets it actually create the ledger, once the connection comes back', async () => {
-    onLineSpy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false) as never
+    onLineSpy = spyOnOnLine(false)
 
     render(
       <MemoryRouter>
