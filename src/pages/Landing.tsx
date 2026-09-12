@@ -131,7 +131,7 @@ export function Landing() {
               <p className="landing-fade-up text-body-lg text-foreground" style={{ animationDelay: '150ms' }}>
                 {LANDING_HERO.body}
               </p>
-              <div className="landing-fade-up flex flex-col sm:flex-row gap-3 pt-2" style={{ animationDelay: '300ms' }}>
+              <div className="landing-fade-up flex flex-col md:flex-row gap-3 pt-2" style={{ animationDelay: '300ms' }}>
                 <Button asChild className="min-h-11">
                   <Link to="/sign-in?authView=sign-up" onClick={cta('create_your_plan', '/sign-in?authView=sign-up')}>
                     {LANDING_HERO.primaryCta}

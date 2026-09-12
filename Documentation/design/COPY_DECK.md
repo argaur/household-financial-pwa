@@ -305,3 +305,187 @@ No "No data found." No "Nothing here yet!" No exclamation marks on empty states.
 | Form validation (required field) | "This field is required." |
 | Form validation (invalid number) | "Enter a valid amount in rupees." |
 | Auth session expired | "Your session has ended. Sign in to continue." + Sign in button |
+
+---
+
+## Projection Panel (added 2026-09-07, D-024)
+
+Functional copy only. Every line follows the existing deck's register: state the fact, no exclamation marks, no persuasion. Zero em-dashes.
+
+| Element | Copy |
+|---|---|
+| Panel title | How this could grow |
+| Panel sub-label | An illustration based on assumptions you can change. Not a forecast. |
+| Horizon label | Project forward |
+| Horizon preset chips | 5 years / 10 years / 15 years / 20 years |
+| Horizon custom label | Or enter a number of years |
+| Horizon validation | Enter a number between 1 and 40. |
+| Rate list heading | Assumed annual return |
+| Rate row label | {Asset class} |
+| Rate row helper (seeded) | Seeded from a published rate. Change it if you disagree. |
+| Rate row helper (default) | A long-run assumption, not a published rate. Change it if you disagree. |
+| Rate validation | Enter a rate between 0 and 30 percent. |
+| Reset rates CTA | Reset to defaults |
+| Maths disclosure CTA | See the maths |
+| Maths panel heading | How this number was worked out |
+| Maths panel formula line | Each holding grows at its assumed annual rate, compounded once a year, from its current value. Monthly SIP amounts are added at the start of each year. Nothing is adjusted for tax or inflation. |
+| Maths panel source row | {Instrument or asset class} at {rate} percent. Source: {source}. Checked {date}. |
+| Maths panel stale note | This rate was last checked more than a year ago. |
+| Maths panel closing line | These are assumptions, not predictions. Change any rate above and the chart updates. |
+| Empty state (no holdings) | Add a holding to this plan and a projection appears here. |
+| Error state | Couldn't load your assumptions. Check your connection and try again. |
+
+---
+
+## Goal Planner (added 2026-09-07, D-024)
+
+### "+ New" modal, third option
+
+| Element | Copy |
+|---|---|
+| Option label | Plan toward a goal |
+| Option helper | Describe what you are saving for and get a sample mix to start from. |
+| Goal name label | What are you saving for? |
+| Goal name placeholder | A short name you will recognise later |
+| Goal name validation | Give this goal a name. |
+| Target amount label | Amount you want to reach (₹) |
+| Target amount validation | Enter a valid amount in rupees. |
+| Target year label | By which year? |
+| Target year validation | Enter a year between {next year} and {current year plus 40}. |
+| Monthly capacity label | What you can add each month (₹) |
+| Monthly capacity helper | Leave blank if you are not sure yet. |
+| Continue CTA | Continue |
+| Cancel CTA | Cancel |
+
+### Consent step, shown before every call
+
+| Element | Copy |
+|---|---|
+| Step title | This request leaves your device |
+| Body line 1 | Your holdings are encrypted on your device and Vittam's servers cannot read them. This one request is the exception. |
+| Body line 2 | What is sent: your asset mix as percentages, rounded totals, your goal name, and the instruments in your plan. |
+| Body line 3 | What is not sent: your family members' names, nominees, exact amounts, or anything from your profile. |
+| Body line 4 | The request goes to Anthropic, which processes it under its own API policy and may retain it for a period under that policy. Vittam's database does not store any of it. |
+| Counter line | This uses one of your {remaining} remaining plans. It is counted when the request is sent, even if it fails. |
+| Confirm CTA | Send this request |
+| Cancel CTA | Not now |
+| Link | How Vittam handles your data |
+
+### Call in flight and results
+
+| Element | Copy |
+|---|---|
+| In-flight label | Working on a sample mix |
+| In-flight sub-label | This usually takes a few seconds. |
+| Card title (goal plan) | One way to think about this goal |
+| Card title (counsel) | One way to read this plan |
+| Card caveat line | This is an illustration, not advice. Every number beside it was worked out on your device from the mix below. |
+| Card allocation row | {Instrument name} · {weight} percent |
+| Apply CTA | Add these to the plan |
+| Dismiss CTA | Dismiss |
+| Applied confirmation | Added to {ledger name}. You can change or remove anything from here. |
+| No-suggestion state | No sample mix came back for this goal. Nothing was changed. |
+| Failure state | Couldn't complete this request. Nothing was changed, and this attempt was counted. |
+| Failure sub-line | You have {remaining} left. |
+
+### Counsel entry point
+
+| Element | Copy |
+|---|---|
+| CTA | Review this ledger |
+| CTA helper | Get one reading of this plan's mix. Uses one of your {remaining} reviews. |
+
+### Cap states, three distinct messages
+
+| Element | Copy |
+|---|---|
+| Household plans exhausted, title | You have used both of your plans |
+| Household plans exhausted, body | Building and editing plans by hand stays fully available. A paid tier with more is coming. |
+| Ledger edits exhausted, title | You have used both reviews for this plan |
+| Ledger edits exhausted, body | Other plans still have their own reviews. Editing this one by hand stays fully available. |
+| Global limit reached, title | This feature is paused for the month |
+| Global limit reached, body | Vittam runs on a fixed monthly budget for this, and it has been reached. Your own limits have not been used up. Everything else works as normal. |
+
+---
+
+## Bulk Import (added 2026-09-07, D-025)
+
+### Entry point and disclosure
+
+| Element | Copy |
+|---|---|
+| Entry CTA | Import from a spreadsheet |
+| Entry helper | Add many holdings to {ledger name} at once. |
+| Disclosure title | Before you download |
+| Disclosure body 1 | The file is filled in with your family members' names so each person gets their own tab. |
+| Disclosure body 2 | Once it is saved on your device, that file is a plain spreadsheet. Vittam's encryption does not cover it, and anything with access to your files can read it, including browser extensions. |
+| Disclosure body 3 | Delete the file once you have imported it. |
+| Download CTA | Download the template |
+| Cancel CTA | Cancel |
+| Generating label | Building your template |
+| Generate failure | Couldn't build the template. Try again. |
+
+### Upload
+
+| Element | Copy |
+|---|---|
+| Upload title | Upload your filled template |
+| Upload helper | Rows go into {ledger name}, the plan you have open. |
+| Drop zone label | Drop your .xlsx file here, or choose a file |
+| Choose CTA | Choose a file |
+| Parsing label | Reading your file |
+| Wrong file type | This needs to be an .xlsx file. |
+| Unreadable file | Couldn't read this file. Download a fresh template and fill that in. |
+| Wrong shape | This doesn't look like a Vittam template. Download a fresh one and fill that in. |
+| Nothing filled in | This file has no amounts filled in yet. Add at least one and upload it again. |
+| Too many rows | This file has {count} rows and a plan holds up to {cap}. Remove {over} and try again. |
+
+### Review screen
+
+| Element | Copy |
+|---|---|
+| Screen title | Check what will be added |
+| Screen sub-label | Nothing is saved until you confirm. |
+| Bucket: Ready | Ready to add ({count}) |
+| Bucket: Needs attention | Needs attention ({count}) |
+| Bucket: Possible duplicate | Possible duplicate ({count}) |
+| Bucket: Skipped | Skipped ({count}) |
+| Bucket helper: Ready | These will be added as they are. |
+| Bucket helper: Needs attention | Something in the row could not be read. Fix it in the spreadsheet and upload again. |
+| Bucket helper: Possible duplicate | {ledger name} already has this instrument for this person. Check before adding. |
+| Bucket helper: Skipped | Nothing was filled in on these rows. |
+| Duplicate row action | Add anyway |
+| Primary CTA | Add {count} holdings to {ledger name} |
+| Primary CTA, single row | Add 1 holding to {ledger name} |
+| Rejects CTA | Download the rows that need attention |
+| Leave confirm title | Leave without adding anything? |
+| Leave confirm body | The rows you uploaded are only held while this screen is open. Nothing has been saved. |
+| Leave confirm CTA | Leave |
+| Leave cancel CTA | Stay here |
+
+### Per-row reasons, column named, value never echoed
+
+| Element | Copy |
+|---|---|
+| Unreadable amount | Amount invested is not a number I can read. |
+| Unreadable current value | Current value is not a number I can read. |
+| Shorthand rejected | Current value uses shorthand. Type the full number, like 150000. |
+| Unreadable date | Start date is not a date I can read. |
+| Date out of range | Maturity date is before the start date. |
+| Unknown instrument | This instrument is not in Vittam's library. Use a row from the template. |
+| Negative number | Amount invested cannot be negative. |
+| Missing member | This tab does not match anyone in your household. |
+| Notes too long | Notes is longer than this field holds. Shorten it and upload again. |
+
+### Commit
+
+| Element | Copy |
+|---|---|
+| Committing label | Adding your holdings |
+| Success title | {count} holdings added to {ledger name} |
+| Success body, clean | Nothing else was left over. |
+| Success body, leftovers | {count} rows still need attention. Download them, fix them, and upload again. |
+| Success CTA | View {ledger name} |
+| Commit failure | Something went wrong adding these. Nothing was saved, and your rows are still here. |
+| Commit failure CTA | Try again |
+| Ledger full on commit | {ledger name} holds {current} of {cap} holdings, so these {attempted} do not fit. Remove some first. |

@@ -4,6 +4,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { track } from '@/lib/analytics'
 import { WHY_SECTIONS, WHY_REPO_URL, type WhyDecision } from '@/lib/why-decisions'
+import { AI_REQUEST_LIMIT } from '@/lib/privacy-note'
 
 /**
  * "NN / Section title" — a numbered, ruled section header. Matches the one
@@ -65,6 +66,15 @@ export function Why() {
             </div>
           </section>
         ))}
+
+        {/* Same claim as /privacy, word for word — sourced from the shared
+            constant so the two pages cannot drift apart (D-018 Q7). */}
+        <section className="rounded-lg border border-dashed p-4 space-y-2" aria-labelledby="why-ai-limit">
+          <p className="section-label" id="why-ai-limit">
+            {AI_REQUEST_LIMIT.heading}
+          </p>
+          <p className="text-body text-muted-foreground">{AI_REQUEST_LIMIT.body}</p>
+        </section>
 
         <Separator />
 

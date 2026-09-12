@@ -11,6 +11,7 @@ import {
   LedgersApiError,
   LedgerCapReachedError,
   LedgerCopyError,
+  MAX_GOAL_LABEL_CHARS,
 } from './ledgers-api'
 import { unlockTestVault, lockTestVault, requestBody, rawRequestBody, jsonResponse, wireRow, legacyWireRow, corrupt } from '@/test/encrypted-fixtures'
 
@@ -21,6 +22,8 @@ const SOURCE_ID_1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
 const SOURCE_ID_2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
 const LEDGER_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1'
 const BASELINE_ID = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1'
+const OTHER_LEDGER_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'
+const OTHER_HOUSEHOLD_ID = '99999999-9999-4999-8999-999999999999'
 
 const NOMINEE = 'Ananya Verma'
 const NOTE = 'Synthetic sample note about this holding'
@@ -220,6 +223,161 @@ describe('ledgers-api', () => {
       await expect(createBlankLedger('token', '   ')).rejects.toBeInstanceOf(LedgersApiError)
       await expect(createBlankLedger('token', 'x'.repeat(61))).rejects.toBeInstanceOf(LedgersApiError)
       expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * D-024 open question 3, resolved 2026-09-07: a ledger's goal rides the
+   * envelope that already carries its name rather than getting its own table.
+   * `version` does not bump, because a payload with no `goal` key is a valid,
+   * expected state — it is what every ledger created before this widening, and
+   * every ledger a user creates by hand afterwards, actually looks like.
+   */
+  describe('the sealed payload widened to { name, goal? } (D-024 G1)', () => {
+    const GOAL = {
+      label: 'College fund',
+      targetAmountInr: 4_000_000,
+      targetYear: 2043,
+      monthlyCapacityInr: null,
+    }
+
+    /** The envelope the client just sealed, read back off the POST it sent. */
+    function sentEnvelope() {
+      const body = requestBody(calls())
+      return {
+        rowId: body.id as string,
+        envelope: {
+          ciphertext: body.ciphertext as string,
+          iv: body.iv as string,
+          alg: body.alg as string,
+          version: 1,
+        },
+      }
+    }
+
+    it('round-trips a goal through seal and decrypt, all four fields, monthlyCapacityInr null included', async () => {
+      mockEchoServer()
+
+      const result = await createBlankLedger('token', 'Siya education', GOAL)
+
+      expect(result.name).toBe('Siya education')
+      expect(result.goal).toEqual(GOAL)
+
+      // The goal is household data, so it must be as invisible on the wire as
+      // the name already is, and it must not have added a plaintext key.
+      const raw = rawRequestBody(calls())
+      expect(raw).not.toContain('College fund')
+      expect(raw).not.toContain('4000000')
+      expect(raw).not.toContain('2043')
+      expect(Object.keys(requestBody(calls())).sort()).toEqual(['alg', 'ciphertext', 'holdings', 'id', 'iv', 'source'])
+    })
+
+    it('round-trips a goal that carries a monthly capacity', async () => {
+      mockEchoServer()
+      const withCapacity = { ...GOAL, monthlyCapacityInr: 25_000 }
+
+      const result = await createBlankLedger('token', 'Siya education', withCapacity)
+
+      expect(result.goal).toEqual(withCapacity)
+    })
+
+    it('carries a goal through the snapshot copy path too', async () => {
+      mockEchoServer()
+
+      const result = await createLedgerFromCurrent('token', 'Siya education', [sourceHolding()], GOAL)
+
+      expect(result.goal).toEqual(GOAL)
+      expect(rawRequestBody(calls())).not.toContain('College fund')
+    })
+
+    it('reads a legacy { name }-only payload with goal undefined — not null, not a validation failure', async () => {
+      // Every ledger row in production today is exactly this shape.
+      const wire = await wireRow('ledgers', vault, {
+        id: LEDGER_ID,
+        payload: { name: 'Aggressive equity' },
+        extra: LEDGER_EXTRA,
+      })
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledgers: [wire] }))
+
+      const result = await listLedgers('token')
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('Aggressive equity')
+      expect(result[0].goal).toBeUndefined()
+      expect(result[0].goal).not.toBeNull()
+    })
+
+    it('leaves the baseline row untouched — a plain name, no envelope, no goal', async () => {
+      const baseline = legacyWireRow(BASELINE_ID, HOUSEHOLD_ID, {
+        name: 'Current',
+        isBaseline: true,
+        origin: 'manual',
+        snapshotOf: null,
+      })
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ ledgers: [baseline] }))
+
+      const [row] = await listLedgers('token')
+
+      expect(row.name).toBe('Current')
+      expect(row.ciphertext).toBeNull()
+      expect(row.goal).toBeUndefined()
+    })
+
+    it('binds the widened payload to the same AAD — { table, householdId, rowId, version }, version still 1', async () => {
+      mockEchoServer()
+      await createBlankLedger('token', 'Siya education', GOAL)
+      const { rowId, envelope } = sentEnvelope()
+
+      // The one binding that opens it, and the full widened payload inside.
+      await expect(
+        decryptRow(envelope, vault.dataKey, {
+          tableName: 'ledgers',
+          householdId: HOUSEHOLD_ID,
+          rowId,
+          version: 1,
+        }),
+      ).resolves.toEqual({ name: 'Siya education', goal: GOAL })
+
+      // Each of the four AAD components, varied one at a time. Every one of
+      // these must fail, or the ciphertext could be moved between rows,
+      // households, tables or versions.
+      const wrong = [
+        { tableName: 'ledgers', householdId: HOUSEHOLD_ID, rowId: OTHER_LEDGER_ID, version: 1 },
+        { tableName: 'ledgers', householdId: OTHER_HOUSEHOLD_ID, rowId, version: 1 },
+        { tableName: 'holdings', householdId: HOUSEHOLD_ID, rowId, version: 1 },
+        { tableName: 'ledgers', householdId: HOUSEHOLD_ID, rowId, version: 2 },
+      ]
+      for (const aad of wrong) {
+        await expect(decryptRow(envelope, vault.dataKey, aad)).rejects.toThrow()
+      }
+    })
+
+    it('rejects a goal the server could never check, without asking it', async () => {
+      const invalid = [
+        { ...GOAL, label: '' },
+        { ...GOAL, label: '   ' },
+        { ...GOAL, label: 'x'.repeat(MAX_GOAL_LABEL_CHARS + 1) },
+        { ...GOAL, targetAmountInr: 0 },
+        { ...GOAL, targetAmountInr: -1 },
+        { ...GOAL, targetAmountInr: 1000.5 },
+        { ...GOAL, targetYear: 999 },
+        { ...GOAL, targetYear: 10_000 },
+        { ...GOAL, targetYear: 2043.5 },
+        { ...GOAL, monthlyCapacityInr: -1 },
+        { ...GOAL, monthlyCapacityInr: 100.5 },
+      ]
+
+      for (const goal of invalid) {
+        await expect(createBlankLedger('token', 'Siya education', goal)).rejects.toBeInstanceOf(LedgersApiError)
+      }
+      expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+    })
+
+    it('accepts an 80-character label, the documented ceiling', async () => {
+      mockEchoServer()
+      const goal = { ...GOAL, label: 'x'.repeat(MAX_GOAL_LABEL_CHARS) }
+
+      await expect(createBlankLedger('token', 'Siya education', goal)).resolves.toMatchObject({ goal })
     })
   })
 

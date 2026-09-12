@@ -33,6 +33,12 @@ import { HOLDINGS_TABLE, holdingPayloadSchema, type Holding } from './holdings-a
  *    "not-yet-encrypted" outcome `decryptWireRow` already models, and here it
  *    means "this is the baseline row," not "this predates encryption."
  *
+ *    D-024 widened that sealed payload from `{ name }` to `{ name, goal? }`.
+ *    It changes nothing about the asymmetry above: the baseline row still
+ *    carries a plain `name` and no envelope, and therefore can never carry a
+ *    goal — Current is the record of what the household owns, not something it
+ *    is planning toward.
+ *
  * 2. The snapshot copy's crypto happens here and can happen nowhere else. The
  *    server holds no data key, and a row's ciphertext is bound by AAD to
  *    `{ tableName, householdId, rowId, version }` — so byte-copying a Current
@@ -63,15 +69,100 @@ export const MAX_LEDGER_HOLDINGS = 200
  */
 export const MAX_LEDGER_NAME_CHARS = 60
 
+/**
+ * Same reasoning as {@link MAX_LEDGER_NAME_CHARS}, one level down: the goal
+ * rides inside the same ciphertext, so the server cannot see its label either
+ * and cannot bound it. This module is the only place the ceiling exists.
+ */
+export const MAX_GOAL_LABEL_CHARS = 80
+
+/** A target year is a four-digit year, and nothing else is one. */
+const MIN_GOAL_YEAR = 1000
+const MAX_GOAL_YEAR = 9999
+
 /** Mirrors `memberIdSchema` / `rowIdSchema` in server/lib/envelope.ts, which accept v4 UUIDs only. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export const LEDGER_ORIGINS = ['manual', 'ai_suggestion'] as const
 export type LedgerOrigin = (typeof LEDGER_ORIGINS)[number]
 
-/** The one thing a ledger's envelope carries. */
+/**
+ * What a ledger was planned toward, sealed inside the ledger's own envelope.
+ *
+ * D-024 open question 3, resolved 2026-09-07: this is NOT a table. A goal has
+ * exactly one ledger and a ledger has at most one goal, so a separate table
+ * would buy a join and a second AAD binding for nothing — and the plaintext
+ * `goals` table that was specced for it is household data, which D-014 forbids
+ * in the clear. It stays in the schema, unused, exactly as `analytics_events`
+ * does under D-012; dropping it is its own migration and its own decision.
+ */
+export const ledgerGoalSchema = z.object({
+  label: z.string().trim().min(1).max(MAX_GOAL_LABEL_CHARS),
+  /** Integer rupees. A target of zero is not a goal. */
+  targetAmountInr: z.number().int().positive(),
+  targetYear: z.number().int().min(MIN_GOAL_YEAR).max(MAX_GOAL_YEAR),
+  /** What the household says it can add per month, or `null` if it has not said. */
+  monthlyCapacityInr: z.number().int().nonnegative().nullable(),
+})
+export type LedgerGoal = z.infer<typeof ledgerGoalSchema>
+
+/**
+ * Mirrors `MAX_SUGGESTION_ALLOCATIONS` in server/lib/ai-suggestion-output.ts.
+ * Repeated rather than imported: `server/` is not part of the browser bundle,
+ * and the two ceilings are the same number for the same reason (a suggestion
+ * names a handful of library slugs, never a portfolio).
+ */
+export const MAX_SUGGESTION_ALLOCATIONS = 12
+
+/**
+ * What an applied AI suggestion left behind on the ledger it created.
+ *
+ * WHY THIS AND NOT {@link LedgerGoal} (M3c, the question the step asked):
+ * a goal is `{ label, targetAmountInr, targetYear, monthlyCapacityInr }`, and
+ * a counsel suggestion has none of those. Writing one would mean inventing a
+ * target amount and a target year the user never gave, which is the same class
+ * of mistake as guessing a `memberId` — so the suggestion gets its own optional
+ * key beside `goal` instead of being bent into it. A ledger may hold either,
+ * both, or neither.
+ *
+ * Slugs and weights only. The model's prose (`reasoning`) and the fixed
+ * `caveat` are NOT kept: DATA_MODEL.md's "cards live in browser state only"
+ * line is about the card, and what survives Apply is the mix the user chose to
+ * act on, not the model's words about it. Rupee figures cannot appear here at
+ * all — there is no field for one, the same structural guarantee
+ * `AiSuggestionAllocation` gives the card (SPEC.md §G6.5).
+ *
+ * Like `goal`, this rides inside the ledger's own ciphertext, so the server can
+ * neither read nor bound it and the ceilings below are the only ones there are.
+ */
+export const ledgerSuggestionSchema = z.object({
+  kind: z.enum(['goal_plan', 'counsel']),
+  allocations: z
+    .array(
+      z.object({
+        slug: z.string().trim().min(1).max(100),
+        weightPct: z.number().min(0).max(100),
+      }),
+    )
+    .min(1)
+    .max(MAX_SUGGESTION_ALLOCATIONS),
+})
+export type LedgerSuggestion = z.infer<typeof ledgerSuggestionSchema>
+
+/**
+ * What a ledger's envelope carries.
+ *
+ * `goal` is optional and its absence is a normal, expected read: every ledger
+ * written before D-024, and every ledger a user creates by hand after it, is a
+ * bare `{ name }`. That is exactly why the row `version` does NOT bump for this
+ * widening — there is no old shape to migrate away from, only a key that may or
+ * may not be there. `suggestion` (M3c) is the same shape of widening and gets
+ * the same treatment for the same reason.
+ */
 const ledgerPayloadSchema = z.object({
   name: z.string().trim().min(1).max(MAX_LEDGER_NAME_CHARS),
+  goal: ledgerGoalSchema.optional(),
+  suggestion: ledgerSuggestionSchema.optional(),
 })
 type LedgerPayload = z.infer<typeof ledgerPayloadSchema>
 
@@ -88,6 +179,17 @@ export interface Ledger {
   id: string
   householdId: string
   name: string | null
+  /**
+   * Absent unless this ledger was created with a goal. Absent is not "no goal
+   * recorded yet" versus "goal cleared" — there is one state, and it is the
+   * shape every pre-D-024 row has.
+   */
+  goal?: LedgerGoal
+  /**
+   * Absent unless this ledger was created by applying an AI suggestion (M3c).
+   * Absent is the shape every hand-made and every pre-M3c ledger has.
+   */
+  suggestion?: LedgerSuggestion
   ciphertext: string | null
   iv: string | null
   alg: string | null
@@ -184,9 +286,20 @@ function describeFailure(error: unknown): string {
   return 'UNKNOWN'
 }
 
-/** A decrypted or baseline wire row, assembled back into a {@link Ledger}. */
+/**
+ * A decrypted or baseline wire row, assembled back into a {@link Ledger}.
+ *
+ * `goal` is spread in only when the payload had one, so a legacy `{ name }` row
+ * comes back with no `goal` key at all rather than an explicit `undefined` or,
+ * worse, a `null` a caller would have to distinguish from "absent".
+ */
 function assemble(wire: LedgerWire, payload: LedgerPayload): Ledger {
-  return { ...wire, name: payload.name }
+  return {
+    ...wire,
+    name: payload.name,
+    ...(payload.goal ? { goal: payload.goal } : {}),
+    ...(payload.suggestion ? { suggestion: payload.suggestion } : {}),
+  }
 }
 
 /**
@@ -239,9 +352,44 @@ export async function deleteLedger(token: string | null, id: string): Promise<vo
   await encryptedFetch(`/api/ledgers?id=${encodeURIComponent(id)}`, token, fail, { method: 'DELETE' })
 }
 
-export async function createBlankLedger(token: string | null, name: string): Promise<Ledger> {
+export async function createBlankLedger(token: string | null, name: string, goal?: LedgerGoal): Promise<Ledger> {
   const vault = await openVault()
-  return postLedger(token, vault, name, 'blank', [])
+  return postLedger(token, vault, name, 'blank', [], goal)
+}
+
+/**
+ * M3c — what "Apply" on an AI suggestion writes.
+ *
+ * A new ledger, EMPTY OF HOLDINGS, with the suggested mix sealed onto it as
+ * context. It is `createBlankLedger` with a second sealed key, and that is the
+ * whole of it by decision, not by omission:
+ *
+ * An `AiSuggestionAllocation` is `{ slug, weightPct }` and names no member.
+ * Every holding needs a `memberId`, which `POST /api/ledgers` verifies against
+ * the caller's household, and a household has several members. Turning a
+ * suggestion into holdings would therefore mean choosing a member, which would
+ * silently attribute the rest of the household's money to that one person. So
+ * the `holdings` array here is `[]`, always, and the user records the holdings
+ * themselves against the people they actually belong to.
+ *
+ * The name is sealed by `postLedger` exactly like every other non-baseline
+ * ledger's (D-020) — there is no second path and no plaintext-name shortcut for
+ * an AI-created ledger.
+ *
+ * `origin` stays `'manual'`, because the server decides `origin` and never
+ * accepts it from a client (server/lib/ledgers.ts: "nor claim a ledger came
+ * from the AI planner"). The `'ai_suggestion'` value in {@link LEDGER_ORIGINS}
+ * is unreachable until a server route sets it; marking this ledger as
+ * AI-derived is what the sealed `suggestion` key does instead, and it does it
+ * somewhere the server cannot read.
+ */
+export async function createSuggestionLedger(
+  token: string | null,
+  name: string,
+  suggestion: LedgerSuggestion,
+): Promise<Ledger> {
+  const vault = await openVault()
+  return postLedger(token, vault, name, 'blank', [], undefined, suggestion)
 }
 
 /**
@@ -264,18 +412,27 @@ export async function createLedgerFromCurrent(
   token: string | null,
   name: string,
   sourceHoldings: Holding[],
+  goal?: LedgerGoal,
 ): Promise<Ledger> {
   const vault = await openVault()
   const holdings = await resealForCopy(vault, sourceHoldings)
-  return postLedger(token, vault, name, 'copy', holdings)
+  return postLedger(token, vault, name, 'copy', holdings, goal)
 }
 
 /**
- * Seals `{ name }` under a freshly minted row id, then posts it alongside the
- * (already sealed, for a copy) holdings. `vault` is passed in rather than
- * opened here so `createLedgerFromCurrent` seals the name and the holdings
- * against the same unlocked vault rather than risking two separate reads of
- * it.
+ * Seals `{ name, goal? }` under a freshly minted row id, then posts it
+ * alongside the (already sealed, for a copy) holdings. `vault` is passed in
+ * rather than opened here so `createLedgerFromCurrent` seals the name and the
+ * holdings against the same unlocked vault rather than risking two separate
+ * reads of it.
+ *
+ * The goal is validated here for the same reason the name is: it never leaves
+ * this module in the clear, so `server/lib/envelope.ts` cannot bound it — it is
+ * `.strict()` and would reject a plaintext `goal` key outright. A client bug is
+ * caught here or it is sealed into a ciphertext and caught by nobody.
+ *
+ * `NEW_ROW_VERSION` is deliberately untouched by the widening: see
+ * {@link ledgerPayloadSchema}.
  */
 async function postLedger(
   token: string | null,
@@ -283,14 +440,28 @@ async function postLedger(
   name: string,
   source: 'blank' | 'copy',
   holdings: LedgerHoldingWrite[],
+  goal?: LedgerGoal,
+  suggestion?: LedgerSuggestion,
 ): Promise<Ledger> {
   const trimmed = name.trim()
   if (trimmed.length === 0 || trimmed.length > MAX_LEDGER_NAME_CHARS) {
     throw new LedgersApiError(400, 'invalid_ledger_name')
   }
 
+  const payload: LedgerPayload = { name: trimmed }
+  if (goal !== undefined) {
+    const parsed = ledgerGoalSchema.safeParse(goal)
+    if (!parsed.success) throw new LedgersApiError(400, 'invalid_ledger_goal')
+    payload.goal = parsed.data
+  }
+  if (suggestion !== undefined) {
+    const parsed = ledgerSuggestionSchema.safeParse(suggestion)
+    if (!parsed.success) throw new LedgersApiError(400, 'invalid_ledger_suggestion')
+    payload.suggestion = parsed.data
+  }
+
   const id = newRowId()
-  const sealed = await sealRow(LEDGERS_TABLE, vault, id, NEW_ROW_VERSION, { name: trimmed })
+  const sealed = await sealRow(LEDGERS_TABLE, vault, id, NEW_ROW_VERSION, payload)
 
   const res = await encryptedFetch('/api/ledgers', token, fail, {
     method: 'POST',

@@ -91,6 +91,84 @@ export interface EventMap {
   // Catalog metadata only, per the same property discipline as
   // instrument_viewed: never anything describing what the household holds.
   explore_holding_added: { instrument_slug: string; section: string }
+  // Fires on a COMMITTED edit to a class rate override (blur/Enter), never on
+  // a keystroke.
+  //
+  // NO PROPERTIES, deliberately. METRICS_PLAN.md:204 originally specced
+  // `asset_class` on this event, which contradicted the property-discipline
+  // rule sixteen lines below it in the same file ("No event may carry anything
+  // describing what a household owns") and the FORBIDDEN_ANALYTICS_PROPERTIES
+  // guard in src/test/analytics-guard.ts, where `asset_class` is the first
+  // entry. The leak is real and specific to this panel: a rate row is only
+  // rendered for an asset class the household actually holds, so the property
+  // would report which classes they own. Criterion 6 only asks whether a
+  // household overrode at least one default rate, which a bare count answers.
+  // METRICS_PLAN.md:204 has been corrected to match. Do not re-add it.
+  //
+  // `projection_viewed`, this event's funnel partner, is E10's job.
+  projection_rate_overridden: Record<string, never>
+  // E10 (D-024 AI import). Fires once per ledger, the first time a freshly
+  // computed projection is actually visible to the user (see
+  // src/components/projection-panel.tsx's own comment on the effect).
+  // `horizon_years` is a setting the user chose, not portfolio shape, so it
+  // is not on FORBIDDEN_ANALYTICS_PROPERTIES and is fine here
+  // (METRICS_PLAN.md:203).
+  projection_viewed: { horizon_years: number }
+  // D-024 Chunk A (goal planner / counsel suggestion cards). `target`
+  // distinguishes a suggestion shown against the protected Current ledger
+  // from one shown against a scratch ledger -- criterion 7 filters on
+  // `target = current` specifically. `kind` distinguishes a goal draft from
+  // a counsel review. Neither property, nor any other on these four events,
+  // may carry an allocation, an instrument, a rupee amount or a member --
+  // see the property-discipline note in METRICS_PLAN.md's D-016 section.
+  ai_suggestion_shown: { target: 'current' | 'ledger'; kind: 'counsel' | 'goal_plan' }
+  ai_suggestion_applied: { target: 'current' | 'ledger'; kind: 'counsel' | 'goal_plan' }
+  ai_suggestion_dismissed: { target: 'current' | 'ledger'; kind: 'counsel' | 'goal_plan' }
+  // `cap_type` is one of three distinct facts (AiCapNotice's own module doc):
+  // the household's plans cap, this ledger's edits cap, or the global
+  // monthly breaker. No count, no household id, no ledger id.
+  ai_cap_reached: { cap_type: 'plans' | 'edits' | 'global' }
+  // D-025 step I4 (bulk holdings import) and D-014 step 13 (the /privacy
+  // page's own plaintext-download exception). `surface` is the only
+  // property, per METRICS_PLAN.md's D-016 table row for this event — never
+  // a ledger name, a member name, or a row count, all of which describe
+  // what a household owns.
+  pii_disclosure_shown: { surface: 'bulk_import' | 'privacy' }
+  // D-025 step I14 (bulk holdings import telemetry, METRICS_PLAN.md D-016
+  // table row for feature 7). No properties on the template-download event —
+  // the workbook carries no data yet at that point, only the fact that one
+  // was generated for download. `bulk_import_completed` carries row COUNTS
+  // only, per the property-discipline rule above and the I13 PostHog audit
+  // (src/lib/import-telemetry-scrubbing.test.ts): never a member name, an
+  // amount, an instrument or a nominee.
+  bulk_import_template_downloaded: Record<string, never>
+  bulk_import_completed: { rows_clean: number; rows_rejected: number }
+  // D-025 step H3 ("Add anyway" on Possible duplicate rows), METRICS_PLAN.md
+  // line 325. No properties by design: a row value or count here would be
+  // exactly the leak the whole property-discipline rule guards against.
+  bulk_import_duplicate_overridden: Record<string, never>
+  // D-025 step H4 — the seven events METRICS_PLAN.md lines 320-326 specify
+  // and Chunk I never gave a call site, all fired from
+  // `import-host-sheet.tsx`. Property discipline is the same rule the three
+  // events above follow, and it is the reason every shape here is either
+  // empty, a count, or a closed string union: counts and fixed enums only,
+  // never a file name (a file name carries the ledger name and can carry a
+  // member name), a sheet name, a member name, an instrument slug or an
+  // amount. `bulk_import_review_shown` is the widest of them and it carries
+  // four integers.
+  bulk_import_started: Record<string, never>
+  bulk_import_file_rejected: {
+    reason: 'wrong_type' | 'unreadable' | 'wrong_shape' | 'empty' | 'too_many_rows' | 'multiple_files'
+  }
+  bulk_import_review_shown: {
+    rows_ready: number
+    rows_attention: number
+    rows_duplicate: number
+    rows_skipped: number
+  }
+  bulk_import_rejects_downloaded: { rows_rejected: number }
+  bulk_import_abandoned: { stage: 'disclosure' | 'upload' | 'review' }
+  bulk_import_failed: { reason: 'batch_error' | 'ledger_full' | 'forbidden' }
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {

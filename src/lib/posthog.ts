@@ -13,40 +13,51 @@ export function initPostHog() {
     capture_pageview: false, // page_viewed fires explicitly via track() on route change
     /**
      * OFF DELIBERATELY. posthog-js defaults this to `true`, and it sends an
-     * `$autocapture` event on every click carrying the clicked element's own
-     * text and every attribute.
+     * `$autocapture` event for every click carrying the element's own text and
+     * every attribute.
      *
-     * That is a leak in this product specifically. The whole architecture
-     * exists so the server cannot read household data (D-014/D-015: the
-     * database holds ciphertext and two wrapped keys it cannot open), and
+     * That is a leak in this product specifically, not merely noise. The whole
+     * architecture exists so the server cannot read household data (D-014/D-015:
+     * the database holds ciphertext and two wrapped keys it cannot open), and
      * `EventMap` types `ledger_created`, `ledger_edited` and
      * `compare_strip_viewed` as `Record<string, never>` precisely so a ledger
      * name can never be sent on purpose. Autocapture routed around all of it.
      *
-     * Not hypothetical. Found 2026-09-11: 611 `$autocapture` events from this
-     * app in 90 days on the shared Web Fleet project, with `$el_text` values
-     * including real ledger and member labels ("Minor's Equity Folio",
-     * "Aggressive Growth", "Spouse").
+     * It was not hypothetical. Found 2026-09-11 (plan step I13, item I-leak-1):
+     * 611 `$autocapture` events from this app in 90 days on the shared Web Fleet
+     * project, with `$el_text` values including real ledger and member labels
+     * ("Minor's Equity Folio", "Aggressive Growth", "Spouse"). Chunk I would
+     * have widened it: the import review screen's CTA reads
+     * `Add <n> holdings to <ledger name>`.
      *
-     * Pinned by `src/lib/posthog-privacy.config.test.ts`. DELETING THIS LINE
-     * SILENTLY REOPENS THE LEAK, because it merely restores a vendor default
-     * and nothing else would break.
+     * Pinned by both `src/lib/posthog-privacy.config.test.ts` (the original
+     * hotfix regression pin) and `src/lib/import-telemetry-scrubbing.test.ts`
+     * (the import feature's own scrubbing audit). DELETING THIS LINE SILENTLY
+     * REOPENS THE LEAK, because it merely restores a vendor default and
+     * nothing else would break.
      */
     autocapture: false,
     /**
      * OFF DELIBERATELY, and not left to a setting in another system.
      *
      * posthog-js defaults this to `false`, meaning recording is NOT disabled:
-     * this app was opted IN client-side. No replay was ever captured only
-     * because the SHARED "Web Fleet" project has replay switched off at the
-     * project level, which this repository does not control and which covers
-     * every app pointed at it. Someone enabling replay there, for an unrelated
-     * app, would have started recording this one.
+     * this app was opted IN client-side. No replay was actually captured only
+     * because the SHARED "Web Fleet" PostHog project has replay switched off at
+     * the project level, which this repository does not control and which
+     * covers every app pointed at that project. Someone enabling replay there,
+     * for any unrelated app, would have started recording this one.
      *
-     * PostHog replay masks INPUTS by default but NOT text, and this product
-     * renders real household financial data as ordinary text nodes.
+     * That is not an acceptable dependency for these screens. PostHog's replay
+     * masks INPUTS by default but NOT text, and this product renders real
+     * household financial data as ordinary text nodes: the ledger view's
+     * holdings, and the bulk-import review screen's member names and rupee
+     * amounts.
      *
-     * Same silent-deletion hazard as above, same pin.
+     * Found 2026-09-11 alongside I-leak-1 (plan item I-leak-2). Setting it here
+     * makes the fleet toggle irrelevant for this app in the safe direction.
+     *
+     * Pinned by both `src/lib/posthog-privacy.config.test.ts` and
+     * `src/lib/import-telemetry-scrubbing.test.ts`.
      */
     disable_session_recording: true,
   })

@@ -201,7 +201,7 @@ Every bundle feature has at least one event. Exit check passed; see the coverage
 | `ledger_cap_reached` | — | (4) | User attempts a fifth ledger and is blocked |
 | `instrument_drift_warning_shown` | — | (5) | A ledger renders the red-toned drift warning |
 | `projection_viewed` | `horizon_years` | (6) | User opens a projection on any ledger, Current included |
-| `projection_rate_overridden` | `asset_class` | (6) | User changes a default annual return rate |
+| `projection_rate_overridden` | (none) | (6) | User changes a default annual return rate |
 | `bulk_import_template_downloaded` | — | (7) | User downloads the generated template |
 | `bulk_import_completed` | `rows_clean`, `rows_rejected` | (7) | User commits a reviewed import |
 | `ai_suggestion_shown` | `target` (current / ledger), `kind` (counsel / goal_plan) | (8)(9) | A suggestion card renders |
@@ -214,6 +214,8 @@ Every bundle feature has at least one event. Exit check passed; see the coverage
 | `explore_holding_added` | `instrument_slug`, `section` | (11) redesign, D-016 Slice 5 | User saves a holding created via the Explore screen's "+ Add" entry point (list-level, distinct from the existing detail-page "Record this in my plan" flow, but both paths open the same prefilled form and produce the same holding record). Fires on successful save, not on tap. Added 2026-08-25 — the concept folio surfaced this as a real new interaction, not present in v1; confirmed in scope, not deferred. **Renamed from `explore_holding_toggled` during the Phase 3 plan's gate review, 2026-08-25:** the folio's own text ("Tapping opens the holding form prefilled with the instrument") rules out an instant no-form toggle, and the Explore card offers no remove action, only add — so the event name and property set were corrected to match what is actually built, not a symmetric add/remove toggle. Properties follow the same discipline as `instrument_viewed`: catalog metadata only, nothing describing what a household holds |
 
 **Property discipline, carried from the 2026-08-01 correction above.** No event may carry anything describing what a household owns. That rule is why `ledger_edited` has no instrument or amount properties, why `ai_suggestion_shown` records `kind` and not the suggestion text, and why `bulk_import_completed` records row *counts* and not row contents. The AI proxy is a further case: **it must not emit analytics at all**, since anything it could usefully report is derived from plaintext holdings. Cap accounting happens server-side against a counter, not by inspecting payloads.
+
+**Correction, 2026-09-09 (D-024 build, step E8).** `projection_rate_overridden` was specced in the table above with an `asset_class` property. That contradicted the rule in this very paragraph, and `asset_class` is the first entry in `FORBIDDEN_ANALYTICS_PROPERTIES` in `src/test/analytics-guard.ts`, so the guard test failed the moment the event was registered as specced. The leak is real and specific to this panel: **a rate row is only rendered for an asset class the household actually holds**, so reporting the class a user overrode reports which classes they own. The property was dropped rather than the guard exempted. Criterion 6 asks only whether a household overrode at least one default rate, which a bare event count answers completely. The row still shows its asset class on screen; only the telemetry stops carrying it.
 
 ### Dashboard additions
 
@@ -246,3 +248,105 @@ Every bundle feature has at least one event. Exit check passed; see the coverage
 | 13 PII disclosure | `pii_disclosure_shown` |
 
 No feature is without a metric. Nothing cut at the exit check.
+
+---
+
+## D-024: AI Goal Planner, Counsel Cards, Deterministic Engine (Phase 2 Design, 2026-09-07)
+
+Added by the Phase 2 design pass for D-024. **No event above is renamed or removed.** The D-016 bundle's event table already covers most of this feature; the rows below are the gaps that design surfaced.
+
+**Status: drafted 2026-09-07, not approved.**
+
+### Reused unchanged from the D-016 bundle table
+
+`projection_viewed` (`horizon_years`), `projection_rate_overridden` (`asset_class`), `ai_suggestion_shown` (`target`, `kind`), `ai_suggestion_applied` (`target`, `kind`), `ai_suggestion_dismissed` (`target`, `kind`), `ai_cap_reached` (`cap_type`). Criteria 2, 3, 6, and 7 in the D-016 section are measured from these and do not change.
+
+**`ai_cap_reached.cap_type` gains a third value: `global`.** The existing values `plans` and `edits` stay. The global monthly circuit breaker (D-024 decision 6) is a distinct fact from a household exhausting its own cap and must be separable in the data, or criterion 3 counts one as the other.
+
+### New events
+
+| Event | Key properties | Fires when |
+|---|---|---|
+| `projection_maths_opened` | `surface` (ledger / goal_card) | User opens the "See the maths" disclosure. The audit panel is the regulatory answer to D-018 §8's largest named risk, so whether anyone opens it is worth knowing |
+| `projection_horizon_changed` | `horizon_years`, `method` (preset / custom) | User changes the projection horizon. `method` decides whether the free-text field earns its place |
+| `goal_planner_started` | (none) | User picks "Plan toward a goal" in the "+ New" modal |
+| `goal_planner_abandoned` | `step` (goal / consent) | User closes the modal before the request is sent. The consent step is the most likely drop point and the one worth measuring |
+| `ai_consent_shown` | `kind` (goal_plan / counsel) | The per-transmission disclosure step renders |
+| `ai_consent_accepted` | `kind` | User confirms and the request is sent |
+| `ai_request_failed` | `kind`, `reason` (provider_error / invalid_output / timeout) | The proxy returns a failure. Fires from the browser, never from the route. `reason` carries the proxy's own classification and nothing derived from the payload |
+| `counsel_requested` | (none) | User taps "Review this ledger" |
+
+### Property discipline, unchanged and restated
+
+No event here carries an instrument, an amount, a member, a goal name, or any part of a suggestion's text. `projection_horizon_changed` carries a number of years, which is a setting, not a holding. `ai_request_failed` carries a fixed enum, never a provider message. **The proxy route emits no analytics at all**, per the D-016 bundle's note: everything it could usefully report is derived from plaintext holdings.
+
+### Dashboard additions
+
+| Chart | Type | Metric | Segment by |
+|---|---|---|---|
+| Engine adoption | Funnel | `dashboard_viewed` to `projection_viewed` to `projection_rate_overridden` | (none) |
+| Maths panel engagement | Trend | `projection_maths_opened` per `projection_viewed` | `surface` |
+| Goal planner funnel | Funnel | `goal_planner_started` to `ai_consent_shown` to `ai_consent_accepted` to `ai_suggestion_shown` | (none) |
+| Consent drop | Bar | `goal_planner_abandoned` | `step` |
+| Proxy reliability | Trend | `ai_request_failed` per `ai_consent_accepted` | `reason` |
+| Cap pressure, extended | Trend | `ai_cap_reached` per week | `cap_type` including `global` |
+
+### Exit check: feature-to-metric coverage
+
+| Feature | Metric |
+|---|---|
+| Deterministic projection engine | Criterion 6, plus `projection_maths_opened` and `projection_horizon_changed` |
+| Goal planner entry and consent | `goal_planner_started`, `goal_planner_abandoned`, `ai_consent_shown`, `ai_consent_accepted` |
+| Goal draft suggestion | `ai_suggestion_shown` with `kind = goal_plan`, criterion 7 |
+| Counsel cards | `counsel_requested`, `ai_suggestion_shown` with `kind = counsel` |
+| Per-household and per-ledger caps | `ai_cap_reached` with `cap_type` of plans or edits, criterion 3 |
+| Global circuit breaker | `ai_cap_reached` with `cap_type = global` |
+| Proxy failure handling | `ai_request_failed` |
+
+---
+
+## D-025: Bulk Holdings Import (Phase 2 Design, 2026-09-07)
+
+**Status: drafted 2026-09-07, not approved.**
+
+### Reused unchanged from the D-016 bundle table
+
+`bulk_import_template_downloaded`, `bulk_import_completed` (`rows_clean`, `rows_rejected`), `pii_disclosure_shown` (`surface`). Criterion 4 in the D-016 section is measured from `bulk_import_completed` and does not change.
+
+### New events
+
+| Event | Key properties | Fires when |
+|---|---|---|
+| `bulk_import_started` | (none) | User opens the import entry point |
+| `bulk_import_file_rejected` | `reason` (wrong_type / unreadable / wrong_shape / empty / too_many_rows / multiple_files) | The file fails before any row is parsed. Fixed enum, never a file name |
+| `bulk_import_review_shown` | `rows_ready`, `rows_attention`, `rows_duplicate`, `rows_skipped` | The review screen renders. Counts only |
+| `bulk_import_rejects_downloaded` | `rows_rejected` | User downloads the fix-and-retry file. This is the event that says whether the loop closes |
+| `bulk_import_abandoned` | `stage` (disclosure / upload / review) | User leaves without committing |
+| `bulk_import_duplicate_overridden` | (none) | User taps "Add anyway" on a Possible duplicate row |
+| `bulk_import_failed` | `reason` (batch_error / ledger_full / forbidden) | The commit request fails. Fixed enum |
+
+### Property discipline
+
+Counts and fixed enums only. No file name, no sheet name, no member name, no instrument slug, no amount. `bulk_import_review_shown` is the widest event here and it carries four integers.
+
+### Dashboard additions
+
+| Chart | Type | Metric | Segment by |
+|---|---|---|---|
+| Import funnel | Funnel | `bulk_import_started` to `bulk_import_template_downloaded` to `bulk_import_review_shown` to `bulk_import_completed` | (none) |
+| Where imports die | Bar | `bulk_import_abandoned` | `stage` |
+| File rejection reasons | Bar | `bulk_import_file_rejected` | `reason` |
+| Fix loop closure | Trend | `bulk_import_rejects_downloaded` followed by a later `bulk_import_completed` in the same household | (none) |
+| Import quality, existing | Trend | `rows_rejected` over `rows_clean` plus `rows_rejected` | (none) |
+
+### Exit check: feature-to-metric coverage
+
+| Feature | Metric |
+|---|---|
+| Entry point and PII disclosure | `bulk_import_started`, `pii_disclosure_shown` |
+| Template generation | `bulk_import_template_downloaded` |
+| Parse and validation | `bulk_import_file_rejected`, `bulk_import_review_shown` |
+| Four-bucket review | `bulk_import_review_shown` row counts |
+| Duplicate handling | `bulk_import_duplicate_overridden` |
+| Fix-and-retry loop | `bulk_import_rejects_downloaded` |
+| Batch commit | `bulk_import_completed`, `bulk_import_failed`, criterion 4 |

@@ -14,6 +14,17 @@ export const households = pgTable('households', {
   iv: text('iv'),
   alg: text('alg'),
   version: integer('version').notNull().default(1),
+  // The per-household plans cap of D-016, moved by the conditional
+  // `UPDATE households SET ai_plans_created = ai_plans_created + 1 WHERE id = $1
+  // AND ai_plans_created < 2` of DATA_MODEL.md. Plaintext counter, never
+  // household data: it records how many times something happened, never what
+  // the household owns.
+  //
+  // Added in R3, not R1. `SOLUTION_BRIEF.md` open item 7 flagged that this
+  // column's migration state was unverified, and it was right: `ai_edits_used`
+  // did land with the D-016 bundle (migration 0003) but `ai_plans_created`
+  // never did, in this schema or in any migration.
+  aiPlansCreated: integer('ai_plans_created').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
@@ -54,6 +65,14 @@ export const instruments = pgTable('instruments', {
   minInvestment: text('min_investment').notNull(),
   rateValue: numeric('rate_value'),
   rateAsOf: date('rate_as_of'),
+  // E1 (D-024/D-025 AI import) — the projection engine's per-instrument rate
+  // assumption. Deliberately separate from rateValue/rateAsOf above (library
+  // display, 5 rows populated): assumedRateAsOf maps to a distinct db column
+  // (assumed_rate_as_of) rather than reusing rate_as_of, since that name is
+  // already taken. Plaintext catalog data, not household data — no envelope.
+  assumedAnnualRatePct: numeric('assumed_annual_rate_pct', { precision: 5, scale: 2 }),
+  rateSource: text('rate_source'),
+  assumedRateAsOf: date('assumed_rate_as_of'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   slugIdx: uniqueIndex('instruments_slug_idx').on(t.slug),
@@ -123,6 +142,70 @@ export const holdings = pgTable('holdings', {
   ledgerIdIdx: index('holdings_ledger_id_idx').on(t.ledgerId),
 }))
 
+// E1 (D-024/D-025 AI import) — specced during D-016, never built until now.
+// First consumer is a later step (E5). One override row per (ledger, asset
+// class): a projection can substitute a household-chosen rate for the
+// asset-class default. Plaintext assumptions, not holdings — no
+// ciphertext/iv/alg/version envelope by design.
+export const ledgerProjectionSettings = pgTable('ledger_projection_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ledgerId: uuid('ledger_id').notNull().references(() => ledgers.id, { onDelete: 'cascade' }),
+  assetClass: text('asset_class', { enum: assetClassEnum }).notNull(),
+  annualRatePct: numeric('annual_rate_pct', { precision: 5, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  ledgerIdIdx: index('ledger_projection_settings_ledger_id_idx').on(t.ledgerId),
+  ledgerAssetClassIdx: uniqueIndex('ledger_projection_settings_ledger_asset_class_idx').on(t.ledgerId, t.assetClass),
+}))
+
+// R1 (D-024/D-025 AI import, Chunk R) — Migration B. Built and proven before
+// any Anthropic call exists in the codebase (see DATA_MODEL.md's
+// ai_call_reservations/ai_global_usage sections). Plaintext, counters-only,
+// no ciphertext/iv/alg/version envelope by design: these rows describe how
+// many times something happened, never what a household owns.
+export const aiCallKindEnum = ['goal_plan', 'counsel'] as const
+export const aiCallCapTypeEnum = ['plans', 'edits'] as const
+export const aiCallStatusEnum = ['reserved', 'completed', 'failed'] as const
+
+// One row per attempted AI call, written before the outbound Anthropic
+// request, never after — the atomic pre-call reservation D-024 item (b)
+// requires. `neon-http` has no transactions, so the guarantee comes from the
+// composite UNIQUE below plus a single conditional statement (R2-R4), not a
+// transaction.
+export const aiCallReservations = pgTable('ai_call_reservations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
+  // Null for a goal_plan call, which creates its ledger only after the
+  // response arrives. Set for a counsel call, which targets an existing ledger.
+  ledgerId: uuid('ledger_id').references(() => ledgers.id, { onDelete: 'cascade' }),
+  idempotencyKey: text('idempotency_key').notNull(),
+  kind: text('kind', { enum: aiCallKindEnum }).notNull(),
+  capType: text('cap_type', { enum: aiCallCapTypeEnum }).notNull(),
+  status: text('status', { enum: aiCallStatusEnum }).notNull().default('reserved'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  // Composite, not two separate uniques: a household may reuse the same
+  // client idempotency key value only if another household happens to mint
+  // an identical v4 UUID (astronomically unlikely, and harmless if it did).
+  householdIdempotencyIdx: uniqueIndex('ai_call_reservations_household_idempotency_idx').on(t.householdId, t.idempotencyKey),
+  householdIdIdx: index('ai_call_reservations_household_id_idx').on(t.householdId),
+  ledgerIdIdx: index('ai_call_reservations_ledger_id_idx').on(t.ledgerId),
+}))
+
+// The global monthly circuit breaker (D-024 decision 6). One row per
+// calendar month, shared by every household — `period` (YYYY-MM, UTC) is
+// itself the primary key, created lazily by the first call of that month.
+// `capCalls` seeds from AI_GLOBAL_MONTHLY_CALL_CAP (server/lib/ai-usage.ts)
+// on row creation, stored per row so raising the cap later does not rewrite
+// a past month.
+export const aiGlobalUsage = pgTable('ai_global_usage', {
+  period: text('period').primaryKey(),
+  callsUsed: integer('calls_used').notNull().default(0),
+  capCalls: integer('cap_calls').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export const protectionTypeEnum = ['term-life', 'health', 'disability', 'other'] as const
 export const protectionStatusEnum = ['active', 'lapsed', 'pending'] as const
 
@@ -188,6 +271,12 @@ export const householdsRelations = relations(households, ({ many, one }) => ({
   goals: many(goals),
   ledgers: many(ledgers),
   householdKeys: one(householdKeys, { fields: [households.id], references: [householdKeys.householdId] }),
+  aiCallReservations: many(aiCallReservations),
+}))
+
+export const aiCallReservationsRelations = relations(aiCallReservations, ({ one }) => ({
+  household: one(households, { fields: [aiCallReservations.householdId], references: [households.id] }),
+  ledger: one(ledgers, { fields: [aiCallReservations.ledgerId], references: [ledgers.id] }),
 }))
 
 export const ledgersRelations = relations(ledgers, ({ one, many }) => ({
@@ -199,6 +288,12 @@ export const ledgersRelations = relations(ledgers, ({ one, many }) => ({
     relationName: 'ledgerSnapshotOf',
   }),
   snapshots: many(ledgers, { relationName: 'ledgerSnapshotOf' }),
+  projectionSettings: many(ledgerProjectionSettings),
+  aiCallReservations: many(aiCallReservations),
+}))
+
+export const ledgerProjectionSettingsRelations = relations(ledgerProjectionSettings, ({ one }) => ({
+  ledger: one(ledgers, { fields: [ledgerProjectionSettings.ledgerId], references: [ledgers.id] }),
 }))
 
 export const familyMembersRelations = relations(familyMembers, ({ one, many }) => ({

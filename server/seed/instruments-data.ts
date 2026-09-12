@@ -21,9 +21,36 @@ export interface InstrumentSeed {
   minInvestment: string
   rateValue: string | null
   rateAsOf: string | null
+  // E1 (D-024/D-025 AI import) — the projection engine's per-instrument rate
+  // assumption, separate from rateValue/rateAsOf above (library display).
+  // Populated ONLY for instruments with a genuinely defensible *published*
+  // statutory rate; every market instrument stays null on all three and
+  // falls back to an asset-class default (a later step in this plan).
+  assumedAnnualRatePct: string | null
+  rateSource: string | null
+  assumedRateAsOf: string | null
 }
 
 const VERIFIED_QUARTER = '2026-07-01' // Jul-Sep 2026 quarter start; source: Ministry of Finance small-savings notification, 2026-06-30
+const SMALL_SAVINGS_SOURCE = 'Ministry of Finance, Department of Economic Affairs, small savings scheme interest rate notification (quarterly)'
+
+// An FD has no single notified rate: every bank sets its own. The RBI does
+// publish an aggregate for exactly this purpose, the weighted average domestic
+// term deposit rate (WADTDR) across scheduled commercial banks, and unlike a
+// market instrument that aggregate *is* the whole return, because an FD's
+// return is its interest and nothing else. That makes it the one defensible
+// published figure available for this instrument. Re-check it against the RBI
+// series before quoting it as current; assumedRateAsOf is what dates it.
+//
+// Use the FRESH-deposit series, not the outstanding-deposit one. Outstanding
+// WADTDR blends in back-book deposits opened when rates were higher, so it is
+// backward-looking: it says what banks pay across their whole book today, not
+// what a deposit opened now will earn. A projection needs the forward number.
+// Verified 2026-09-09 against the RBI July 2026 release: fresh 5.90%,
+// outstanding 6.58%. An earlier draft of this seed carried 6.58% (and before
+// that an unsourced 7.00%), which overstated a new depositor's return.
+const RBI_WADTDR_SOURCE = 'Reserve Bank of India, weighted average domestic term deposit rate on fresh rupee term deposits, scheduled commercial banks'
+const RBI_WADTDR_AS_OF = '2026-07-01'
 
 export const instrumentsSeedData: InstrumentSeed[] = [
   // ---------------------------------------------------------------- Equity
@@ -40,6 +67,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Price of one share; no fixed minimum.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'equity-active-mutual-funds',
@@ -54,6 +84,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Many funds accept a SIP (Systematic Investment Plan, a fixed amount invested automatically every month) starting around ₹500/month, or a lump sum from ₹1,000. Check the specific fund.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'equity-index-funds-etfs',
@@ -68,6 +101,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Index funds: a SIP (fixed monthly instalment) from ~₹500/month. ETFs: price of one unit.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'equity-elss',
@@ -82,6 +118,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'A SIP (fixed monthly instalment) typically from ₹500/month.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'equity-minor-folio',
@@ -96,6 +135,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Same as the underlying fund. A SIP (fixed monthly instalment) typically from ₹500/month.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
 
   // ------------------------------------------------------------------ Debt
@@ -112,6 +154,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Typically ₹1,000–₹10,000 depending on the bank.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: '5.90',
+    rateSource: RBI_WADTDR_SOURCE,
+    assumedRateAsOf: RBI_WADTDR_AS_OF,
   },
   {
     slug: 'debt-ppf',
@@ -126,6 +171,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: '₹500/year minimum, up to ₹1.5 lakh/year maximum.',
     rateValue: '7.1',
     rateAsOf: VERIFIED_QUARTER,
+    assumedAnnualRatePct: '7.1',
+    rateSource: SMALL_SAVINGS_SOURCE,
+    assumedRateAsOf: VERIFIED_QUARTER,
   },
   {
     slug: 'debt-nsc',
@@ -140,6 +188,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: '₹1,000, in multiples of ₹100 thereafter.',
     rateValue: '7.7',
     rateAsOf: VERIFIED_QUARTER,
+    assumedAnnualRatePct: '7.7',
+    rateSource: SMALL_SAVINGS_SOURCE,
+    assumedRateAsOf: VERIFIED_QUARTER,
   },
   {
     slug: 'debt-mutual-funds',
@@ -154,6 +205,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'A SIP (fixed monthly instalment) typically from ₹500/month; a lump sum from ₹1,000.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'debt-epf-gpf',
@@ -168,6 +222,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Determined by employee/employer contribution rules. Not a voluntary lump-sum product.',
     rateValue: '8.25',
     rateAsOf: '2025-04-01',
+    assumedAnnualRatePct: '8.25',
+    rateSource: 'Employees’ Provident Fund Organisation (EPFO), notified annual interest rate for EPF, FY2025-26',
+    assumedRateAsOf: '2025-04-01',
   },
 
   // ------------------------------------------------------------------ Gold
@@ -184,6 +241,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Price of the smallest coin/unit a seller offers. No fixed minimum.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'gold-sovereign-bonds',
@@ -198,6 +258,17 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: '1 gram equivalent per bond; maximum per person per year is capped.',
     rateValue: null,
     rateAsOf: null,
+    // No projection assumption, deliberately. SGBs do pay a fixed,
+    // government-notified 2.50% p.a. coupon, but that coupon is not the
+    // instrument's return: it rides on top of the gold-price component, which
+    // is the dominant term and which D-002 forbids us from feeding in.
+    // Seeding 2.50% would beat the asset-class default (see the resolution
+    // order in DATA_MODEL.md) and project every SGB holding at 2.50% a year,
+    // understating it inside the panel that promises the user auditability.
+    // Pinned by a test in instruments-data.test.ts.
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'gold-etf',
@@ -212,6 +283,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Price of one unit (a small fraction of a gram).',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'gold-digital',
@@ -226,6 +300,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'As low as ₹1–₹10 on some platforms.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'gold-mutual-fund',
@@ -240,6 +317,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'A SIP (fixed monthly instalment) typically from ₹500/month.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
 
   // ---------------------------------------------------- Hybrid/Guaranteed
@@ -256,6 +336,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: '₹250/year minimum, up to ₹1.5 lakh/year maximum.',
     rateValue: '8.2',
     rateAsOf: VERIFIED_QUARTER,
+    assumedAnnualRatePct: '8.2',
+    rateSource: SMALL_SAVINGS_SOURCE,
+    assumedRateAsOf: VERIFIED_QUARTER,
   },
   {
     slug: 'hybrid-kvp',
@@ -270,6 +353,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: '₹1,000, in multiples of ₹100 thereafter.',
     rateValue: '7.5',
     rateAsOf: VERIFIED_QUARTER,
+    assumedAnnualRatePct: '7.5',
+    rateSource: SMALL_SAVINGS_SOURCE,
+    assumedRateAsOf: VERIFIED_QUARTER,
   },
   {
     slug: 'hybrid-nps',
@@ -284,6 +370,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: '₹500 per contribution / ₹1,000 per year minimum to keep the account active.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'hybrid-balanced-funds',
@@ -298,6 +387,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'A SIP (fixed monthly instalment) typically from ₹500/month.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'hybrid-traditional-insurance',
@@ -312,6 +404,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Varies by policy and insurer; typically requires a multi-year premium commitment.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
 
   // -------------------------------------------------------------- Real Estate
@@ -328,6 +423,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Full property price, typically financed partly via a home loan.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'realestate-land',
@@ -342,6 +440,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Full plot price; varies enormously by location.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'realestate-reits',
@@ -356,6 +457,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Price of one unit. Significantly lower entry point than buying physical property.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'realestate-underconstruction',
@@ -370,6 +474,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Booking amount plus milestone-linked payments; varies by project.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'realestate-commercial',
@@ -384,6 +491,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Full property price. Commercial units are generally more expensive per square foot than comparable residential space.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
 
   // -------------------------------------------------------------- Alternative
@@ -400,6 +510,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Fractional purchases possible. As low as a few hundred rupees on most exchanges.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'alternative-p2p-lending',
@@ -414,6 +527,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Typically a few hundred to a few thousand rupees per loan, spread across many loans.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'alternative-aif',
@@ -428,6 +544,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: '₹1 crore minimum under current SEBI rules (lower for accredited investors in specific cases). Verify the current threshold.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'alternative-chit-funds',
@@ -442,6 +561,9 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Set by the specific chit\'s periodic contribution amount. Varies widely by scheme size.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
   {
     slug: 'alternative-unlisted-shares',
@@ -456,5 +578,8 @@ export const instrumentsSeedData: InstrumentSeed[] = [
     minInvestment: 'Varies by dealer and company; often requires buying in board-lot-like minimums set by the seller.',
     rateValue: null,
     rateAsOf: null,
+    assumedAnnualRatePct: null,
+    rateSource: null,
+    assumedRateAsOf: null,
   },
 ]

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { NewLedgerModal } from './new-ledger-modal'
 import { LedgerCapReachedError, LedgerCopyError, type Ledger } from '@/lib/ledgers-api'
@@ -248,5 +248,170 @@ describe('NewLedgerModal', () => {
 
     await waitFor(() => expect(createBlankLedger).toHaveBeenCalledWith('test-token', 'New strategy'))
     expect(createLedgerFromCurrent).not.toHaveBeenCalled()
+  })
+
+  // G2 — goal capture as a third option in this same modal.
+  describe('goal step', () => {
+    beforeEach(() => {
+      // shouldAdvanceTime: fake only `Date`, let real timers (and therefore
+      // `waitFor`'s own polling) keep running — otherwise `waitFor` never
+      // sees the mocked promise resolve and every async assertion here hangs.
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      vi.setSystemTime(new Date('2026-09-09T00:00:00Z'))
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    function openGoalStep() {
+      render(<NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />)
+      fireEvent.click(screen.getByRole('radio', { name: /plan toward a goal/i }))
+    }
+
+    it('swaps the modal body in place rather than opening a second surface', () => {
+      render(<NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />)
+      const dialogsBefore = screen.getAllByRole('dialog')
+      expect(dialogsBefore).toHaveLength(1)
+      const dialogBefore = dialogsBefore[0]
+
+      fireEvent.click(screen.getByRole('radio', { name: /plan toward a goal/i }))
+
+      const dialogsAfter = screen.getAllByRole('dialog')
+      expect(dialogsAfter).toHaveLength(1)
+      expect(dialogsAfter[0]).toBe(dialogBefore)
+
+      // The blank/copy options are gone, replaced in place — not a second surface.
+      expect(screen.queryByRole('radio', { name: /copy my current holdings/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('radio', { name: /start empty/i })).not.toBeInTheDocument()
+      expect(screen.getByLabelText(/what are you saving for/i)).toBeInTheDocument()
+    })
+
+    it('prefills the horizon to target year minus current year, using a fixed clock', () => {
+      // System time faked to 2026-09-09, so "current year" is 2026.
+      openGoalStep()
+      fireEvent.change(screen.getByLabelText(/target year/i), { target: { value: '2033' } })
+      expect(screen.getByLabelText(/years to reach it/i)).toHaveValue('7')
+    })
+
+    it('shows an inline error and keeps the modal open for an over-length label', () => {
+      openGoalStep()
+      fireEvent.change(screen.getByLabelText(/ledger name/i), { target: { value: 'A goal' } })
+      fireEvent.change(screen.getByLabelText(/what are you saving for/i), { target: { value: 'x'.repeat(81) } })
+      fireEvent.change(screen.getByLabelText(/target amount/i), { target: { value: '500000' } })
+      fireEvent.change(screen.getByLabelText(/target year/i), { target: { value: '2033' } })
+
+      fireEvent.click(screen.getByRole('button', { name: /create ledger/i }))
+
+      expect(screen.getByText(/80 characters or fewer/i)).toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(createBlankLedger).not.toHaveBeenCalled()
+    })
+
+    it('shows an inline error and keeps the modal open for a zero target amount', () => {
+      openGoalStep()
+      fireEvent.change(screen.getByLabelText(/ledger name/i), { target: { value: 'A goal' } })
+      fireEvent.change(screen.getByLabelText(/what are you saving for/i), { target: { value: 'A house' } })
+      fireEvent.change(screen.getByLabelText(/target amount/i), { target: { value: '0' } })
+      fireEvent.change(screen.getByLabelText(/target year/i), { target: { value: '2033' } })
+
+      fireEvent.click(screen.getByRole('button', { name: /create ledger/i }))
+
+      expect(screen.getByText(/whole rupee amount greater than zero/i)).toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(createBlankLedger).not.toHaveBeenCalled()
+    })
+
+    it('shows an inline error and keeps the modal open for a non-integer target amount', () => {
+      openGoalStep()
+      fireEvent.change(screen.getByLabelText(/ledger name/i), { target: { value: 'A goal' } })
+      fireEvent.change(screen.getByLabelText(/what are you saving for/i), { target: { value: 'A house' } })
+      fireEvent.change(screen.getByLabelText(/target amount/i), { target: { value: '500000.5' } })
+      fireEvent.change(screen.getByLabelText(/target year/i), { target: { value: '2033' } })
+
+      fireEvent.click(screen.getByRole('button', { name: /create ledger/i }))
+
+      expect(screen.getByText(/whole rupee amount greater than zero/i)).toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(createBlankLedger).not.toHaveBeenCalled()
+    })
+
+    it('shows an inline error and keeps the modal open for an out-of-range target year', () => {
+      openGoalStep()
+      fireEvent.change(screen.getByLabelText(/ledger name/i), { target: { value: 'A goal' } })
+      fireEvent.change(screen.getByLabelText(/what are you saving for/i), { target: { value: 'A house' } })
+      fireEvent.change(screen.getByLabelText(/target amount/i), { target: { value: '500000' } })
+      fireEvent.change(screen.getByLabelText(/target year/i), { target: { value: '99999' } })
+
+      fireEvent.click(screen.getByRole('button', { name: /create ledger/i }))
+
+      expect(screen.getByText(/valid target year/i)).toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(createBlankLedger).not.toHaveBeenCalled()
+    })
+
+    it('clears every goal field and resets to the options step on reopen — the dialog stays mounted, not remounted', () => {
+      const { rerender } = render(
+        <NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />,
+      )
+      fireEvent.click(screen.getByRole('radio', { name: /plan toward a goal/i }))
+      fireEvent.change(screen.getByLabelText(/what are you saving for/i), { target: { value: 'A house' } })
+      fireEvent.change(screen.getByLabelText(/target amount/i), { target: { value: '500000' } })
+      fireEvent.change(screen.getByLabelText(/target year/i), { target: { value: '2033' } })
+      fireEvent.change(screen.getByLabelText(/what can you add each month/i), { target: { value: '5000' } })
+
+      rerender(
+        <NewLedgerModal open={false} onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />,
+      )
+      rerender(
+        <NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={vi.fn()} />,
+      )
+
+      // Back on the options step, not the goal step, with the blank/copy options showing again.
+      expect(screen.getByRole('radio', { name: /copy my current holdings/i })).toBeInTheDocument()
+      expect(screen.queryByLabelText(/what are you saving for/i)).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('radio', { name: /plan toward a goal/i }))
+      expect(screen.getByLabelText(/what are you saving for/i)).toHaveValue('')
+      expect(screen.getByLabelText(/target amount/i)).toHaveValue(null)
+      expect(screen.getByLabelText(/target year/i)).toHaveValue(null)
+      expect(screen.getByLabelText(/what can you add each month/i)).toHaveValue(null)
+    })
+
+    it('creates a hand ledger with a goal that stays origin "manual" via the same blank-ledger path', async () => {
+      const goalLedger: Ledger = {
+        ...ledger,
+        origin: 'manual',
+        goal: { label: 'A house', targetAmountInr: 500000, targetYear: 2033, monthlyCapacityInr: null },
+      }
+      createBlankLedger.mockResolvedValue(goalLedger)
+      const onCreated = vi.fn()
+      render(
+        <NewLedgerModal open onOpenChange={vi.fn()} sourceHoldings={holdings} unreadableCount={0} onCreated={onCreated} />,
+      )
+      fireEvent.click(screen.getByRole('radio', { name: /plan toward a goal/i }))
+
+      fireEvent.change(screen.getByLabelText(/ledger name/i), { target: { value: 'Toward the house' } })
+      fireEvent.change(screen.getByLabelText(/what are you saving for/i), { target: { value: 'A house' } })
+      fireEvent.change(screen.getByLabelText(/target amount/i), { target: { value: '500000' } })
+      fireEvent.change(screen.getByLabelText(/target year/i), { target: { value: '2033' } })
+
+      fireEvent.click(screen.getByRole('button', { name: /create ledger/i }))
+
+      await waitFor(() =>
+        expect(createBlankLedger).toHaveBeenCalledWith('test-token', 'Toward the house', {
+          label: 'A house',
+          targetAmountInr: 500000,
+          targetYear: 2033,
+          monthlyCapacityInr: null,
+        }),
+      )
+      // Never the copy path, and never any AI/consent call — this is the same
+      // hand-creation function a goalless blank ledger uses.
+      expect(createLedgerFromCurrent).not.toHaveBeenCalled()
+      expect(track).toHaveBeenCalledWith('ledger_created', { source: 'blank' })
+      expect(onCreated).toHaveBeenCalledWith(goalLedger, 'blank')
+      expect(onCreated.mock.calls[0][0].origin).toBe('manual')
+    })
   })
 })

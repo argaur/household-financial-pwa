@@ -8,6 +8,7 @@ import {
   WHAT_IS_NOT_LEAKED,
   XSS_LIMIT,
   LOST_PASSPHRASE,
+  AI_REQUEST_LIMIT,
 } from '@/lib/privacy-note'
 
 /**
@@ -40,6 +41,15 @@ export function Privacy() {
             And what that does not mean
           </p>
           <p className="text-body text-muted-foreground">{PRIVACY_CLAIM.limit}</p>
+        </section>
+
+        {/* A second, narrower boundary on the same claim, not a disclaimer
+            bolted on separately — so it sits right beside the first one. */}
+        <section className="rounded-lg border border-dashed p-4 space-y-2" aria-labelledby="privacy-ai-limit">
+          <p className="section-label" id="privacy-ai-limit">
+            {AI_REQUEST_LIMIT.heading}
+          </p>
+          <p className="text-body text-muted-foreground">{AI_REQUEST_LIMIT.body}</p>
         </section>
 
         <Separator />

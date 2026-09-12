@@ -1,6 +1,7 @@
 # Implementation Plan — Household Financial Planning PWA
 
 **Status:** approved ("Plan approved" gate passed 2026-07-10 — Gaurav authorized autonomous decision-making for this session; no ambiguity required escalation)
+**Codex lane, P6 addendum only:** `codex-lane: yes`, opted in 2026-09-10 per Gaurav's instruction and a `/council` run (`collab-runs/2026-09-10-ai-layer-plan/exchange.json`). Applies only to steps in P6 tagged `codex/<tier>/<effort>`; every other tag in this document predates the opt-in and stands as written.
 **Inputs:** `SOLUTION_BRIEF.md`, `SPEC.md`, `DATA_MODEL.md`, `COMPONENT_SHOWCASE.md`, `METRICS_PLAN.md`, `DECISIONS_LOG.md`, design tokens
 **Rule:** Slices ordered hardest-unknown-first after Slice 0. Default feature-list ordering is a trap.
 
@@ -545,3 +546,587 @@ The chunk is **not promotable**: step A9's 390px browser pass has not run, and D
 One real defect was found and fixed during the build: the instrument-detail CTA was written `w-full sm:w-auto`, and since this project redefines `sm` to 390px that would have dropped the full-width button at exactly the primary phone width. It is now `w-full md:w-auto`, pinned by a regression test asserting no `sm:` modifier on that element. This is the same failure class as the ledger slice's `sm:grid-cols-3`, caught this time by reading the Tailwind config rather than by a browser.
 
 The cross-path parity assertion (A8) that D-016 Slice 5 Chunk 4 asked for and never got now exists, and the three call sites matched on the first run.
+
+---
+
+# D-024 + D-025 Combined (Phase 3 Plan, 2026-09-07)
+
+**Status:** draft, pending "Plan approved". **No Blueprint gate is marked passed by this document.** Gaurav has not reviewed it.
+**Build arc:** `extends-existing`. Every screen this touches already exists, every write path this uses already exists, and both features hang off the ledger surface shipped at `1fa570c`.
+**Why one plan for two features:** they share exactly three things, and nothing else. The ledger holdings view (both add an entry point to it), the service-worker config (D-025 changes it, and D-024's lazy chunks must not regress it), and the `sm:`-is-390px pin test (one test file, two features' class strings). Everything else is disjoint, which is why the chunk map keeps them in separate chunks rather than interleaving them. Same file convention as the D-016 bundle and D-016 Slice 5 sections above.
+**Inputs:** `DECISIONS_LOG.md` D-024 and D-025 including the 2026-09-07 resolutions (all open questions in both are now closed); `SPEC.md` §G1 to §G8 and §I1 to §I8; `DATA_MODEL.md` Stage 0 sections for D-024 and D-025; `COPY_DECK.md` and `METRICS_PLAN.md` D-024/D-025 sections.
+**Not in this document:** any application code, any dev-manager dispatch, any gate marked passed.
+
+## P1. Summary and guiding principle
+
+**Guiding principle: the deterministic engine is a prerequisite, not a sibling, and it ships alone.** D-024 decision 1 and `DATA_MODEL.md` note 13 both say this in as many words. Chunk E below is complete, shippable, and portfolio-worthy with zero AI code present in the repository. If Gaurav sees the engine and decides the AI layer is not worth building, that is a legitimate outcome of this ordering and costs nothing already spent.
+
+**The second principle, inherited: the caps are the cost control, so the cap logic is the riskiest code here.** Chunk R exists as its own chunk, before any Anthropic call is ever made, precisely so the reservation shape can be proven against concurrent and repeated callers with no provider in the loop.
+
+| In scope | Out of scope (this plan) |
+|---|---|
+| Deterministic client-side projection engine, rate resolution, "See the maths" panel (Chunk E) | Dropping the unused plaintext `goals` table (its own migration, its own decision) |
+| Goal capture into the existing sealed ledger envelope (Chunk G) | Export to Excel (D-025 decision 1, import only in v1) |
+| Cap reservation and global circuit breaker, server-side, no provider call (Chunk R) | Prompt caching, Files API, queues, retries at the Anthropic layer (all rejected 2026-09-07) |
+| `POST /api/ai-suggestions` proxy, `kind: "goal_plan"` (Chunk A) | Tune/edit flow, multiple goals per ledger, step-up SIP, tax-adjusted returns, Monte Carlo, streaming, per-user caps (D-024 decision 8) |
+| Counsel cards on the same proxy, `kind: "counsel"` (Chunk C) | Clipboard import, foreign CSVs, bank statements, any hosted parsing API |
+| Bulk Excel import end to end including `POST /api/holdings-batch` (Chunk I) | Inline row editing on the review screen (D-025, fix loop is download-fix-reupload) |
+| The "never at rest" copy correction across four files (Step A1) | Closing the standing 390px gap from D-022 and D-023 (see Step V3) |
+| Manual verification gates that automated tests cannot substitute for (Chunk V) | Per-instrument rate overrides (per asset class only, not offered) |
+
+Any scope creep during build routes back to Solution Stage and is logged in `DECISIONS_LOG.md`, never absorbed silently. Standing rule from both prior plans.
+
+## P2. The structural decisions
+
+Two, both already resolved by Gaurav on 2026-09-07 and restated here because every chunk downstream depends on them.
+
+**1. The goal rides the existing encrypted envelope. `[P]`** Read directly from `DATA_MODEL.md`'s D-024 Stage 0 section and cross-checked against `src/lib/ledgers-api.ts`: `sealRow` and `decryptWireRow` already handle the `ledgers` row under `LEDGERS_TABLE`, so widening the sealed object from `{ name }` to `{ name, goal? }` needs no schema change, no migration, and no server change at all. The server has never had a schema that could accept the payload shape and still does not. A reader that gets `{ name }` with no `goal` key is a valid expected state, so `version` does not bump. The plaintext `goals` table stays in the schema unused, the same way `analytics_events` does under D-012.
+
+**2. A failed AI call does not refund its reservation.** Resolved 2026-09-07. `ai_call_reservations.status` moves to `failed` and the counter stays consumed. This is not fairness, it is un-gameability: "the call failed" is a claim the client makes, and refunding on it hands an attacker unlimited calls. The consequence is a copy problem, not a schema problem, and Step A2 owns it: the consent step says a failed attempt still counts, before the call, not after it fails.
+
+**The project-killer candidate for this plan is Chunk R, not Chunk E.** The reservation-plus-conditional-UPDATE shape has no precedent anywhere in this repository (`SPEC.md` §G7 says so), `neon-http` has no transactions so it cannot be reached for, and a wrong shape here fails silently under exactly the conditions nobody tests by hand: two tabs, a double tap, a client retry. It is sequenced after Chunk E and before any provider call for that reason.
+
+## P3. Data model and schema
+
+Two migrations, both additive, neither destructive.
+
+- **Migration A (Chunk E):** three plaintext catalog columns on `instruments`, `assumed_annual_rate_pct numeric(5,2)`, `rate_source text`, `rate_as_of date`, all nullable, plus the seed populating the 6 instruments that have a defensible published rate. The other 24 stay null and fall back to their asset class default.
+- **Migration B (Chunk R):** `ai_call_reservations` and `ai_global_usage`, both new, both plaintext counters only, per `DATA_MODEL.md`. `ai_global_usage.cap_calls` seeds from a server constant of **50** (resolved 2026-09-07).
+- **No migration for D-025 at all.** Confirming that absence is the Stage 0 output, same as it was for D-016 Slice 5. Import writes ordinary `holdings` rows through the sealed path that already exists.
+
+**Verify both migrations against the configured Neon database with `npm run db:probe`, never against `drizzle/migrations/meta/_journal.json`.** The 2026-08-04 lesson: the journal records what was generated, the database records what was applied, and they disagreed for three days while production sat at `0000`.
+
+## P4. Chunk map, boundary contracts, and dispatch steps
+
+Every step is test-first. A failing test lands before the implementation it describes, per this project's TDD convention and the root CLAUDE.md rule that non-trivial feature work starts with a failing test. Where a step is verification or configuration and has no meaningful failing-test-first shape, that is stated on the step rather than skipped quietly.
+
+**Chunk ordering rationale.** E is first and unconditional: it is the prerequisite D-024 decision 1 names, and it is the only chunk that ships user value with no AI in the repository. G follows because goal capture is meaningless without a projection to draw against, and it is still AI-free. R follows because the cap must be provably atomic before any provider call exists to spend money. A then C, in D-024 decision 7's order (a, b, c). **I (Excel import) shares no source file with E, G, R, A or C except the ledger holdings view's entry-point row and the one `sm:` pin test, so it is genuinely independent and could run in parallel with any of them once E lands.** It is sequenced last by default for a single-session narrative and because it is the larger of the two features by step count, not because anything in it depends on the AI work. V is last and mandatory.
+
+### Chunk E: deterministic projection engine (first, ships alone)
+
+- **Owns:** the new engine module and its fixtures, the projection panel, the horizon control, the "See the maths" panel, `GET`/`PUT /api/projection-settings`, Migration A and the instrument rate seed.
+- **Reads but does not own:** `ledger_projection_settings` (specced in the D-016 additions, never built, this is its first consumer, no shape change), `GET /api/instruments` (extended with three fields, not replaced), the allocation donut's Recharts palette.
+- **Endpoints:** `GET /api/projection-settings?ledgerId=<uuid>` and `PUT /api/projection-settings`. Single path segment, ledger by query parameter, never a path segment. The 2026-07-11 Vercel routing limitation applies.
+- **Acceptance criteria:** the panel renders a compound-growth line for the chosen horizon with every number produced locally; rate rows appear only for asset classes actually present in this ledger; "See the maths" is a disclosure panel readable while the chart is visible, never a modal; the whole chunk is shippable with zero AI code in the repository.
+
+- [ ] **E1. Migration A plus the instrument rate seed** `[model: sonnet]`. Failing test first: a schema-shape test asserting `instruments` carries the three new nullable columns, and a seed test asserting exactly 6 instruments have a non-null `assumed_annual_rate_pct` with a non-null `rate_source` and `rate_as_of`, and that the other 24 are null on all three. Then generate the migration and the seed. Apply and confirm with `npm run db:probe`, never from the journal file.
+- [ ] **E2. Extend `GET /api/instruments` with the three catalog fields** `[model: sonnet]`. Failing test against the real Hono app: the response carries `assumedAnnualRatePct`, `rateSource`, `rateAsOf` per instrument, and every existing assertion in that route's test file passes unmodified. Catalog data, already public, no auth change.
+- [ ] **E3. The rate resolution order, as its own pure function** `[model: opus]`. Failing tests one per branch of `DATA_MODEL.md`'s three-step order: instrument rate when unoverridden, the asset-class override winning for every holding in that class when set, the seeded per-class default when neither exists. This is opus because the precedence is the thing a user audits in "See the maths" and a silently wrong precedence produces plausible numbers that are wrong, which is the most expensive failure mode this feature has.
+- [ ] **E4. Compound-growth engine core** `[model: opus]`. Failing fixture-based test suite first, written so a human who wants to check the numbers can read the fixture and do the arithmetic by hand. `SPEC.md` §G7 makes this an explicit cost flag: "See the maths" promises the user auditability, so the test suite is the artifact that proves the promise, not an afterthought. Opus for the maths itself and the fixture design; the numbers are the regulatory surface per `DATA_MODEL.md` note 14.
+- [ ] **E5. `GET` and `PUT /api/projection-settings`** `[model: sonnet]`. Failing tests first: ownership checked against the session household, ledger by query parameter, a `PUT` for a ledger the session does not own returns 403, rates are plaintext by category (an assumption, not a holding, so nothing is sealed here). Mirrors the existing ledger routes' auth shape.
+- [ ] **E6. Projection panel shell inside the ledger view** `[model: sonnet]`. Failing tests first: sits below the allocation donut, collapsed by default below `md:` and expanded above it, hidden entirely when the ledger has no holdings (hidden, not shown empty, per the state matrix), container carries `min-w-0` and its own `overflow-x` context so a long axis label cannot push the page into horizontal scroll at 390px.
+- [ ] **E7. Horizon control, presets plus free entry** `[model: sonnet]`. Failing tests first: preset chips at 5, 10, 15 and 20 years and a free numeric field accepting 1 to 40, both driving the same state, the field winning when edited after a chip. Resolved 2026-09-07: both, not one. Chips must not use `sm:` for their layout.
+- [ ] **E8. Rate rows, editable inline** `[model: sonnet]`. Failing tests first: one row per asset class present in this ledger and no others, one column below `md:` and two at `md:` and up, six stacked rows at 390px is correct and is not a bug, edits persist through `PUT /api/projection-settings`, `projection_rate_overridden` fires on a committed edit.
+- [ ] **E9. "See the maths" disclosure panel** `[model: sonnet]`. Failing tests first: renders per-class rate, `rate_source` verbatim, `rate_as_of` with a staleness note, and the formula in words; it is a disclosure panel and not a modal, so the chart stays visible while it is open. `rate_as_of` drives a note only, never any automatic behaviour.
+- [ ] **E10. Engine telemetry** `[model: sonnet]`. Failing test: `projection_viewed` and `projection_rate_overridden` fire from the browser with the properties `METRICS_PLAN.md` defines, and carry no rupee amounts. Run `scripts/check_events.py` as part of the step.
+- [ ] **E11. The `sm:`-is-390px pin test, created here and extended by later chunks** `[model: opus]`. Failing test first, in the style of `csp-policy.test.ts`: **no new class string in this feature matches `sm:(grid-cols|w-auto|flex-row|inline-flex)`.** This project redefines `sm` to 390px and this exact bug class has now shipped twice, the D-016 compare strip's `sm:grid-cols-3` and the D-021 button's `w-full sm:w-auto`. Opus because the test has to be written so it genuinely covers new code without either passing vacuously or firing on the entire pre-existing codebase, and getting that boundary wrong makes the pin worthless in a way that looks green.
+
+### Chunk G: goal capture in the ledger envelope (still no AI)
+
+- **Owns:** the widened sealed payload type, the goal step inside the existing "+ New" ledger modal.
+- **Reads but does not own:** `src/lib/ledgers-api.ts`'s `sealRow` and `decryptWireRow`, the existing modal's blank and copy options.
+- **Endpoints:** none new. The goal travels on the existing `POST /api/ledgers` body with no server change.
+- **Acceptance criteria:** a ledger with no `goal` key still reads correctly (a manually created ledger is a valid expected state); `version` does not bump; a hand-created ledger that later gains a goal stays `origin: manual` and does not count against `ai_plans_created`.
+
+- [ ] **G1. Widen the sealed ledger payload to `{ name, goal? }`** `[model: opus]`. Failing tests first: a sealed-then-decrypted round trip preserving the goal, a legacy `{ name }`-only payload decrypting cleanly with `goal` undefined, AAD still bound to `{ table, householdId, rowId, version }`, and the server rejecting any attempt to send the goal as a plaintext field. Opus: this is the encryption boundary, and a mistake here is the class of thing that is expensive to unwind after rows exist.
+- [ ] **G2. Goal step as a third option in the existing "+ New" modal** `[model: sonnet]`. Failing tests first: it swaps the modal body rather than opening a second surface; the horizon prefills to target year minus current year; fields validate inline with the modal staying open; and the Radix reset trap the ledger slice already paid for is covered by open, type, close, reopen, assert clean (dialogs stay mounted between opens, they do not remount).
+
+### Chunk R: cap reservation and circuit breaker (server only, no provider call)
+
+**This chunk builds and proves the entire cost-control mechanism before a single Anthropic call exists in the codebase.** That sequencing is deliberate: the failure modes here are concurrency-shaped, and they are far cheaper to reproduce against a route that returns a stub than against one that spends money.
+
+- **Owns:** Migration B, `ai_call_reservations`, `ai_global_usage`, the reservation module, `GET /api/ai-suggestions`.
+- **Reads but does not own:** `households.ai_plans_created` and `ledgers.ai_edits_used` (both live since the D-016 bundle), `server/lib/auth.ts`, `server/lib/rate-limit.ts` (which stays as the burst limiter and is explicitly not the monthly enforcement).
+- **Acceptance criteria:** every one of `SPEC.md` §G6's cap assertions passes against the real Hono app with no provider in the loop.
+
+- [ ] **R1. Migration B, both tables** `[model: sonnet]`. Failing schema-shape tests first, including the UNIQUE constraint on `(household_id, idempotency_key)` and the two ON DELETE CASCADE edges. Then generate, apply, and confirm with `npm run db:probe`. `ai_global_usage.cap_calls` seeds from a server constant of 50, stored per row so raising it later does not rewrite a past month.
+- [ ] **R2. Reservation insert with idempotency absorption** `[model: opus]`. Failing tests first: a second POST with the same `idempotencyKey` returns the first outcome and makes no second downstream call (`SPEC.md` §G6.8); a conflict on the unique constraint is a normal expected path, not an error surface. Opus: this is security-sensitive concurrency logic with no precedent in the repo.
+- [ ] **R3. The three conditional counter UPDATEs, atomic, one statement each** `[model: opus]`. Failing tests first and this is the hard requirement `DECISIONS_LOG.md` D-024 item (b) states in as many words: **conditional `UPDATE ... SET counter = counter + 1 WHERE counter < cap RETURNING counter`, never read-check-increment.** Test that two concurrent callers with different idempotency keys and one plan remaining produce exactly one success and one 409 (`SPEC.md` §G6.9). Test each of the three caps independently: household plans, per-ledger edits, global monthly. Zero rows affected means the cap is reached and the reservation is marked `failed`. `neon-http` has no transactions, so each guarantee must be expressible as one statement. Opus, and this is the project-killer step of the whole plan.
+- [ ] **R4. Failure does not release the reservation** `[model: opus]`. Failing test first: a reservation whose downstream call fails moves to `failed` and the counter stays consumed, and a client that reports every call as failed still exhausts its cap. Resolved 2026-09-07. Opus because this is the gameability boundary and the temptation to "be fair" here is exactly what reopens the hole.
+- [ ] **R5. `GET /api/ai-suggestions`, usage only** `[model: sonnet]`. Failing test first: returns `{ plansUsed, plansCap, editsUsed, editsCap, globalOpen }` for the session household, carries no household data, and is cheap enough to fetch alongside the dashboard so cap-exhausted states render without a speculative POST.
+
+### Chunk A: the AI proxy, `kind: "goal_plan"`
+
+- **Owns:** `POST /api/ai-suggestions`, the consent step, the suggestion card, the three cap-exhausted copies, and the "never at rest" copy correction.
+- **Reads but does not own:** Chunk R's reservation module, Chunk E's engine (every number on the card comes from it), `server/lib/envelope.ts`'s `.strict()` discipline.
+- **Endpoints:** `POST /api/ai-suggestions`. Single segment. **The browser CSP is not touched and the Anthropic host appears in no browser CSP directive**: the browser never calls Anthropic, the proxy does. Adding it would be exactly the mistake D-024's ship-traps list names.
+
+- [ ] **A1. The "never at rest" copy correction, four files, its own step** `[model: sonnet]`. Failing test first, asserting the corrected claim is present and the absolute phrasing is absent in every location. **The exact wording is already on record in D-024 and is not rewritten here: "Vittam's database does not store AI-request plaintext; the AI provider may retain it under its own API policy."** The four files:
+  1. the `/privacy` page's AI-exception section (added per D-018 Q7),
+  2. the `/why` page's matching section (same D-018 Q7 ruling, same wording so the two cannot drift),
+  3. `src/lib/privacy-note.ts` (which is also on the standing list of pre-2026-08-05 copy carrying em-dashes and needs a copy pass regardless),
+  4. `Documentation/design/COPY_DECK.md`, corrected in the same commit so the deck and the rendered pages cannot disagree.
+
+  This is a standalone step and a shipping blocker for the rest of Chunk A: the current claim is false end to end as worded, and it becomes materially false the moment a real request leaves for Anthropic.
+
+  **`[P]` Read directly from the repository on 2026-09-07, and it changes the shape of this step for three of the four files.** `grep` for "at rest" and "Anthropic" across `src/` returns only `src/lib/crypto/keys.ts` and `src/lib/export.ts`, neither of which carries this claim. So: (1) the `/privacy` page's AI-exception section **does not exist yet**, because D-018 Q7 specced it alongside an AI feature that was never built, so this is a write, not a correction; (2) the `/why` page's matching section likewise **does not exist yet**; (3) `src/lib/privacy-note.ts` exists but **does not carry the claim at all**, so its only work here is the standing em-dash copy pass, not a correction; (4) `COPY_DECK.md` **already carries the corrected wording** in its new D-024 section (line 368, "The request goes to Anthropic, which processes it under its own API policy and may retain it for a period under that policy. Vittam's database does not store any of it."), so the deck is the source and the two pages are written from it rather than reconciled against it. The step still touches all four files and is still a shipping blocker; what it does to each is not what D-024's table assumed, because that table was written against a `/privacy` section that was specced and never shipped.
+- [ ] **A2. Per-transmission consent step** `[model: sonnet]`. Failing tests first: a separate step inside the same modal, always shown, never remembered (per transmission means per transmission); it states what is and is not sent; **and it states before the call that a failed attempt still counts against the cap**, which is where P2 decision 2's cost is paid in copy. Zero em-dashes in every new user-facing string.
+- [ ] **A3. Proxy route, hardened, in the exact order `SPEC.md` §G3 sets** `[model: opus]`. Failing tests first, one per ordered behaviour: auth resolved via `server/lib/auth.ts` before the body is read at all; body size and shape limits before parse with strict Zod rejecting unknown keys; the reservation insert; the conditional UPDATEs; and only then the Anthropic call. `claude-sonnet-5`, structured output, no prompt caching, no retries, no queue, no Files API (all four settled 2026-09-07). Payload minimisation is enforced by the schema itself: percentages and banded totals only, never member names, nominees, or exact rupee amounts. Opus: security-sensitive ordering where doing step 5 before step 3 silently removes the entire cost control.
+- [ ] **A4. Output allowlist validation** `[model: opus]`. Failing tests first: the model may emit only library slugs, and **a slug outside the library enum invalidates the whole response as `invalid_output`, it is not filtered out silently**. This enum is the enforcement mechanism for two standing constraints at once (D-024 decision 5): no product names, therefore mechanically no embedded-insurance product, and the education-not-advice line held by construction. Opus because silent filtering is the intuitive implementation and it is the wrong one.
+- [ ] **A5. No request or response body reaches any log, Sentry, or Neon** `[model: opus]`. Failing test first, by spy on the logger and the Sentry client, plus an assertion that `Cache-Control: no-store` is set on every response, success and failure (`SPEC.md` §G6.6 and §G6.7). Nothing is written to Neon beyond the reservation status. Opus: this is the retention-surface promise the corrected copy in A1 is making on the product's behalf.
+- [ ] **A6. Suggestion card, rendered inline** `[model: sonnet]`. Failing tests first: renders in the compare strip's position, never as a toast or modal; Apply and Dismiss are the only actions, stacked vertically below `md:`, each full width and at least 44px tall; **the card component receives weights and slugs only and has no access to a formatter that takes a model-supplied number** (`SPEC.md` §G6.5). Every rupee figure beside a weight is computed locally by Chunk E's engine.
+- [ ] **A7. Three distinct cap-exhausted states** `[model: sonnet]`. Failing tests first: household plans exhausted, this ledger's edits exhausted, and the global monthly breaker tripped are three different facts with three different implications, and each gets its own copy (`DATA_MODEL.md` note 13). Each replaces the action's own affordance in place, styled informational, never an error toast. Manual ledger creation stays fully available in all three.
+- [ ] **A8. CSP assertion** `[model: sonnet]`. Failing test first, in `csp-policy.test.ts`: the Anthropic host appears in no browser CSP directive, in either policy. This is a pin against a future well-meant addition, not a fix for anything currently broken.
+- [ ] **A9. Goal-plan telemetry** `[model: sonnet]`. Failing test: `ai_suggestion_shown`, `ai_suggestion_applied`, `ai_suggestion_dismissed`, `ai_cap_reached` fire from the browser with the `METRICS_PLAN.md` properties. **The proxy route itself emits no analytics**, carried forward verbatim from the D-016 property-discipline note: anything the proxy could usefully report is derived from plaintext holdings. Run `scripts/check_events.py`.
+- [ ] **A10. Extend the E11 pin test to Chunk A's class strings** `[model: sonnet]`. Failing test first over the goal-step form fields, the consent step's Continue button, the Apply and Dismiss pair, the horizon preset chips, and the rate-row grid, all named explicitly in `SPEC.md` §G6.1.
+
+### Chunk C: counsel cards, same proxy, second schema
+
+- **Owns:** the `kind: "counsel"` request and response path, the "Review this ledger" action.
+- **Reads but does not own:** everything Chunk A built. This chunk adds a second schema to one route, it does not add a route.
+- **Acceptance criteria:** on demand only, never proactive, never a background call (D-024 decision 4). Apply or Dismiss, per D-017 item 5 and D-018 item 3. Cards are never persisted: `ai_call_reservations` records that a call happened, never what it said.
+
+- [ ] **C1. `kind: "counsel"` request schema and ledger ownership** `[model: sonnet]`. Failing tests first: `ledgerId` ownership checked server-side against the session household; the payload carries `currentMix` percentages and `holdingSlugs` only, no amounts and no names; a ledger the session does not own returns 403 before any provider call.
+- [ ] **C2. Counsel reservation takes the `edits` cap** `[model: opus]`. Failing tests first: a counsel call consumes `ledgers.ai_edits_used` and not `households.ai_plans_created`, the reservation row records `cap_type: "edits"` and `ledger_id` set (unlike a goal-plan call, whose `ledger_id` is null because its ledger does not exist yet), and the global breaker applies to both kinds. Opus: routing the wrong reservation to the wrong counter is a cost-control defect that looks correct in every single-call test.
+- [ ] **C3. "Review this ledger" action** `[model: sonnet]`. Failing tests first: on-demand button on any ledger, never proactive; when the ledger's edits cap is exhausted the button carries the disabled soft register from A7; the same consent step from A2 is shown, unremembered.
+- [ ] **C4. Counsel card reuse and telemetry** `[model: sonnet]`. Failing tests first: the card renders through A6's component, not a second one, so an AI suggestion cannot come to read as a different product; the same events fire with the counsel kind distinguished per `METRICS_PLAN.md`.
+
+### Chunk I: bulk holdings import from Excel (independent of E, G, R, A, C after Chunk E)
+
+- **Owns:** the SheetJS dependency and its build config, the template generator, the parser, the validation message builder, the bucketing logic, the review screen, the rejects download, `POST /api/holdings-batch`, and the service-worker config change.
+- **Reads but does not own:** `server/lib/envelope.ts`'s `memberScopedCreateSchema` (reused unchanged), `MAX_LEDGER_HOLDINGS` (200), `src/lib/holdings-api.ts`'s sealing path, `GET /api/instruments`, the decrypted member list.
+- **Endpoints:** `POST /api/holdings-batch`. **`/api/holdings/batch` is impossible on this project's Vercel config** (single path segment only, 2026-07-11), so this is a new top-level Hono mount in `server/app.ts`, not a sub-path of the holdings router.
+
+- [ ] **I1. SheetJS pinned to the vendor tarball, dynamic import, and precache registration in one pass** `[model: opus]`. Failing test first, in the style of `pwa-registration.config.test.ts`, asserting **the parser chunk is present in the precache list** and that the dependency resolves to the vendor's own tarball URL rather than the frozen npm registry copy. Then the dependency and the dynamic import so the main bundle and the 2s load target are untouched. Opus and paired with I2 deliberately: `SPEC.md` §I7 states these two requirements pull opposite directions through the same vite-plugin-pwa config and must be done in one pass with one test file covering both, and this project has already shipped one PWA offline-scope defect (D-013/B-005) and one silent registration gap (`virtual:pwa-register`, closed 2026-08-06).
+- [ ] **I2. Service worker excludes every `/api/*` body and all import-screen row data** `[model: opus]`. Failing test first, same file as I1, in the style of `sw-cache-policy.test.ts`: the runtime caching config carries an explicit exclusion, no `/api/*` request or response body is cacheable, and the import screen's row data is not cached by any route rule. Opus for the same reason as I1: this is the exact defect class this project has already paid for twice, and `injectRegister: false` in `vite.config.ts` is a known trap that looks like a fix and silently makes it worse.
+- [x] **I-spec-1. `SPEC.md` §I6.6 contradicted a shipped guard — RESOLVED** `[model: sonnet]`. **Found 2026-09-11 during I1/I2.**
+
+  **RESOLVED 2026-09-11 — Gaurav's ruling, relayed via the session coordinator. §I6.6 is scoped to the Excel-import feature only.** No imported holdings data and no import-screen API traffic may be cached. **The existing `/api/instruments` `runtimeCaching` rule stays untouched**: that offline-library behaviour is a shipped feature §I6.6 was never written to remove.
+
+  This confirms the interim reading already in force from I1/I2, so **no code change is required** — the pin written during I1/I2 already encodes exactly this. `SPEC.md` §I6.6's wording should be amended to match the ruling when that document is next edited, so the literal-versus-intended reading does not have to be rediscovered.
+
+  Provenance note: this arrived relayed rather than as a marker file. That is appropriate here — it authorizes nothing destructive and ratifies existing shipped behaviour rather than changing it.
+
+  **The contradiction, both sides verified against the tree:**
+  - `SPEC.md` §I6.6 (line 486) states absolutely: "**The service worker caches no `/api/*` request or response body.**"
+  - `src/lib/sw-cache-policy.test.ts:61` asserts the opposite for one route: the instrument library **must still be cached**, failing with "no rule matches the instrument library — offline support for public content has been dropped."
+
+  Honouring §I6.6 literally means deleting the shipped `/api/instruments` CacheFirst rule, which breaks that guard. It would also undercut §I6.7's own goal, since the import screen needs the instrument library offline to validate instrument references.
+
+  **Interim reading in force (I1/I2):** §I6.6 forbids any *new* `/api` caching and any route carrying household data. Pinned as `ALLOWED_API_CACHE_RULES = 1`, plus an assertion that the single permitted rule *is* the instrument library, so a substitution or addition fails. The conflict and the reading are documented in a comment above that test.
+
+  **Assessment, for the ruling:** the interim reading is very probably the intended one. `/api/instruments` is the **public** instrument library, not household data — caching it leaks nothing private, so the literal reading would drop a shipped offline capability (D-013's scope) for no privacy gain. §I6.6's evident intent is row and household data, which the interim reading forbids absolutely.
+
+  **The decision is whether to amend §I6.6's wording to match that intent, or to drop offline instrument browsing.** It is a product call about a shipped feature, so it was not resolved unilaterally during execution.
+- [ ] **I3. Template generation, one tab per member, 30 instruments prefilled** `[model: sonnet]`. Failing tests first: one tab per household member, all 30 library instruments prefilled and grouped by asset class, a hidden slug column, cell comments carrying kind-awareness (shading plus comments, never a hard block), and the twelve columns D-025 decision 2 names. Built entirely in the browser from the decrypted member list and the existing `GET /api/instruments` response. **No API for template generation**, which is what keeps member names off every server surface even though they are in the file.
+- [ ] **I-spec-2. "Shading" is not deliverable with SheetJS Community Edition** `[model: sonnet]`. **Found 2026-09-11 during I3. Needs Gaurav's ruling. Not blocking Track I.**
+
+  **Verified against the installed package, not inferred.** `node_modules/xlsx/types/index.d.ts` types cell comments as a first-class documented field — `c?: Comments`, "Comments associated with the cell" — while styles are only `s?: any`, "The style/theme of the cell (if applicable)". Writing cell fill/background styles to `.xlsx` is a SheetJS **Pro** feature; the pinned Community Edition build has no write-side style support.
+
+  **What that breaks.** `SPEC.md` §I3 and this plan's I3 step both describe kind-awareness as "**shading plus comments**, never a hard block". Comments work. Shading does not. The template therefore ships with one of its two stated guidance channels.
+
+  **What it does NOT break: the library choice stands.** D-025 chose SheetJS over ExcelJS and `read-excel-file` on the strength of hidden sheets and cell comments, both of which work. Shading was never the deciding constraint, so this is a documentation-versus-capability gap, not a reason to revisit the library.
+
+  **The second-order risk, which is the real one.** Cell comments are now the *sole* guidance channel. Comment fidelity across real Excel, Google Sheets and LibreOffice cannot be proven by a generator-written fixture — it is exactly the closed loop **V1** exists to break. V1 consequently carries more weight than when it was written: **if comments do not survive a Google Sheets round-trip, the template has no kind-awareness at all.** V1 should check comment survival explicitly, not only dates and lakh grouping.
+
+  **Decision (b) RESOLVED 2026-09-11 — Gaurav's call, relayed by an in-session agent: keep the `cell.s = { fill: ... }` line, commented, as a placeholder in case SheetJS's paid tier is ever added.** No code change results; this ratifies what I3 already shipped. The existing comment above it already states it is a probable no-op under the Community Edition build, which is what stops it being mistaken for working shading.
+
+  **Decision (a) still open:** amend `SPEC.md` §I3 and D-025 decision 3 to drop "shading", or accept in the documents that the template is comment-only. Until that is done, two design documents describe a capability the build cannot deliver.
+
+  **Provenance note:** (b) arrived relayed by an in-session agent rather than from Gaurav directly. Acceptable here because it preserves existing code and authorizes nothing destructive. It is **not** a precedent for anything that writes to production or touches the sealed data path.
+
+- [ ] **I-spec-3. The per-instrument kind-relevance rule is unspecified** `[model: sonnet]`. **Found 2026-09-11 during I3. Needs confirmation against real content. Not blocking Track I.**
+
+  D-025 decision 3 settles that guidance **never blocks** entry, and that it must "match how the in-app form already behaves" (all fields accepted on all instruments). It does **not** specify which cells get flagged as "less common for this instrument".
+
+  I3 stands in a documented, testable heuristic derived from each instrument's existing `summary` / `liquidity` / `minInvestment` text already returned by `GET /api/instruments` — no new per-slug table, no new data. **This is an implementation choice, not a resolved product decision.**
+
+  **Why it needs checking rather than accepting:** a heuristic that mis-flags a commonly-used field actively misleads, which is worse than no guidance on a template whose whole job is guidance. It should be reviewed against the real 30-instrument content during I4 or the Phase 5 review.
+
+- [ ] **I4. PII disclosure as a step before the download** `[model: sonnet]`. Failing tests first: a step, not a checkbox beside the button; it states what the file will contain and that the file is outside the app's protection once saved; **it discloses that a browser extension with file access is outside Vittam's trust boundary** (disclose, do not engineer around it); `pii_disclosure_shown` fires with `surface`. The file name carries the ledger name and the date so a stale download is identifiable by its name.
+- [ ] **I-bug-1. `exportFilename` stamps a UTC date, so an IST export can be named with yesterday's date** `[model: sonnet]`. **Pre-existing defect found 2026-09-11 during I4. Not a Track I regression. Not blocking.**
+
+  **The defect, narrowly.** `src/lib/export.ts:116`:
+
+  ```ts
+  const date = exportedAt.toISOString().slice(0, 10)
+  ```
+
+  `toISOString()` reports UTC. Under IST (+05:30), any export taken between 00:00 and 05:30 local time renders the **previous** day, so a file exported at 02:00 on 12 September is named `household-financial-plan-2026-09-11.json`.
+
+  **Scope it precisely — most of this file is correct.** `export.ts:84` (`exportedAt: input.exportedAt.toISOString()`) is a *timestamp field* and is right: ISO timestamps should be UTC. **Only the file-name date stamp is wrong.** Do not "fix" line 84.
+
+  **Why it is recorded here rather than fixed in place.** It is outside Chunk I's scope and predates this branch. But it is the *same defect class* that D-025 decision 8 and step I5 exist to defend against, and I4's own `src/lib/import-filename.ts` deliberately takes the other approach (local `getFullYear`/`getMonth`/`getDate`). Two filename builders in one repo now disagree about how to stamp a date, and only one of them is right. Left unrecorded, that inconsistency invites someone to "align" them toward the wrong one.
+
+  **Fix:** reuse `localDateStamp` from `src/lib/import-filename.ts`. Verify with a test that pins a fixed instant in the 00:00-05:30 IST window and asserts the local date, which is the only window where the bug is observable.
+
+- [ ] **I5. Parser: the two India-specific traps** `[model: opus]`. Failing tests first, both named now so neither is rediscovered late. **Excel date serials are formatted from local date parts and `toISOString()` appears nowhere in the parser**: a serial for 1 January under an IST offset must produce 1 January, not 31 December. **Lakh grouping parses**: "1,50,000" is 150000. **Shorthand is rejected with a clear message, never guessed**: "1.5L" produces a rejection, because a wrong guess about money is worse than a clear refusal. Opus: these are correctness traps where the wrong implementation passes casual testing and silently corrupts amounts.
+- [ ] **I-spec-4. D-025 decision 8 describes the date trap inaccurately** `[model: sonnet]`. **Found 2026-09-11 during I5, by probing the pinned build rather than reasoning from the document. Documentation fix only; the code is already correct.**
+
+  **What D-025 decision 8 says:** the trap is a `Date` at **local** midnight which `toISOString()` then pushes back a day.
+
+  **What xlsx 0.20.3 actually does**, verified by writing a workbook holding 1 Jan 2026 and reading it back under two process timezones:
+
+  | read option | result |
+  |---|---|
+  | `cellDates: false` (default) | `{ t: 'n', v: 46023 }` — a raw 1900-system serial. No `Date`, no timezone anywhere |
+  | `cellDates: true` | `{ t: 'd', v: Date }` at **UTC midnight** — identical under `TZ=UTC` and `TZ=EST5EDT` |
+
+  **Why the difference matters rather than being pedantry.** If the cell arrives at *UTC* midnight, then under IST `toISOString()` returns the **correct** day and reading *local* parts is what breaks — under a negative (western) offset. That is the exact opposite of the failure D-025 describes. Both are real day-shifts, but they sit on **opposite sides of UTC**, so a fix written to the document's framing could be wrong in the other direction.
+
+  **How I5 resolved it:** by removing the ambiguity instead of choosing a side. The parser consumes **serials** and converts them with integer arithmetic, constructing no `Date` at all, which is correct under every offset including UTC and satisfies §I6.9 structurally. `PARSER_READ_OPTIONS.cellDates === false` is pinned by test so the defensive `Date` branch is never live.
+
+  **Action:** amend D-025 decision 8 to describe the real mechanism, so a future reader does not "fix" a correct parser toward the wrong framing. **No code change.**
+
+- [ ] **I6. Validation message builder names the column and the reason, never the value** `[model: sonnet]`. Failing test first over the message builder with a fixture value chosen to be unmistakable if echoed. "Current value is not a number I can read" is allowed; echoing the cell contents is not, because these messages are the most likely thing to end up in a Sentry breadcrumb or a screenshot.
+- [ ] **I7. Bucketing, including conservative duplicate detection** `[model: sonnet]`. Failing tests first: rows land in Ready, Needs attention, Possible duplicate, or Skipped, derived at parse time and living only in component state, no table and no persisted draft. A row is Possible duplicate when the target ledger already holds a decrypted holding with the same instrument slug and the same `member_id`, compared after the vault is unlocked, which is the only place both sides exist in plaintext. **Fuzzy instrument matching may only ever suggest a candidate for explicit confirmation, never auto-resolve.** Both agents said this independently.
+- [ ] **I-vis-1. The review screen's collapsible sections are native `<details>`/`<summary>`, which will not match the mint/brass design system** `[model: sonnet]`. **Found 2026-09-11 during I8. Visual only. Blocked on the same wall as D-022/D-023, not on a decision.**
+
+  I8 used native `<details>`/`<summary>` because `src/components/ui/` has no Collapsible or Accordion primitive. That is a real advantage, not laziness: native disclosure carries keyboard and assistive-technology support for free, which is why the screen's axe scan passes with no hand-wired ARIA.
+
+  **But the default disclosure triangle and its focus styling belong to the browser, not to this product's design language.** The mint/brass system (D-016 Slice 5) governs every other surface. So this is a **deferred visual decision, not an avoided one** — it will be obvious the first time a human looks at the screen.
+
+  **Why it is not actionable yet:** nobody can look at it. This is the same tooling wall as D-022 and D-023 — the Chrome extension available to these sessions floors `window.innerWidth` near 630px, an iframe workaround is blocked by the site's own CSP, and CSS `zoom` moves neither `window.innerWidth` nor `matchMedia`. **Pair this with the first real-device pass**; do not build a custom Collapsible speculatively before anyone has seen the screen render.
+
+- [ ] **I-spec-5. Duplicate detection ignores amounts, which may make "Possible duplicate" the default path for top-ups** `[model: sonnet]`. **Found 2026-09-11 during I7. Needs Gaurav's product call. Not blocking; a one-line change either way.**
+
+  **The rule as built:** a row is a Possible duplicate when the target ledger already holds a decrypted holding with the **same instrument and the same member**, regardless of amounts. So a row whose invested and current values differ from the existing holding is still flagged.
+
+  **The reasoning, which is sound as far as it goes:** a top-up, a correction and a genuine double-entry are indistinguishable from amounts alone. Asking beats guessing, consistent with I5's shorthand refusal and I7's never-auto-resolve rule. D-025 and `SPEC.md` §I4 say only "conservative" and never state whether amounts participate, so this was genuinely unspecified rather than overlooked.
+
+  **The cost, which needs a decision rather than more reasoning.** A household topping up SIPs it already holds will see **every one of those rows** land in Possible duplicate. If most real imports are top-ups rather than first-time entry, that bucket becomes the default path and the feature reads as obstructive — the opposite of what a bulk importer is for. The failure is not incorrect, it is annoying, which is the kind that survives review and then gets abandoned in use.
+
+  **RESOLVED 2026-09-11 — Gaurav's call, relayed in-session: keep it as built. Flag on instrument plus member only; amounts do not participate. No code change.**
+
+  The cost recorded above is accepted deliberately, not overlooked: a household topping up existing SIPs will see those rows in Possible duplicate, and that is the intended conservative behaviour. **If real use shows that bucket swallowing most of a typical import, revisit it then** — `bucketOneRow`'s predicate in `src/lib/import-bucketing.ts` is a one-line change, and V1's pass against a real file is the natural place to notice.
+
+  **Related and the same shape:** I-spec-3 (the kind-relevance heuristic). Both are reasonable defaults chosen where the spec was silent, and both want observation rather than argument.
+
+- [ ] **I8. Review screen** `[model: sonnet]`. Failing tests first: four collapsible sections in fixed order with Ready expanded and the rest collapsed with counts visible; one column below `md:` with each row a stacked block and its reason beneath it (a four-column row table at 390px is the failure mode to avoid); `min-w-0` on every bucket section and row block so a long instrument name wraps rather than widening the page; every touch target at least 44px; the primary CTA carries the count and the ledger name and commits the Ready bucket only. `SPEC.md` §I4 and `DATA_MODEL.md` note 16: the review screen is the feature, the upload control is not.
+- [ ] **I9. Rejects download and the leave-screen confirm** `[model: sonnet]`. Failing tests first: a rejects file is produced as a filtered copy of the original template so the fix-and-reupload loop uses the same shape (`SPEC.md` §I8.1); a second upload replaces the review state rather than merging into it (§I8.2); leaving the screen prompts a confirm, because parsed rows are memory-only and leaving discards them, and the copy says so before it happens.
+- [ ] **I10. `POST /api/holdings-batch`** `[model: opus]`. Failing tests first: the array element is `memberScopedCreateSchema` reused unchanged and `.strict()`, so **a body carrying any plaintext field is rejected**; ledger ownership is checked against the session household; **every `memberId` in the array is checked for tenancy, not just the first**; a batch that would exceed `MAX_LEDGER_HOLDINGS` inserts zero rows and returns 409 with `currentCount`, `cap` and `attempted`; a ledger or member outside the household returns 403. All or nothing within one multi-row INSERT, which is the only atomicity available over `neon-http`. Opus: this is a new authenticated write endpoint accepting an array, and per-element authorization is the classic place an array endpoint is weaker than the single-row one it was modelled on.
+**I10 → I11 handoff: four contract details `SPEC.md` does not fix.** Recorded 2026-09-11 during I10, because I11's client has to match them and none is discoverable from the spec alone.
+
+  1. **Success is `201`, not specified.** §I3 gives the success body (`{ status: 'ok', inserted }`) but no status code. `201` was chosen to match `POST /api/holdings`. If I11's client expects `200`, change one of the two rather than adding a tolerant check.
+  2. **The 400/403 error-body keys are not specified either**, so the route deliberately mixes conventions: `409` and success follow the spec's `status` key verbatim, while `400`/`403` use the house `{ error: 'invalid_batch' }` / `{ error: 'forbidden' }` shape. I11 must read both, and a future tidy-up should change the route and the client together.
+  3. **An empty batch is a `400`**, since `.min(1)` follows §I3's stated `1..MAX_LEDGER_HOLDINGS` range. **If I11 wants "commit zero Ready rows" to be a harmless no-op, that is a route change, not a client workaround** — do not have the client suppress the call and pretend it succeeded.
+  4. **Only `POST` is mounted on `/api/holdings-batch`.** Any other verb falls through to a 404, which is intended but is not pinned by a test.
+
+- [ ] **I11. Commit path, seal every row in the browser** `[model: sonnet]`. Failing tests first: each row is sealed by `sealRow` with AAD bound to `{ holdings, householdId, rowId, version }`, exactly as `src/lib/holdings-api.ts` already does, and a holding created through import is field-for-field identical to a hand-entered one for the same inputs. The same cross-path parity assertion shape D-021's A8 established.
+- [ ] **I12. No parsed row reaches persistent storage** `[model: opus]`. Failing test first: after a parse, `localStorage`, `sessionStorage`, and IndexedDB contain no value matching any fixture amount (`SPEC.md` §I6.5). This is the sharpest edge in the feature: the import flow creates the only plaintext lifetime in the app that exists outside a form field. Opus, because the test has to actually prove absence rather than assert a policy.
+- [ ] **I13. Sentry and PostHog scrubbing audit** `[model: opus]`. Failing tests first: **Sentry breadcrumbs, session replay, and console output carry no row-level or holding-level data**, and no PostHog event property carries a row value or an amount. D-025's hard-requirements list names breadcrumbs, replay, and console specifically. Opus: this is an audit of what leaks by default rather than a feature to build, and default-on instrumentation is precisely the thing that captures what nobody chose to send.
+- [ ] **I-leak-1. PostHog `autocapture` is ON in production and has been sending user-chosen labels to a third party** `[model: opus]`. **Found 2026-09-11 during I13. LIVE PRODUCTION ISSUE, not confined to this branch. Needs Gaurav's decision. Deliberately NOT fixed during execution.**
+
+  **The defect.** `src/lib/posthog.ts` calls `posthog.init()` setting `api_host`, `person_profiles` and `capture_pageview: false`, but **never `autocapture`**. posthog-js **1.399.1** defaults it to `true` (verified by reading the vendor bundle: `autocapture:!0`, not inferred from docs). Autocapture records every clicked element's **own text and all its attributes**.
+
+  **Evidence from the live fleet, not from reasoning.** Web Fleet project `486719`, last 90 days: **611 `$autocapture` events tagged `financial-planning`.** Sampled `$el_text` values include **`"Minor's Equity Folio"`, `"Aggressive Growth"`, `"Spouse"`** — user-chosen ledger and member labels, already sent.
+
+  **Why this is worse in this product than it would be elsewhere.** The entire architecture exists so the server cannot read household data: D-014/D-015 ship client-side encryption, the database holds ciphertext and two wrapped keys it cannot open, and `analytics-guard.ts` plus `EventMap` deliberately type `ledger_created`, `ledger_edited` and `compare_strip_viewed` as `Record<string, never>` so labels cannot be sent on purpose. **Autocapture bypasses all of it** — the guard rail was built and a vendor default routes around it.
+
+  **Chunk I widens it.** I8's CTA reads ``Add ${readyCount} holding${s} to ${ledgerName}``. One click emits `text="Add 11 holdings to Retirement corpus"` — a holding count and a ledger name in a single event. Rows themselves are not captured (they are `div`s inside `<details>`, and `summary` is not in posthog's capturable tag list), so the exposure is button and link **labels**, not row data.
+
+  **The fix is one line — `autocapture: false` in `initPostHog()` — and it is deliberately not applied here**, for three reasons: it changes live analytics behaviour on a shipped product; the related fleet-level replay toggle lives outside this repository and covers every app sharing the project; and the **446 `$autocapture` events attributed to a `null` project** in the same query suggest the exposure may not be limited to this app. That is a fleet decision, not a Chunk I decision.
+
+  **When fixing, the pin in `src/lib/import-telemetry-scrubbing.test.ts` must be updated in the same commit** — it currently pins the observed state, so a fix will fail it by design rather than silently.
+
+- [ ] **I-leak-2. `disable_session_recording` is unset, so this app is opted IN client-side** `[model: sonnet]`. **Found 2026-09-11 during I13. Not currently recording. Unfixed.**
+
+  Recording does not happen today only because the **shared** Web Fleet project has replay disabled — a setting outside this repository that covers every app using it. Client-side, this app consents. **PostHog replay masks inputs by default, not text**, and `import-review-screen.tsx` renders member names and rupee amounts as ordinary text nodes. Flipping that fleet toggle for any reason would begin recording them. Setting `disable_session_recording: true` here would make that impossible regardless of the fleet setting.
+
+- [ ] **I-leak-3. Two type-level holes in `EventMap`** `[model: sonnet]`. **Pre-existing and app-wide, predating D-025. Not fed by the import flow. Now pinned by test.**
+
+  `feature_used` is typed `{ feature_name: string; [key: string]: unknown }` — the index signature defeats TypeScript's excess-property check, so it accepts any property including a member name or an amount. `error_shown.message` is free-form `string`, and `holding-form.tsx`, `member-form.tsx` and `OnboardingStep2.tsx` pass caught error text straight into it.
+
+  The import flow feeds neither: `buildValidationMessage` (I6) **structurally cannot** echo a cell value because it has no parameter for one, and `ImportCommitError` carries enum-like codes. Recorded so the holes are not rediscovered as a Chunk I regression.
+
+- [ ] **I14. Import telemetry** `[model: sonnet]`. Failing test: `bulk_import_template_downloaded`, `bulk_import_completed` with `rows_clean` and `rows_rejected`, and `pii_disclosure_shown` with `surface` all fire with **row counts only, never row contents**. All three are already defined in `METRICS_PLAN.md`. Run `scripts/check_events.py`.
+- [ ] **I15. Extend the E11 pin test to Chunk I's class strings** `[model: sonnet]`. Failing test first over the template download button, the upload drop zone, the primary commit CTA, the rejects download button, and the bucket header rows, all named explicitly in `SPEC.md` §I6.1. Same assertion, same file.
+
+### Chunk V: manual verification (mandatory, last, and not substitutable by the suite)
+
+**This project has an established pattern of naming what green tests structurally cannot prove, rather than letting a green suite stand in for it.** Chunk V is that pattern applied here. It is written as its own gate because D-025 itself asked for exactly that, "given this project's history of gates being overridden at merge time (D-022, D-023)".
+
+- [ ] **V1. Excel cross-tool manual pass** `[model: sonnet]`. **What the suite structurally cannot prove:** Vitest exercises the parser against fixture files the generator itself wrote, which is a closed loop. It cannot catch a difference between what this code writes and what real Excel, Google Sheets, or LibreOffice writes on save. **Required:** at least one template downloaded from the running app, opened and filled and saved in each of real Excel, Google Sheets, and LibreOffice, then uploaded and imported. Date cells and lakh-grouped amounts get specific attention, since those are the two traps I5 pins and the two most likely to differ per writer. A generator-written fixture does not satisfy this step.
+- [ ] **V2. Live AI call against the real Anthropic key** `[model: sonnet]`. **What the suite structurally cannot prove:** structured-output behaviour against `claude-sonnet-5` in production cannot be verified locally, the same class as the 2026-08-05 Turnstile lesson where a CSP gap would have broken every new sign-up while existing users signed in normally. **Required, on a live Vercel deploy against a throwaway Neon branch:** one real goal-plan call and one real counsel call, confirming the response validates against the allowlist schema and that a slug outside the enum would invalidate the whole response; then **exhaust the cap and confirm a third call is genuinely blocked with a 409 rather than merely reported as blocked in the UI**; then confirm the reservation row for a deliberately failed call stays consumed. The key is the reused `group-travel-pwa/backend/ANTHROPIC_API_KEY` from gopass, per Gaurav's 2026-09-07 accepted-risk resolution; **wiring it into Vercel is a prerequisite for this step and is currently listed as the blocker on backlog item 2 in `app/CLAUDE.md`.**
+- [ ] **V3. Add the new AI and import screens to the existing 390px backlog check** `[model: sonnet]`. **This step does not close the 390px gap and must not be recorded as closing it.** D-022 and D-023 are both still open on exactly this against the live site, stacked on the same deploy, blocked on tooling: the Chrome extension available to these sessions floors `window.innerWidth` near 630px, an iframe workaround is blocked by the site's own CSP (correctly), and CSS `zoom` moves neither `window.innerWidth` nor `matchMedia`. **What this step does:** add the projection panel, the horizon control, the rate-row grid, the goal step, the consent step, the suggestion card, the cap-exhausted states, the PII disclosure step, the upload zone, and the review screen to `Documentation/plan/A9-390PX-CHECKLIST.md`, so that whenever that check eventually runs on a real device or through Chrome DevTools' device toolbar, these screens are in its matrix. The static `sm:` pins from E11, A10 and I15 reduce the risk of the specific bug class that has shipped twice; they do not substitute for looking at the screen.
+
+## P5. Build sequence
+
+1. **Chunk E**, deterministic projection engine. First, unconditional, ships alone with no AI code in the repository.
+2. **Chunk G**, goal capture into the sealed envelope. Still no AI.
+3. **Chunk R**, cap reservation and circuit breaker. Proven with no provider in the loop. Project-killer chunk.
+4. **Chunk A**, the proxy, `kind: "goal_plan"`. Step A1's copy correction is a shipping blocker for the rest of the chunk.
+5. **Chunk C**, counsel cards on the same proxy.
+6. **Chunk I**, Excel import. Independent of 2 through 5; sequenced here by default, safely parallelisable after Chunk E.
+7. **Chunk V**, manual verification. Last, mandatory, and explicitly not satisfiable by the test suite.
+
+## P6. Addendum — mounting the AI layer, scoped migration application, and a codex-lane pilot (2026-09-10)
+
+**Status:** approved 2026-09-10, in-session. Written after `/council` (`collab-runs/2026-09-10-ai-layer-plan/exchange.json`, one blind round plus one rebuttal round, all four contested claims resolved, no items left open).
+
+**Why this addendum exists.** Chunks R, A, and C are complete and committed (`4943486`, `b803b7c`, `7580f5c`, `3d6c698`). `SPEC.md` §G3, line 329, records a real gap in this plan, not a skipped step: the consent step, suggestion card, cap-exhausted states, and "Review this ledger" button are all built and tested, but nothing mounts them on any screen, and Chunk G's goal step is never wired to `POST /api/ai-suggestions`. This blocks Chunk V's V2, which the plan itself calls mandatory and not substitutable by the test suite.
+
+**Sequencing, per the council decision.** Two independent tracks run in parallel: Track M mounts the AI layer, Track I is the existing, unchanged Chunk I (bulk Excel import). They do not block each other; Chunk I has no dependency on the AI layer per this plan's own P5. Track G, a short gated migration step, runs ahead of Track M's live check only, not ahead of Track M's code, since Track M's own tests run against the in-memory model regardless of migration state. Chunk V's V2 (the live Anthropic call) moves up: it runs as soon as Track M is verified locally and Track G's migrations are live, rather than sitting last. This reflects the council's converged view that Gaurav's own attended time for a live production check is the scarcer resource, not coding capacity, so that window should be scheduled early rather than deferred.
+
+### Track G: scoped migration application
+
+Migrations `0006` and `0007` do not need to travel bundled with `0008`. They add schema that no *deployed* code reads. `0008` (`households.ai_plans_created`) is the one that matters once mounted code starts reading it, so it stays held separately.
+
+**Correction, 2026-09-10 (dev-manager execution):** an earlier version of this paragraph described both migrations as "Chunk R's two tables". That is wrong. `0007` alone is Chunk R (`ai_call_reservations`, `ai_global_usage`). **`0006` is Chunk E's** migration: the `ledger_projection_settings` table plus three `instruments` rate columns (`assumed_annual_rate_pct`, `rate_source`, `assumed_rate_as_of`). G-a's grep pattern below covers only `0007`'s objects and never tests `0006` at all; `0006` was verified separately during execution and is also clean on `main`.
+
+- [x] **G-a. Verify by direct grep that no shipped code path reads any column added by migrations 0006 or 0007, before touching the database** `[model: sonnet]`. This check is the evidence the risk-scoping above rests on, not an assumption. Verify: `grep -rln "ai_call_reservations\|ai_global_usage" src server --include=*.ts --include=*.tsx`
+
+  **Correction, 2026-09-10 (dev-manager execution): the `Verify:` line above only passes when run against `main`, not against the branch it executes from.** "Shipped" here means *deployed*, and production runs `main`. Run from `d024-d025-ai-import`, the grep returns 8 files, because Chunk R's own committed-but-unmerged code is what it catches. The check as intended must be run against the deployed tree, e.g. `git grep -l "ai_call_reservations\|ai_global_usage" origin/main -- 'src/*.ts' 'src/*.tsx' 'server/*.ts'`, which returns empty. Verified this way on 2026-09-10: neither migration's objects appear on `origin/main`, and `server/routes/ai-suggestions.ts` and `server/routes/projection-settings.ts` do not exist there at all.
+- [x] **G-b. Apply migrations 0006 and 0007 to production, verify with `npm run db:probe`** `[model: sonnet]`. Requires Gaurav's own direct go-ahead in the session this runs, not an instruction relayed by a prior checkpoint — this project's standing rule, held correctly twice already this session. Verify: `npm run db:probe`
+
+  **Correction, 2026-09-11 (dev-manager execution, run `20260910-1137`): this step was half-done before it started, and the command it names would have over-applied.** Two findings, both from asking the database rather than the repository:
+
+  1. **`0006` was already applied to production on 2026-09-09.** The live ledger held 7 rows (`0000`–`0006`), and `ledger_projection_settings` plus all three `instruments` rate columns were already present. Only `0007` was actually pending. This is the `_journal.json`-vs-`__drizzle_migrations` distinction this project already learned once on 2026-08-04, hitting again: the repository cannot answer "did it land".
+  2. **`npm run db:migrate` applies *every* pending migration, so running it here would have applied `0008` as well** — the migration G-c explicitly holds and which no consent marker covers. The plan's own `Verify:` line points at `db:probe`, but its `Apply` verb implies `db:migrate`, and that command cannot be scoped to a target revision.
+
+  **What was actually run:** drizzle's own migrator (`drizzle-orm/neon-http/migrator`) against a scratch *copy* of `drizzle/migrations` with `0008` removed from the copy's journal. The repository's migration tree was never modified, and the hash algorithm was proven first by reproducing all 7 already-applied hashes exactly (`sha256` of raw file content, 7/7 matched, 0 unmatched ledger rows). Result: ledger at 8 rows, `ai_call_reservations` and `ai_global_usage` present with all 3 expected indexes, row counts unchanged (households 2, family_members 4, holdings 6, protection 1, household_keys 2) so zero data loss.
+
+  **Standing note for whoever applies `0008`:** do not use a bare `npm run db:migrate` unless every pending migration is intended. There is no `--to <tag>` flag.
+- [x] **G-c. Migration 0008 stays held**, applied only immediately before Chunk A's provider call is unblocked (i.e. right before the Anthropic key is wired into the code). Not a step; a checkpoint gating Track M's later steps.
+
+  **Confirmed held, 2026-09-11:** verified positively rather than by omission — `0008`'s hash is absent from `drizzle.__drizzle_migrations`, and `households.ai_plans_created` does not exist as a column. The `db:probe` "mismatch" line (8 applied vs 9 in journal) is now exactly this one held migration and is the expected state, not a defect.
+
+### Track M: mount the AI layer (new scope; not in the original P1–P5 plan)
+
+**The codex-lane pilot ran and failed, 2026-09-11 (run `20260910-1137`). Result: the lane cannot execute on this machine, and the `codex/*` tags below were not honoured.**
+
+Two dispatches, both through `dev-manager-codex-step.sh` into a script-created worktree under `.worktrees/codex/`, both returning **exit 32 `NO_CHANGES` with zero files touched**:
+
+| Step | Model | Effort | Result |
+|---|---|---|---|
+| M1 | `gpt-5.6-terra` | medium | wrote nothing; reported a read-only sandbox |
+| M2 | `gpt-5.6-sol` | high | wrote nothing; reported all shell execution rejected |
+
+**The diagnosis is environmental, not configuration, model or quota.** No auth, 401, 429 or quota language appeared in either run. `--permission edit` was passed correctly and the wrapper did invoke `codex exec -s workspace-write -C <worktree>`; the target was a genuine secondary worktree, never the main tree. The decisive symptom is from the Sol run: Codex reported that **even a read-only shell command (`Get-Location`) was rejected before execution**. That is stronger than "the sandbox blocks writes" — the shell/subprocess layer itself fails to launch. This matches the known Windows defect `codex-delegate.sh`'s own header documents (`CreateProcessAsUserW failed`, spawning subprocesses under the sandboxed token on this OS), which that header already warns should be met by restructuring the call rather than retrying.
+
+**Consequences, decided in-session:**
+
+- **M1 and M2 were built on `sonnet` instead, and independently verified.** Both are committed.
+- **M4 is downgraded from `codex/terra/medium` to `sonnet` for this run**, since terra is the exact configuration that already failed at M1.
+- **The spike question M1 was created to answer — whether the codex lane honours `SPEC.md` §G6.1's `md:` rule unbidden — remains unanswered.** No Codex process ever read a file, so the pilot produced no evidence about output quality in either direction. Anyone re-running this pilot starts from zero, not from a negative result.
+- **Do not re-attempt the edit lane on this machine until the sandbox invocation is fixed.** A third model would burn quota to reconfirm the same environment defect.
+
+The `codex/*` tags are left in place below as the record of what was planned and consented to, rather than rewritten to match what happened.
+
+- [ ] **M1. Failing test: mount the cap-exhausted states on the ledger view** `[model: codex/terra/medium]`. The lowest-stakes of the four unmounted pieces: no live provider dependency, no consent copy. This is the council's proposed validation spike — after it lands, check whether `SPEC.md` §G6.1's `md:` breakpoint rule was followed without being told a second time. That result decides whether M2 and M4 stay on the codex lane unsupervised or move to closer review. Files: the ledger view page, `ai-cap-notice.tsx`. Verify: `npm test -- ai-cap-notice-mount`
+- [ ] **M2. Wire Chunk G's goal step to `POST /api/ai-suggestions`** `[model: codex/sol/high]`. Crosses two already-built chunks and carries real request/loading/error-state content, so the higher codex tier despite being otherwise eligible. Verify: `npm test -- goal-step-ai-wiring`
+- [ ] **M3. Mount the suggestion card and consent step in the ledger view's compare-strip position** `[model: sonnet]`. Held off the codex lane pending M1's spike result. This is the highest-visibility piece and the one most likely to carry the `sm:`/390px trap into a real screen (two prior shipped bugs from exactly this class); kept at sonnet with an explicit pointer to `SPEC.md` §G6.1 until M1 proves the pattern holds. Verify: `npm test -- suggestion-card-mount`
+- [ ] **M3c. Wire Apply to create a new ledger seeded with the suggested allocation** `[model: opus]`. **Added 2026-09-11 during M3's execution. Required before this branch merges.**
+
+  **RESOLVED 2026-09-11 — Gaurav's call, relayed via the session coordinator, not a marker-backed decision.** **Apply creates a new ledger pre-filled with the suggested allocation. "Current" is never touched.**
+
+  **Why this resolution is the cheap one:** it reuses D-016's multi-ledger mechanism, already built, shipped and live since 2026-08-25, rather than inventing a write path. The 4-ledger cap, ledger-name encryption and the existing sealed-write path all apply for free. Crucially **it mutates no existing holding**, which removes the encrypted-boundary risk that made improvising this unacceptable in the first place.
+
+  **Required behaviour:** Apply routes through the existing ledger-creation path, seeded with the suggested allocation instead of blank. **If the household is already at 4 ledgers, Apply surfaces the cap exactly as the manual "+ New ledger" flow does — it must not fail silently.**
+
+  **UNBLOCKED 2026-09-11**: marker `consent-m3c-apply-ledger` (`apply-creates-new-ledger-v1`) verified on disk. The provenance caution below is satisfied.
+
+  **STILL BLOCKED ON A SECOND, DIFFERENT QUESTION, found 2026-09-11 while scoping the build: which member owns the holdings in the new ledger?**
+
+  Three facts collide, and no artifact resolves them:
+  - An AI suggestion is `{ slug, weightPct }` — **no amounts and no member**.
+  - **Every holding requires a `memberId`**, and `POST /api/holdings-batch` (I10) validates every one of them for tenancy.
+  - A household has several members, and the source ledger's holdings are split across them.
+
+  **The amounts half is solved and precedented.** `ai-suggestion-card.tsx` already splits the ledger's own decrypted total across the suggested weights through Chunk E's engine at `horizonYears: 0`, so the rupee figures are computed locally and never come from the model. The same approach applies here.
+
+  **The member half has no defensible default**, and the options produce materially different artifacts:
+  - assign every suggested holding to one member — but this product has no "primary member" concept, and picking one silently attributes the rest of the household's money to that person, the same class of defect as H1b's sheet-mapping bug;
+  - distribute proportionally to each member's existing share — but the suggested slugs need not correspond to anything they currently hold;
+  - create the ledger with the goal recorded and **no holdings**, leaving the user to populate it, which is coherent but makes "pre-filled with the suggested allocation" untrue.
+
+  `SPEC.md` §G4 says only "Apply and Dismiss are the only actions". Nothing anywhere states what the created ledger contains.
+
+  **RESOLVED 2026-09-11 — Gaurav's call, relayed in-session: the new ledger is created EMPTY OF HOLDINGS**, with the goal/suggestion recorded as context, exactly like building any new ledger from scratch. The user populates it by hand afterwards. **Member attribution is never guessed**, and this sidesteps the amounts question entirely, since there is nothing to split into holdings.
+
+  **This changes what "pre-filled" means, and the copy must not lie about it.** The earlier phrasing of this item said Apply creates a ledger "pre-filled with the suggested allocation". Under this resolution it does not: it creates an **empty** ledger carrying the suggestion as context. Any copy on or after the Apply action must say so plainly, or a user will tap Apply, open the new ledger, find nothing in it, and reasonably conclude the feature is broken. **That is the specific failure this resolution introduces, and it is a copy problem, not a logic one.**
+
+  **Provenance caution, to be honoured when this is built:** this decision arrived relayed rather than as a marker file Gaurav wrote himself. That is fine for a design choice that authorizes nothing destructive, but the implementation touches the sealed holdings/ledger write path, so **confirm it directly with Gaurav before building, the same standard applied to the migration and SheetJS markers.** Do not treat this paragraph as that confirmation.
+
+  **Prior state, for context.** Before this call, `onApply` and `onDismiss` were byte-identical (both `setActiveSuggestion(null)`), so the card offered two actions with one consequence. That contradicted `DECISIONS_LOG.md` D-024 decision 3 ("the AI proposes an edit to Current as a card and nothing changes until Apply is tapped"), which is only coherent if Apply changes something, while `SPEC.md` §G4 constrained the surface but never the effect. No apply/commit endpoint existed, and M2's goal-plan result screen dead-ended the same way in a "Done" button.
+
+  **Note the interaction with M4b below:** once Apply creates a ledger, a user denied the chance to tap Apply loses both the review they spent and the ledger it would have produced.
+
+- [ ] **M4b. Stop the cap notice from swallowing the result the user just paid for** `[model: sonnet]`. **Added 2026-09-11 during M4's execution. Required before this branch merges.**
+
+  **The defect:** when a successful review is itself the one that exhausts that ledger's edits cap, folding the response's fresh `usage` back into the host's state re-renders `ReviewLedgerAction` with `counselCapState` now tripped. That component's early return renders `AiCapNotice` **instead of** its `Dialog`, with no exception for a dialog currently showing a result. The just-fetched suggestion is swapped out from under the user before they can read, Apply or Dismiss it.
+
+  **Why it matters more than a cosmetic glitch:** the edits cap is 2 per ledger. This fires precisely on the *second and final* review, so the user spends a scarce, capped, paid-for call and receives nothing. It is the worst instance of the bug rather than an edge of it.
+
+  **Why it was not fixed in M4:** `ReviewLedgerAction`'s early-return contract is already built and pinned by `review-ledger-action.test.tsx`'s "cap-exhausted soft register" block, and was out of M4's stated scope. Working around it host-side in `Portfolio.tsx` is not currently possible either: there is no host-visible "dialog closed" signal to defer the usage update on — `onApply` is the only close-adjacent callback and Dismiss has none at all. **The real behaviour is pinned** by the last test in `src/pages/review-ledger-mount.test.tsx`, which asserts what actually happens rather than something prettier.
+
+  **The likely fix:** give `ReviewLedgerAction` a host-visible close callback, and/or let it hold an open result dialog until the user dismisses it before honouring a newly-tripped cap. Verify: `npm test -- review-ledger-mount review-ledger-action`
+
+  **The state after M3:** `onApply` and `onDismiss` are byte-identical — both call `setActiveSuggestion(null)`. The card offers two actions with one consequence. A user taps Apply, the card disappears, and their ledger is unchanged.
+
+  **Why this is a contradiction rather than a missing detail.** `DECISIONS_LOG.md` D-024 decision 3 reads: "the AI proposes an edit to Current as a card and nothing changes until Apply is tapped." That sentence is only coherent if Apply changes something. `SPEC.md` §G4 constrains the *surface* ("Apply and Dismiss are the only actions") but never the *effect*, so the two artifacts together imply a write that is specified nowhere.
+
+  **Corroboration that this is a real gap and not an M3 oversight:** there is no apply/commit endpoint anywhere — `src/lib/ai-suggestions-api.ts` carries only `getAiSuggestionsUsage` and `postGoalPlanSuggestion`. And M2's already-shipped goal-plan result screen in `new-ledger-modal.tsx` ends the same way, in a "Done" button that writes nothing. Both AI paths dead-end identically.
+
+  **The decision needed, before code:** does Apply rewrite the target ledger's allocations in place, create a new ledger seeded from the suggestion, or open a confirm step first? And what server route backs it, given a write derived from model output touches the encrypted holdings boundary and therefore needs the same sealing path as every other holdings write. **No implementation was invented at M3 deliberately** — improvising how AI output rewrites real household holdings is exactly the class of decision this project does not let an agent make.
+
+  **Interim honesty option, if the decision is deferred past merge:** render Apply disabled, or do not render it at all, rather than shipping a live control that silently does nothing.
+- [ ] **M3b. Thread real usage counters into `AiConsentStep`** `[model: sonnet]`. **Added 2026-09-11 during M2's execution; required before this branch merges, not blocking Track M or Track I from continuing.**
+
+  **The defect:** `AiConsentStep` requires a live `remaining` count, but the only source of one is `GET /api/ai-suggestions`, which needs an existing ledger id — and a goal ledger does not exist yet at the moment the goal step asks for consent. M2 resolved this with an **optional** `usage` prop on `NewLedgerModal`. No real caller passes it today, so in production the consent step renders **"0 remaining" while the feature still works**.
+
+  **Why it matters more than it looks:** this is user-facing copy stating something false on a privacy-consent screen, which is the one surface in this feature where an inaccurate number undermines the point of the screen. It is contained — the server's own `cap_reached` response is still honoured, so nothing can over-spend, and the wrongness is cosmetic rather than a cap bypass — but it must not ship.
+
+  **The work:** pass real usage down from `ledger-tab-strip.tsx` / `Portfolio.tsx` into `NewLedgerModal`, and decide what the goal path should display before any ledger exists (the household's plans counter is the right source; `editsUsed`/`editsCap` are per-ledger and do not apply). Verify: `npm test -- goal-step-ai-wiring`
+- [ ] **M4. Mount "Review this ledger" and wire it to the counsel path** `[model: codex/terra/medium]` — **downgraded to `sonnet` for run `20260910-1137`**, see the codex-lane result above. Same shape and stakes as M1; dispatch once M1's spike result is read. Verify: `npm test -- review-ledger-mount`
+
+  **M4 also closes M1's deliberate gap.** `SPEC.md` §G4 requires the cap notice to replace the action's own affordance **in place**. M1 mounted the notice while the "Review this ledger" button did not yet exist, so on commit `b9216eb` the notice renders standing in for nothing. M4 must make the button and the notice mutually exclusive in the same slot. **This branch must not merge with both, or neither, rendering together.**
+- [ ] **M5. Re-run the full G3 pipeline suite plus an E11-style class-string pin against every newly mounted class** `[model: sonnet]`. Re-verification step, not trusted from worker self-report, matching this project's standing practice. Verify: `npm run typecheck && npm test`
+
+### Track V, reordered
+
+- **V2 moves up**, runs as soon as Track M is locally verified and Track G's migrations are live, not last. Still needs the Anthropic key switched from unwired to wired in code, which stays Gaurav's own direct action, same as the migration gate.
+- **V1 and V3 are unchanged** from P4 and have no dependency on Track M; V1 can run whenever Track I is ready for a cross-tool pass.
+
+### Chunk I, unchanged, two re-tag candidates flagged for Gaurav's call
+
+Every I-step keeps its original tag from P4 except the two flagged here. Neither has been changed; both are flagged for a decision.
+
+- **I1, I2 stay `opus`.** Both touch `vite.config.ts` and precache configuration and add a new dependency (SheetJS) — a new dependency is one of model-router's six codex-ineligibility conditions on its own, so these are not codex candidates regardless of how well-specified they are.
+- **I5 (the two India-specific parsing traps) is flagged as a candidate for `codex/sol/high` instead of `opus`.** It is unusually well-specified for a correctness-critical step: the plan already names the exact test cases (date serial under IST, lakh-grouping, shorthand rejection), touches no auth/secrets/deps/config, and has a single-command verify. It is also exactly the kind of step where a wrong implementation looks right in casual testing, which is why it was opus-tagged originally. Left as `opus` here; re-tag only on Gaurav's explicit call.
+- **I10, I12, I13 stay `opus`.** A new authenticated array endpoint, an absence-of-persistence proof, and a telemetry-scrubbing audit are judgment-heavy, not mechanical, and none is a good fit for the codex lane's "no design decision left" eligibility bar.
+
+Each chunk is one commit, vertical: behaviour plus tests plus analytics events where applicable. Same chunk contract as both plans above.
+
+### Standing repository items found during P6 execution (NOT scoped to `d024-d025-ai-import`, and not on its pre-merge list)
+
+These predate this branch and must not gate its merge. They are recorded here only because this is where they were found; **their proper home is `app/CLAUDE.md`'s "Known gaps" list**, which this execution did not edit by design.
+
+- **`npm run lint` has never run since the ESLint 9 upgrade. Nothing in this repository is linted.** Reproduced 2026-09-11: ESLint **9.39.4** is installed, the script is a bare `eslint .`, and **no `eslint.config.(js|mjs|cjs)` exists in `app/`**. ESLint 9 dropped `.eslintrc.*` support, so the command exits with "couldn't find an eslint.config.js file".
+
+  **Blast radius, checked rather than assumed — and smaller than it first appeared.** `scripts/predeploy-check.sh` does **not** invoke lint, typecheck, or the test suite (its only `lint`/`test` matches are a comment and a `test.invalid` payload string). So no deploy gate was silently swallowing a failure: lint was never wired into the deploy path at all. This is a **dormant** quality gate, not a **bypassed** one. The distinction matters, because "a gate has been failing unnoticed across an encryption cycle, a redesign and three promotions" would be a far more serious claim, and it is not the true one.
+
+  **Fix:** add a flat `eslint.config.js`. Expect a backlog of findings on first run, since no file in this repository has ever been linted under the current toolchain.
+
+- **One unidentified intermittent test failure, observed once at commit `785dac7` (I6).** The first full-suite run at that tree reported **1 failed / 1845 passed**; **six** subsequent runs were clean at **1846**. The worker's own run had also reported 1846/0, so the discrepancy is real and was caught only by re-running independently.
+
+  **The failing test's identity is unrecoverable.** That run used `--reporter=dot | tail -8`, which preserves the counts and discards the failure block. That was a dev-manager error, not a worker one; later steps capture full output to a file and tail the summary from it, so a future failure leaves a name.
+
+  **Not attributable to I6.** That step swapped three string literals for a function call and added a pure-function test file, introducing no async, timing or shared state. The likelier mechanism is **cumulative suite load** — the tree grew 113 → 122 files this session, several of them `@testing-library` files using `findBy*` against a 5s default timeout, and the failing run happened while builds and `npm install` were running alongside the suite.
+
+  **Do not read the six clean runs as a clearance.** They establish only that the failure is not deterministic. They do not establish a rate, and every one was on a single idle machine with a warm cache — conditions plausibly *incapable* of reproducing a load-sensitive timeout. **Not reproduced is not verified stable**, and CI is slower and more contended than the dev box.
+
+  **IDENTIFIED 2026-09-11 during I14, and my earlier attribution above was WRONG.** I guessed timeout-bound `findBy*` assertions in the *component* tests, because that is where the suite had grown. The load hypothesis was right; the location was not.
+
+  **The real mechanism: a mock-hoisting race across the server integration tests.** The observed failure is `No "households" export is defined on the "../drizzle/schema.js" mock`, in a **different `server/*.integration.test.ts` file each time**, with **zero assertion failures**, and **each failing file passes cleanly in isolation**. That signature is a shared-module race, not a logic defect.
+
+  **Eight files use the same pattern**, each calling `vi.mock('../drizzle/schema.js', async (importOriginal) => ...)`: `account-deletion`, `ai-suggestions`, `family-members`, `holdings`, `holdings-batch`, `ledgers`, `projection-settings`, `protection`. **Step I10 added `holdings-batch`, taking the surface from seven files to eight** — Track I did not cause this (it was first seen at I6, when there were seven) but did widen it.
+
+  **The rate is unknown and environment-dependent, which is the important part.** Observed once in seven runs during I6; **twice in three** during I14's own pass, on a machine doing other work; and **zero in two** on my own quiet-machine runs immediately afterwards. Rates that inconsistent point at contention rather than a fixed probability. **CI is the slow, contended, unwatched environment**, so it is where this will bite hardest.
+
+  **Deliberately NOT fixed, and the reason matters.** The obvious fix is a vitest execution-model change (pool, isolation or sequencing), not an edit to eight files, since the mock factories are already per-file and what is shared is the module registry under parallel workers. Changing how all 131 files execute, at the end of a long session, to fix a flake **I could not reproduce on demand and therefore could not verify a fix against**, would be worse than a precise description. There is also a subtler risk: this flake is currently the only signal that these eight files interact at all. Suppressing it by serialising them would leave whatever ordering assumption sits underneath intact, and trade a flaky honest suite for a green silent one.
+
+  **A red suite with zero real assertion failures is the thing that trains people to re-run until green**, which is how a genuine failure eventually gets waved through. Worth fixing deliberately, by someone who can reproduce it under load.
+
+### Track H: the import host (new scope, 2026-09-11, not in P1-P6)
+
+Chunk I finished complete-as-specified and **unusable**: every piece built and verified, no page assembling them. The plan never made the host a numbered step, so no step built it, and each step correctly left a seam rather than inventing scope. Track H closes that.
+
+- [x] **H1. Read an uploaded workbook into `RawImportRow[]`** `[model: opus]`. The missing producer. Opus for the sheet-to-member trap, not for the file handling.
+- [x] **H2. Upload drop zone** `[model: sonnet]`. Drag plus file button, one file at a time, `.xlsx` only (`SPEC.md` §I4). Shipped `563601a`.
+- [x] **H3. The host surface**, assembling disclosure → template download → upload → parse → bucket → review → commit `[model: sonnet]`. Shipped `b443119`.
+- [x] **H4. Entry point and the three dormant seams** `[model: sonnet]`: template download wiring (I4), rejects download wiring (I9), telemetry call sites (I14). **Entry point is specified, not a choice** — `SPEC.md` §I4: "a secondary action on the ledger's holdings view, next to the existing add affordance, naming the active ledger. Not in the FAB, not in the nav." **Completed 2026-09-12**, after the 2026-09-11 rate-limit interruption whose WIP was recovered from the stash. Entry point is a secondary `variant="outline"` button rendered in BOTH holdings states (beside "Record your first holding" when empty, and in a right-aligned row above the grouped list when populated), naming the active ledger; the FAB is untouched, per the spec's exclusion. Mount pinned by `src/pages/import-entry-mount.test.tsx`.
+- [x] **H5. Pin coverage for the drop zone and the download trigger** `[model: sonnet]`, the two `SPEC.md` §I6.1 surfaces I15 could not cover because they did not exist. Drop zone: `src/components/import-drop-zone.test.tsx` (9). Download trigger: `src/lib/import-host-workbook-download.test.ts` (5), covering `triggerBlobDownload`'s revoke-in-`finally` discipline.
+
+- [x] **H-gap-2. The "Possible duplicate" bucket is a dead end, so a top-up cannot be imported at all** `[model: opus]`. **Found 2026-09-11 while scoping H3. NEEDS A PRODUCT DECISION BEFORE H3 BUILDS THE HOST. The most consequential defect found in this cycle. BUILT as option (a) in `b443119`; the copy still wants Gaurav's eye.**
+
+  **Resolved as option (a)**: a per-row "Add anyway" on Possible duplicate rows, promoting the row into the commit set and firing `bulk_import_duplicate_overridden`. Promotion is held as a `Set` of row keys in `import-review-screen.tsx`, so the row stays visible under Possible duplicate marked "Added" with an "Undo", rather than jumping sections. Top-ups are importable again.
+
+  **A follow-on defect this created was caught and closed in H4, and is worth recording because it is the same failure mode inverted.** As first built, a promoted row still counted toward `rejectedCount`, so it was simultaneously being committed AND shipped in the "fix these" rejects workbook. Re-uploading that file would have added the row a second time — **a real duplicate manufactured by the anti-duplicate feature itself.** Closed by `applyPromotions` in `import-host-sheet.tsx`, which rebuilds the buckets so the count, the workbook and the commit all derive from one promotion set. The fix holds only because `selectRejectedRows` (`import-rejects.ts:80`) selects by **array membership**; had it keyed off the row's own `bucket` field, the exclusion would have silently failed, because `applyPromotions` moves rows between arrays without rewriting `bucket`. Pinned by `import-host-sheet.test.tsx:471` and `:484`.
+
+  **Still open for Gaurav, and NOT decided during execution:** the option-(a) vs option-(b) call was implemented rather than ratified, and the button copy ("Add anyway" / "Added" / "Undo") is a product-voice choice that has not been reviewed.
+
+  **The trap, in four facts that are each individually reasonable:**
+  1. The review screen's primary CTA commits `buckets.ready` **only** (`SPEC.md` §I4, "Primary CTA"; `import-review-screen.tsx:162`).
+  2. A row is Possible duplicate when the target ledger already holds the same instrument for the same member, **regardless of amount** — I-spec-5, confirmed deliberate.
+  3. The stated repair path is "download the rejects, fix in Excel, re-upload" (`SPEC.md` §I4, "Row rows").
+  4. **No "Add anyway" affordance exists** anywhere — not in I8, not in `SPEC.md` §I4's panel table, nowhere in the codebase.
+
+  **Why those four combine into a dead end.** A duplicate row is not *broken*, so there is nothing to fix in Excel. Re-uploading the identical row re-runs the identical check against the identical ledger and produces the identical verdict. **The fix loop cannot terminate**, because the flag describes the ledger's existing contents, not a defect in the row.
+
+  **The consequence is the feature's main repeat use case.** Per I-spec-5, **every** top-up to an instrument a member already holds lands in this bucket. A household adding to SIPs it already owns — the most likely reason to bulk-import a second time — has no path through the feature at all. First-time import works; the second one silently cannot.
+
+  **`METRICS_PLAN.md` anticipated exactly this and nothing else did.** Line 325 defines `bulk_import_duplicate_overridden`, *"User taps 'Add anyway' on a Possible duplicate row."* The affordance was intended. It is specified **only** in the metrics table, so no plan step built it — and the event that would have exposed the gap is one of the seven in H-gap-1 that were never implemented.
+
+  **Three independent gaps had to line up for this to stay invisible:** the plan's I14 named three events where `METRICS_PLAN.md` specifies ten; `check_events.py` structurally cannot compare spec to registry; and `SPEC.md` §I4's panel table never mentions an override.
+
+  **The decision, which was NOT taken during execution:** either (a) add an "Add anyway" per-row affordance on Possible duplicate rows, promoting a row into the commit set and firing `bulk_import_duplicate_overridden` — which is what the metrics plan implies and what makes top-ups importable; or (b) accept the bucket as terminal and say so in the copy, so a user is told the row will not be imported and why, rather than being sent round a loop that cannot close. **(b) is defensible only if top-ups are genuinely out of scope for v1**, which contradicts `METRICS_PLAN.md` criterion 4 (line 175), measuring "bulk import for a **subsequent** addition".
+
+  Inventing the affordance during execution was declined: it changes what the commit set means, and the copy in either direction is a product voice decision.
+
+- [x] **H-gap-1. Seven of D-025's ten analytics events were never implemented, and no check could have caught it** `[model: sonnet]`. **Found 2026-09-11 during H2. Fold into H3/H4, which own the surfaces that fire them. CLOSED 2026-09-12.**
+
+  **Verified by comparison, not by assertion**, since the section below is explicit that no automated check can do this. `METRICS_PLAN.md` specifies 10 events for this feature; the `EventMap` registry in `src/lib/analytics.ts` now declares exactly those 10, and each has a real non-test `track()` call site: 6 fire from `import-host-sheet.tsx` (`started`, `file_rejected`, `review_shown`, `rejects_downloaded`, `failed`, plus `abandoned`), `duplicate_overridden` from `import-review-screen.tsx`, `pii_disclosure_shown` from `pii-disclosure-step.tsx`, `completed` from `import-commit.ts`, and `template_downloaded` from `import-template.ts`. The funnel `METRICS_PLAN.md` line 336 defines (`started` → `template_downloaded` → `review_shown` → `completed`) is therefore whole, and line 337's `bulk_import_abandoned.stage` breakdown now resolves.
+
+  **One deliberate, documented gap remains, and it is a spec decision rather than an execution one.** `ImportDropZone` distinguishes two refusals, `wrong_type` and `multiple_files`. `METRICS_PLAN.md`'s `bulk_import_file_rejected` enum has no value meaning "picked several files at once", so `import-host-sheet.tsx`'s `handleFileRejected` fires **no event** for that case rather than misfiling it under a value that would misdescribe it. Adding a `multiple_files` enum value is a `METRICS_PLAN.md` change and was not made unilaterally.
+
+  **`METRICS_PLAN.md` specifies ten events for this feature. Three exist**: `pii_disclosure_shown` (I4), `bulk_import_template_downloaded` and `bulk_import_completed` (I14). **Seven do not** (lines 320-326): `bulk_import_started`, `bulk_import_file_rejected` (`reason`: wrong_type / unreadable / wrong_shape / empty / too_many_rows), `bulk_import_review_shown` (`rows_ready`, `rows_attention`, `rows_duplicate`, `rows_skipped`), `bulk_import_rejects_downloaded` (`rows_rejected`), `bulk_import_abandoned` (`stage`: disclosure / upload / review), `bulk_import_duplicate_overridden`, `bulk_import_failed` (`reason`: batch_error / ledger_full / forbidden).
+
+  **This was not I14's error.** The plan's I14 step names exactly three events and says "all three are already defined in `METRICS_PLAN.md`" — which is true. `METRICS_PLAN.md` line 314 lists three *reused* names; lines 320-326 are a separate table of *new* names the plan step never references. **I14 implemented its step faithfully; the plan step under-specifies the spec.**
+
+  **The cost is the measurement the feature is judged by.** `METRICS_PLAN.md` line 336 defines an import funnel — `started` → `template_downloaded` → `review_shown` → `completed`. Two of its four stages do not exist. Line 337's "where imports die" breakdown reads `bulk_import_abandoned.stage`, which does not exist either. **The feature currently cannot answer "do people finish an import, and if not, where do they stop?"**
+
+  **No automated check could have caught this, and that is worth understanding rather than fixing.** `scripts/check_events.py` was read directly: it flags a `track()` call whose name is unregistered, and flags raw PostHog SDK calls. That is all. There is **no registered-but-never-fired check**, and **the script never reads `METRICS_PLAN.md`**. So all three of these pass silently: an event specified but never registered (these seven), an event registered but never fired (I14's two), and by extension any drift between the spec and the registry.
+
+  `app/CLAUDE.md` states the convention this depends on — *"Events: `METRICS_PLAN.md` ↔ analytics registry, same commit"* — and it is **human discipline, enforced by nothing**. Do not build a `METRICS_PLAN.md` parser in response; spec-to-registry completeness is a review step, and the useful change is knowing that "`check_events.py` passed" says nothing about completeness.
+
+- [ ] **H-risk-1. Member ORDER is an unenforceable contract in the import round trip** `[model: opus]`. **Found 2026-09-11 during H1. Needs a decision BEFORE H2/H3 wire a member list in.**
+
+  **The mechanism.** `sanitizeSheetName` (I3) truncates at 31 characters and disambiguates collisions with ` (2)`, ` (3)` **by position in the member list**. H1 therefore rebuilds the sheet-to-member map by recomputing that forward mapping over the members in order — the only approach that works, since the transform is not invertible.
+
+  **The gap: the file records no member order.** Nothing in the workbook says which member owned which tab. Identity is *recomputed*, not *recorded*. If any caller ever passes a differently-ordered member list than the template was built from, two members whose names collide after truncation are **silently swapped**, and one person's holdings file against the other. No error, entirely plausible amounts, nothing to notice.
+
+  **Why it is safe today and still worth closing.** There is one member source (`GET /api/family-members`) with one stable order, so the contract holds in practice. But it is held by convention across a file that leaves the app, gets edited in Excel, and comes back — possibly days later, possibly after a member was added, renamed or removed. **A member added between download and upload shifts the collision disambiguation.**
+
+  **The fix belongs in I3, not here:** have the template *record* identity rather than have the reader recompute it — a member id in a hidden cell (the template already has a hidden slug column, so the pattern exists) or a workbook custom property. Then H1 reads identity instead of deriving it, and order stops mattering.
+
+  **Decide before H2/H3**, because those wire the member list in and would bake the recomputation in as the permanent contract.
+
+## P6. Model tally
+
+Applied with the `model-router` skill against the finished plan.
+
+**50 steps: 33 sonnet, 17 opus, 0 fable.** No fallback tags; every step fits a bucket cleanly. No fable steps, because both features' strategy and design artifacts (`DECISIONS_LOG.md`, `SPEC.md`, `DATA_MODEL.md`, `COPY_DECK.md`, `METRICS_PLAN.md`) were finished before this plan was written, and no step here produces another strategy artifact.
+
+Per chunk: E 8 sonnet / 3 opus, G 1 / 1, R 2 / 3, A 7 / 3, C 3 / 1, I 9 / 6, V 3 / 0.
+
+The 17 opus steps cluster in exactly three places, which is the useful signal in this tally:
+
+| Cluster | Steps | Why |
+|---|---|---|
+| Cap and cost control | R2, R3, R4, C2 | Concurrency-shaped security logic with no precedent in this repo, over a driver with no transactions. The failure modes are invisible to single-call tests |
+| Encryption and leak boundary | G1, A5, I1, I2, I12, I13 | Every one of these either widens the sealed payload, or proves the absence of a leak. This project has already shipped one PWA offline-scope defect and corrected one overstated privacy claim |
+| Correctness the user audits or the schema enforces | E3, E4, A3, A4, I5, I10, E11 | Rate precedence, compounding maths, route ordering, the output allowlist, the date and lakh traps, per-element authorization, and the pin test's own coverage boundary. Each has a wrong implementation that produces plausible output |
+
+## P7. Gate review (erd-gate discipline applied directly to this plan, no separate erd-template.md, same precedent as both plans above)
+
+Run 2026-09-07 against P1 to P6.
+
+| Check | Result | Location | Note |
+|---|---|---|---|
+| 1. Structural decisions stated and resolved | PASS | P2 | Two, both resolved by Gaurav 2026-09-07, both tagged and neither left as an open hypothesis |
+| 2. No load-bearing unresolved hypothesis on the critical path | PASS | P2, Chunk R | The project-killer is named explicitly as Chunk R rather than assumed to be the largest chunk |
+| 3. Confidence tags where a claim was read from live code | PASS | P2.1 | `[P]` on the envelope claim, read from `DATA_MODEL.md` Stage 0 and `src/lib/ledgers-api.ts` |
+| 4. Chunk boundary contracts complete | PASS | All chunks | Owns / reads-but-does-not-own / endpoints stated per chunk; the E-to-I independence is stated with its two shared files named |
+| 5. Schema to source coverage | PASS | P3 | Two additive migrations, both traced to a `DATA_MODEL.md` Stage 0 table; D-025's absence of a delta is stated as an output, not an omission |
+| 6. Migration safety | PASS | P3, E1, R1 | Both additive, both verified by `npm run db:probe`, never from the journal file |
+| 7. Out of scope stated | PASS | P1 table, Out of Plan | Nine items named, each either already decided elsewhere or explicitly deferred |
+| 8. Auth and authz per endpoint | PASS | E5, R5, A3, C1, I10 | Every new route states its auth position and its ownership check; I10 states per-element tenancy specifically |
+| 9. Access pattern and index hygiene | Advisory | R1 | The UNIQUE on `(household_id, idempotency_key)` is the only new index and it is load-bearing, not incidental |
+| 10. Verification gaps named rather than papered over | PASS | Chunk V | Three, each stating what the suite structurally cannot prove; V3 explicitly does not claim to close the standing 390px gap |
+
+**Gate not marked passed. This review is the plan's own self-check, and it is not a Blueprint gate. Gaurav has not reviewed this plan.**
+
+## Out of Plan (D-024 + D-025)
+
+- **Dropping the plaintext `goals` table.** It stays in the schema unused, exactly as `analytics_events` does. Dropping it is its own migration and its own decision, and folding one into this feature would mix unrelated work.
+- **Excel export.** D-025 decision 1: import only in v1, and export is a separate encryption-boundary decision, not a side effect of import. The template shape is designed so a future export needs two hidden columns added, not a redesign.
+- **Prompt caching, the Files API, queues, and retries at the Anthropic layer.** All four settled 2026-09-07 in the same direction and for the same reason. A failed call fails to the user, who may ask again.
+- **A dedicated Anthropic API key.** Gaurav resolved to reuse the group-travel-pwa key as an accepted risk. The revisit trigger is on record in D-024 and is not this plan's to pull.
+- **Tune and edit flow, multiple goals per ledger, step-up SIP, tax-adjusted returns, Monte Carlo, streaming responses, per-user caps.** D-024 decision 8.
+- **Per-instrument rate overrides.** Per asset class only. Not deferred with a plan, simply not offered.
+- **Inline row editing on the import review screen.** The fix loop is download the rejects, fix in Excel, reupload.
+- **Clipboard import, foreign CSVs, bank statements, any hosted parsing API.** All rejected in D-025.
+- **Closing the standing 390px verification gap.** V3 adds these screens to the existing checklist and explicitly does not close D-022 or D-023.
+
+None of the above is scope creep into this plan. Each is either already decided elsewhere, explicitly deferred by Gaurav, or blocked on tooling that no step here can reach.
