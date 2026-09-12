@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -295,6 +295,93 @@ describe('Portfolio — Apply on an AI suggestion creates a new, empty ledger (M
     // The suggestion is not silently lost: the card is back on the page.
     expect(await screen.findByTestId('ai-suggestion-allocations')).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'AI review, 11 Sep 2026' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Portfolio — Apply respects the offline write guard (SPEC.md §7)', () => {
+  let onLineSpy: ReturnType<typeof vi.spyOn> | null = null
+
+  beforeEach(() => {
+    listFamilyMembers.mockReset()
+    listInstruments.mockReset()
+    listHoldings.mockReset()
+    createHolding.mockReset()
+    updateHolding.mockReset()
+    deleteHolding.mockReset()
+    listLedgers.mockReset()
+    createSuggestionLedger.mockReset()
+    createBlankLedger.mockReset()
+    createLedgerFromCurrent.mockReset()
+    deleteLedger.mockReset()
+    getAiSuggestionsUsage.mockReset()
+    postCounselSuggestion.mockReset()
+    track.mockReset()
+
+    listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
+    listInstruments.mockResolvedValue([instrument])
+    listLedgers.mockResolvedValue([baselineLedger])
+    listHoldings.mockResolvedValue({ holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 })
+    getAiSuggestionsUsage.mockResolvedValue(usage())
+    postCounselSuggestion.mockResolvedValue({
+      status: 'ok',
+      kind: 'counsel',
+      suggestion: {
+        allocations: ALLOCATIONS,
+        reasoning: 'A simple illustration.',
+        caveat: 'This is an illustration, not advice.',
+      },
+      usage: { plansUsed: 0, plansCap: 2, editsUsed: 1, editsCap: 2 },
+    })
+    createSuggestionLedger.mockResolvedValue(createdLedger)
+  })
+
+  afterEach(() => {
+    onLineSpy?.mockRestore()
+    onLineSpy = null
+  })
+
+  it('disables Apply and shows the offline message on the result card while offline, and never calls createSuggestionLedger', async () => {
+    onLineSpy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false) as never
+
+    render(
+      <MemoryRouter>
+        <Portfolio />
+      </MemoryRouter>,
+    )
+    await screen.findByText("Ananya Verma's holdings")
+    fireEvent.click(await screen.findByRole('button', { name: /review this ledger/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /send this request/i }))
+    await screen.findByTestId('ai-suggestion-allocations')
+
+    const applyButton = screen.getByRole('button', { name: /add these to the plan/i })
+    expect(applyButton).toBeDisabled()
+    expect(screen.getByText(/nothing is queued in the background/i)).toBeInTheDocument()
+
+    applyButton.click()
+    expect(createSuggestionLedger).not.toHaveBeenCalled()
+  })
+
+  it('re-enables Apply, and lets it actually create the ledger, once the connection comes back', async () => {
+    onLineSpy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false) as never
+
+    render(
+      <MemoryRouter>
+        <Portfolio />
+      </MemoryRouter>,
+    )
+    await screen.findByText("Ananya Verma's holdings")
+    fireEvent.click(await screen.findByRole('button', { name: /review this ledger/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /send this request/i }))
+    await screen.findByTestId('ai-suggestion-allocations')
+    expect(screen.getByRole('button', { name: /add these to the plan/i })).toBeDisabled()
+
+    onLineSpy.mockReturnValue(true)
+    fireEvent(window, new Event('online'))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /add these to the plan/i })).not.toBeDisabled())
+
+    fireEvent.click(screen.getByRole('button', { name: /add these to the plan/i }))
+    await waitFor(() => expect(createSuggestionLedger).toHaveBeenCalledTimes(1))
   })
 })
 

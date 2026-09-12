@@ -51,6 +51,7 @@ function renderAction(props: Partial<React.ComponentProps<typeof ReviewLedgerAct
         totalValueInr={props.totalValueInr ?? 100_000}
         onReview={onReview}
         onApply={onApply}
+        offlineBlocked={props.offlineBlocked}
       />
     </MemoryRouter>,
   )
@@ -273,6 +274,28 @@ describe('ReviewLedgerAction — cards are never persisted', () => {
 
     expect(localSetSpy).not.toHaveBeenCalled()
     localSetSpy.mockRestore()
+  })
+})
+
+describe('ReviewLedgerAction — offline (SPEC.md §7: writes disabled, never queued)', () => {
+  it('passes offlineBlocked through to the result card, disabling Apply and showing the offline message', async () => {
+    renderAction({ offlineBlocked: true })
+    fireEvent.click(screen.getByRole('button', { name: /review this ledger/i }))
+    fireEvent.click(screen.getByRole('button', { name: /send this request/i }))
+    await waitFor(() => expect(screen.getByTestId('ai-suggestion-allocations')).toBeInTheDocument())
+
+    expect(screen.getByRole('button', { name: /add these to the plan/i })).toBeDisabled()
+    expect(screen.getByText(/nothing is queued in the background/i)).toBeInTheDocument()
+  })
+
+  it('never calls onApply if Apply is clicked while offlineBlocked', async () => {
+    const { onApply } = renderAction({ offlineBlocked: true })
+    fireEvent.click(screen.getByRole('button', { name: /review this ledger/i }))
+    fireEvent.click(screen.getByRole('button', { name: /send this request/i }))
+    await waitFor(() => expect(screen.getByTestId('ai-suggestion-allocations')).toBeInTheDocument())
+
+    screen.getByRole('button', { name: /add these to the plan/i }).click()
+    expect(onApply).not.toHaveBeenCalled()
   })
 })
 

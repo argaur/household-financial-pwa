@@ -11,7 +11,17 @@ export function triggerTextDownload(
   contents: string,
   mimeType = 'application/json',
 ): void {
-  const url = URL.createObjectURL(new Blob([contents], { type: mimeType }))
+  triggerBlobDownload(filename, new Blob([contents], { type: mimeType }))
+}
+
+/**
+ * The same anchor dance for bytes rather than text, so a binary file (D-025's
+ * `.xlsx` template and rejects workbooks) gets the identical revoke
+ * discipline instead of a second, subtly different copy of it. The blob is
+ * built by the caller, because only the caller knows the media type.
+ */
+export function triggerBlobDownload(filename: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename

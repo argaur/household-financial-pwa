@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { AiSuggestionCard, type AiSuggestionAllocation, type AiSuggestionCardProps } from './ai-suggestion-card'
+import { OFFLINE_WRITE_MESSAGE } from '@/lib/use-online'
 
 const track = vi.fn()
 vi.mock('@/lib/analytics', () => ({ track: (...args: unknown[]) => track(...args) }))
@@ -227,6 +228,27 @@ describe('AiSuggestionCard', () => {
       for (const [, payload] of track.mock.calls) {
         expect(Object.keys(payload as object).sort()).toEqual(['kind', 'target'])
       }
+    })
+  })
+
+  describe('offline (SPEC.md §7: writes disabled, never queued)', () => {
+    it('disables Apply and shows the offline message when offlineBlocked, leaving Dismiss enabled', () => {
+      renderCard({ offlineBlocked: true })
+      expect(screen.getByRole('button', { name: /add these to the plan/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /^dismiss$/i })).not.toBeDisabled()
+      expect(screen.getByText(OFFLINE_WRITE_MESSAGE)).toBeInTheDocument()
+    })
+
+    it('does not show the offline message or disable Apply when online (offlineBlocked false/omitted)', () => {
+      renderCard()
+      expect(screen.getByRole('button', { name: /add these to the plan/i })).not.toBeDisabled()
+      expect(screen.queryByText(OFFLINE_WRITE_MESSAGE)).not.toBeInTheDocument()
+    })
+
+    it('a disabled Apply while offlineBlocked never invokes onApply, even if clicked', () => {
+      const { onApply } = renderCard({ offlineBlocked: true })
+      screen.getByRole('button', { name: /add these to the plan/i }).click()
+      expect(onApply).not.toHaveBeenCalled()
     })
   })
 

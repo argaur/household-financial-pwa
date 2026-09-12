@@ -147,6 +147,26 @@ export interface EventMap {
   // line 325. No properties by design: a row value or count here would be
   // exactly the leak the whole property-discipline rule guards against.
   bulk_import_duplicate_overridden: Record<string, never>
+  // D-025 step H4 — the seven events METRICS_PLAN.md lines 320-326 specify
+  // and Chunk I never gave a call site, all fired from
+  // `import-host-sheet.tsx`. Property discipline is the same rule the three
+  // events above follow, and it is the reason every shape here is either
+  // empty, a count, or a closed string union: counts and fixed enums only,
+  // never a file name (a file name carries the ledger name and can carry a
+  // member name), a sheet name, a member name, an instrument slug or an
+  // amount. `bulk_import_review_shown` is the widest of them and it carries
+  // four integers.
+  bulk_import_started: Record<string, never>
+  bulk_import_file_rejected: { reason: 'wrong_type' | 'unreadable' | 'wrong_shape' | 'empty' | 'too_many_rows' }
+  bulk_import_review_shown: {
+    rows_ready: number
+    rows_attention: number
+    rows_duplicate: number
+    rows_skipped: number
+  }
+  bulk_import_rejects_downloaded: { rows_rejected: number }
+  bulk_import_abandoned: { stage: 'disclosure' | 'upload' | 'review' }
+  bulk_import_failed: { reason: 'batch_error' | 'ledger_full' | 'forbidden' }
 }
 
 export function track<E extends keyof EventMap>(event: E, properties: EventMap[E]): void {

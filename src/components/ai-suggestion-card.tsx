@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { projectHoldings, type ProjectionHolding } from '@/lib/projection/engine'
 import type { AssetClass } from '@/lib/allocation'
 import { track } from '@/lib/analytics'
+import { OFFLINE_WRITE_MESSAGE } from '@/lib/use-online'
 
 /**
  * A6 (D-024/D-025 Chunk A) — the suggestion card, rendered inline.
@@ -73,6 +74,13 @@ export interface AiSuggestionCardProps {
   /** Invoked when "Dismiss" is pressed. */
   onDismiss: () => void
   submitting?: boolean
+  /**
+   * SPEC.md §7 — Apply is a write with no offline queue, so it must be
+   * disabled rather than silently dropped. The caller (which owns `useOnline`)
+   * passes this rather than the card reaching for connectivity itself, same
+   * seam as `submitting`. Dismiss is never affected: it writes nothing.
+   */
+  offlineBlocked?: boolean
 }
 
 const currency = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
@@ -104,6 +112,7 @@ export function AiSuggestionCard({
   onApply,
   onDismiss,
   submitting = false,
+  offlineBlocked = false,
 }: AiSuggestionCardProps) {
   // A9 (METRICS_PLAN.md): fires exactly once per mount, never again on a
   // re-render caused by an unrelated prop change (e.g. totalValueInr ticking
@@ -163,6 +172,8 @@ export function AiSuggestionCard({
       <p className="text-caption text-foreground">{reasoning}</p>
       <p className="text-caption text-muted-foreground">{caveat}</p>
 
+      {offlineBlocked && <p className="text-caption text-muted-foreground">{OFFLINE_WRITE_MESSAGE}</p>}
+
       {/* G6.3: stacked below md, each full width, each >= 44px tall (Button's
           default size is h-11 = 44px, SPEC.md §6). Never `sm:` -- G6.1. */}
       <div className="flex flex-col gap-2 md:flex-row md:justify-end">
@@ -175,7 +186,12 @@ export function AiSuggestionCard({
         >
           Dismiss
         </Button>
-        <Button type="button" onClick={handleApply} disabled={submitting} className="w-full md:w-auto">
+        <Button
+          type="button"
+          onClick={handleApply}
+          disabled={submitting || offlineBlocked}
+          className="w-full md:w-auto"
+        >
           Add these to the plan
         </Button>
       </div>

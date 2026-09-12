@@ -73,6 +73,12 @@ export interface ReviewLedgerActionProps {
    * not touch the network or a database.
    */
   onApply: (allocations: AiSuggestionAllocation[]) => void
+  /**
+   * SPEC.md §7 — threaded straight to the result card's Apply control.
+   * This component owns no connectivity check of its own; the caller
+   * (which holds `useOnline`) tells it whether the write is blocked.
+   */
+  offlineBlocked?: boolean
 }
 
 type Step = 'consent' | 'result' | 'error'
@@ -84,6 +90,7 @@ export function ReviewLedgerAction({
   totalValueInr,
   onReview,
   onApply,
+  offlineBlocked = false,
 }: ReviewLedgerActionProps) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<Step>('consent')
@@ -163,6 +170,7 @@ export function ReviewLedgerAction({
                 totalValueInr={totalValueInr}
                 onApply={() => handleApply(result.allocations)}
                 onDismiss={handleDismiss}
+                offlineBlocked={offlineBlocked}
               />
             </>
           )}

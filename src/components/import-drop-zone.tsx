@@ -39,12 +39,29 @@ import { cn } from '@/lib/utils'
  * "Selected: <name>" confirmation below is UI-only, never logged.
  */
 
+/**
+ * Why the refusal happened, for a host that wants to count refusals. Kept as
+ * two distinct values rather than one: `multiple_files` and `wrong_type` are
+ * genuinely different user mistakes, and collapsing them here would make the
+ * distinction unrecoverable upstream. METRICS_PLAN.md's `bulk_import_file_rejected`
+ * enum happens to name only the second of them today; that is the host's
+ * problem to state, not a reason for this seam to lose the fact.
+ */
+export type ImportFileRejection = 'multiple_files' | 'wrong_type'
+
 export interface ImportDropZoneProps {
   /**
    * Invoked once, with the accepted file, when a single `.xlsx` file is
    * chosen or dropped. This component does not read the file's bytes itself.
    */
   onFileAccepted: (file: File) => void
+  /**
+   * Invoked instead of `onFileAccepted` when this component refuses the
+   * selection. Carries the REASON only, never the file or its name: this
+   * component still fires no analytics itself, and a host that turns this
+   * into an event must not be handed a name it could leak.
+   */
+  onFileRejected?: (rejection: ImportFileRejection) => void
   disabled?: boolean
 }
 
@@ -54,7 +71,7 @@ function isXlsxFile(file: File): boolean {
   return file.name.toLowerCase().endsWith(ACCEPTED_EXTENSION)
 }
 
-export function ImportDropZone({ onFileAccepted, disabled = false }: ImportDropZoneProps) {
+export function ImportDropZone({ onFileAccepted, onFileRejected, disabled = false }: ImportDropZoneProps) {
   const inputId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -69,6 +86,7 @@ export function ImportDropZone({ onFileAccepted, disabled = false }: ImportDropZ
       if (list.length > 1) {
         setSelectedFileName(null)
         setMessage('Choose one file at a time. Drop or select a single .xlsx file.')
+        onFileRejected?.('multiple_files')
         return
       }
 
@@ -76,6 +94,7 @@ export function ImportDropZone({ onFileAccepted, disabled = false }: ImportDropZ
       if (!isXlsxFile(file)) {
         setSelectedFileName(null)
         setMessage('That file is not an .xlsx file. Upload the file downloaded from the template step.')
+        onFileRejected?.('wrong_type')
         return
       }
 
@@ -83,7 +102,7 @@ export function ImportDropZone({ onFileAccepted, disabled = false }: ImportDropZ
       setSelectedFileName(file.name)
       onFileAccepted(file)
     },
-    [onFileAccepted],
+    [onFileAccepted, onFileRejected],
   )
 
   return (

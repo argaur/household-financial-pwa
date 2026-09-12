@@ -27,7 +27,9 @@ import {
   type AiSuggestion,
 } from '@/lib/ai-suggestions-api'
 import { ReviewLedgerAction, type ReviewLedgerSuggestion } from '@/components/review-ledger-action'
+import { ImportHostSheet } from '@/components/import-host-sheet'
 import { computeAllocation } from '@/lib/allocation'
+import { useOnline } from '@/lib/use-online'
 
 /**
  * M3 (D-024/D-025) — the state shape M4 (the "Review this ledger" counsel
@@ -57,6 +59,8 @@ interface AiSuggestionSlotProps {
   onDismiss: () => void
   /** True while M3c's Apply is creating the new ledger, so the card's own buttons lock. */
   applying?: boolean
+  /** SPEC.md §7 — passed straight to AiSuggestionCard's own offline guard. */
+  offlineBlocked?: boolean
 }
 
 /**
@@ -86,6 +90,7 @@ export function AiSuggestionSlot({
   onApply,
   onDismiss,
   applying = false,
+  offlineBlocked = false,
 }: AiSuggestionSlotProps) {
   if (suggestion) {
     return (
@@ -100,6 +105,7 @@ export function AiSuggestionSlot({
         totalValueInr={totalValueInr}
         onApply={onApply}
         onDismiss={onDismiss}
+        offlineBlocked={offlineBlocked}
       />
     )
   }
@@ -185,6 +191,10 @@ export function Portfolio() {
   // that reports what Apply did, success or failure.
   const [applying, setApplying] = useState(false)
   const [applyNotice, setApplyNotice] = useState<ApplyNotice | null>(null)
+  // SPEC.md §7 — Apply is a write with no offline queue in v1, so it must be
+  // disabled rather than silently dropped, same as every other write surface
+  // in this app (holding-form.tsx, member-form.tsx, etc.).
+  const online = useOnline()
   // The last suggestion a counsel review returned, kept so a FAILED apply can
   // put the card back. `ReviewLedgerAction` holds the suggestion in its own
   // state and closes its dialog on Apply, so without this a create that failed
@@ -192,6 +202,10 @@ export function Portfolio() {
   const lastReviewSuggestionRef = useRef<ActiveAiSuggestion | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null)
+  // H4/H5 (D-025) — the bulk-import entry point's own open state, separate
+  // from the single-holding sheet above: the two can never be open together,
+  // but they are not the same overlay and must not share one boolean.
+  const [importSheetOpen, setImportSheetOpen] = useState(false)
   // Sheet content is position:fixed and taller than the viewport; some mobile
   // browsers scroll the underlying document (not the fixed sheet) to bring a
   // focused field into view above the keyboard. That leaves window scroll
@@ -233,6 +247,17 @@ export function Portfolio() {
   // Defaults true while ledgers haven't loaded yet, so nothing tries to fetch
   // a non-baseline ledger's holdings before the tab strip itself exists.
   const isBaselineActive = activeLedger?.isBaseline ?? true
+
+  /**
+   * How the active ledger is NAMED to the user, in one place.
+   *
+   * Extracted 2026-09-12 at the project's 3+ duplicates rule: H4 took this
+   * expression to four copies (the two import buttons, `HoldingForm`'s
+   * `ledgerName`, and `ImportHostSheet`'s). Every one of them is a promise to
+   * the user about where a write is about to land, so a copy that drifts
+   * would tell someone their holdings are going somewhere they are not.
+   */
+  const activeLedgerLabel = isBaselineActive ? 'Current' : (activeLedger?.name ?? 'this ledger')
 
   // Fetches the selected non-baseline ledger's holdings whenever the active
   // tab changes to one. Guarded against the stale-response race the same way
@@ -339,7 +364,7 @@ export function Portfolio() {
    * 'blank'`, which is what it is.
    */
   async function applySuggestion(kind: AiSuggestionKind, allocations: AiSuggestionAllocation[]) {
-    if (applying) return
+    if (applying || !online) return
     setApplying(true)
     setApplyNotice(null)
     const name = suggestionLedgerName(kind)
@@ -449,6 +474,31 @@ export function Portfolio() {
     setSheetOpen(true)
   }
 
+  function openImportSheet() {
+    setImportSheetOpen(true)
+  }
+
+  /**
+   * H4/H5 — what a successful bulk-commit refreshes. Reuses the exact fetch
+   * + setter pairs the two effects above already use for Current and for a
+   * non-baseline ledger's holdings, rather than inventing a new fetch path:
+   * a commit always lands in the currently active ledger (`ImportHostSheet`
+   * is only ever opened with `ledgerId={activeLedgerId}`), so which pair to
+   * call is the same `isBaselineActive` branch `handleSaved`/`handleDeleted`
+   * already use.
+   */
+  async function handleImportCommitted() {
+    const token = await getToken()
+    if (isBaselineActive) {
+      const result = await listHoldings(token)
+      setHoldings(result.holdings)
+      setUnreadableHoldingsCount(result.unreadableCount)
+    } else if (activeLedgerId) {
+      const result = await listHoldings(token, activeLedgerId)
+      setLedgerHoldings(result.holdings)
+    }
+  }
+
   // The Current tab's own state is used verbatim (byte-identical to before
   // this chunk); a non-baseline tab substitutes its own fetch and state.
   const displayedHoldings = isBaselineActive ? holdings : ledgerHoldings
@@ -523,6 +573,7 @@ export function Portfolio() {
             instrumentNamesBySlug={instrumentNamesBySlug}
             totalValueInr={totalCurrentValue}
             applying={applying}
+            offlineBlocked={!online}
             onApply={() => {
               if (activeSuggestion) {
                 void applySuggestion(activeSuggestion.kind, activeSuggestion.suggestion.allocations)
@@ -630,6 +681,7 @@ export function Portfolio() {
             totalValueInr={totalCurrentValue}
             onReview={handleReviewLedger}
             onApply={(allocations) => void applySuggestion('counsel', allocations)}
+            offlineBlocked={!online}
           />
         )}
 
@@ -650,14 +702,27 @@ export function Portfolio() {
             <p className="text-body text-muted-foreground">
               Add your investments, savings, insurance, and assets to see your complete household picture.
             </p>
-            <Button variant="ghost" onClick={openAddSheet}>
-              Record your first holding
-            </Button>
+            <div className="flex flex-col md:flex-row items-center justify-center gap-2">
+              <Button variant="ghost" onClick={openAddSheet}>
+                Record your first holding
+              </Button>
+              <Button variant="outline" onClick={openImportSheet}>
+                Import to {activeLedgerLabel}
+              </Button>
+            </div>
           </div>
         )}
 
         {displayedReady && displayedHoldings.length > 0 && (
           <div className="space-y-6">
+            {/* H4/H5 (D-025) — SPEC.md §I4's secondary import action for the
+                populated state. Deliberately not the FAB below: the spec
+                excludes it by name. */}
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={openImportSheet}>
+                Import to {activeLedgerLabel}
+              </Button>
+            </div>
             {groupedByMember.map(({ member, memberHoldings }) => {
               const memberTotal = memberHoldings.reduce((sum, h) => sum + Number(h.currentValue), 0)
               return (
@@ -738,13 +803,26 @@ export function Portfolio() {
                  here would mean an active non-baseline ledger's name failed
                  to decrypt, and claiming it's Current would be actively
                  wrong, not just generic. */
-              ledgerName={isBaselineActive ? 'Current' : (activeLedger?.name ?? 'this ledger')}
+              ledgerName={activeLedgerLabel}
               onSaved={handleSaved}
               onDeleted={handleDeleted}
             />
           </div>
         </SheetContent>
       </Sheet>
+
+      {activeLedgerId && (
+        <ImportHostSheet
+          open={importSheetOpen}
+          onOpenChange={setImportSheetOpen}
+          ledgerId={activeLedgerId}
+          ledgerName={activeLedgerLabel}
+          members={members}
+          instruments={instruments}
+          existingHoldings={displayedHoldings}
+          onCommitted={() => void handleImportCommitted()}
+        />
+      )}
     </main>
   )
 }
