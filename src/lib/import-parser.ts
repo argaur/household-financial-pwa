@@ -292,7 +292,7 @@ export function parseAmountCell(raw: CellValue, column: string): ParseResult<num
   }
 
   // Normalise the invisible characters spreadsheets love: NBSP and narrow NBSP.
-  const trimmed = raw.replace(/[  ]/g, ' ').trim()
+  const trimmed = raw.replace(/[\u00A0\u202F]/g, ' ').trim()
   if (trimmed === '') return { ok: true, value: null }
 
   const withoutCurrency = trimmed.replace(CURRENCY_PREFIX, '').trim()

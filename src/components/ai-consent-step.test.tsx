@@ -33,7 +33,6 @@ function Host({
 }) {
   const [step, setStep] = useState<HostStep>('other')
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (open) setStep('other')
   }, [open])
@@ -149,7 +148,6 @@ describe('AiConsentStep', () => {
     // by the time the step is shown — never gated behind a click or a toggle,
     // and never appended after the CTA in DOM order.
     expect(confirmButton).not.toBeDisabled()
-    // eslint-disable-next-line no-bitwise
     expect(counterLine.compareDocumentPosition(confirmButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 

@@ -198,7 +198,6 @@ export function NewLedgerModal({
   // and its fields reset the same way, plus the modal always reopens on the
   // options step, never mid-goal-form — this is the same Radix reset trap
   // the ledger slice already paid for once (2026-08-25), now covered here too.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (open) {
       setName('')
@@ -213,6 +212,7 @@ export function NewLedgerModal({
       setAiCapState(null)
       setError(null)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately open-only, see comment above
   }, [open])
 
   const trimmed = name.trim()

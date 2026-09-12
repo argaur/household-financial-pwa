@@ -69,7 +69,6 @@ export function PiiDisclosureStep({
     if (fired.current) return
     fired.current = true
     track('pii_disclosure_shown', { surface: 'bulk_import' })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const memberList = memberNames.join(', ')
