@@ -214,16 +214,11 @@ export function ImportHostSheet({
    * The drop zone's own refusals. It shows its own message either way; this
    * only decides what, if anything, is counted.
    *
-   * AN HONEST GAP, NOT A GUESS: METRICS_PLAN.md's `bulk_import_file_rejected`
-   * enum is wrong_type / unreadable / wrong_shape / empty / too_many_rows.
-   * None of those means "picked several files at once", so that refusal fires
-   * no event rather than being filed under a value that would misdescribe it.
-   * Adding an enum value is a METRICS_PLAN.md decision, not this file's.
+   * `multiple_files` closed 2026-09-12: METRICS_PLAN.md's enum now carries it
+   * alongside wrong_type / unreadable / wrong_shape / empty / too_many_rows.
    */
   function handleFileRejected(rejection: ImportFileRejection) {
-    if (rejection === 'wrong_type') {
-      track('bulk_import_file_rejected', { reason: 'wrong_type' })
-    }
+    track('bulk_import_file_rejected', { reason: rejection })
   }
 
   async function handleFileAccepted(file: File) {

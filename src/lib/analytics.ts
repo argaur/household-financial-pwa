@@ -157,7 +157,9 @@ export interface EventMap {
   // amount. `bulk_import_review_shown` is the widest of them and it carries
   // four integers.
   bulk_import_started: Record<string, never>
-  bulk_import_file_rejected: { reason: 'wrong_type' | 'unreadable' | 'wrong_shape' | 'empty' | 'too_many_rows' }
+  bulk_import_file_rejected: {
+    reason: 'wrong_type' | 'unreadable' | 'wrong_shape' | 'empty' | 'too_many_rows' | 'multiple_files'
+  }
   bulk_import_review_shown: {
     rows_ready: number
     rows_attention: number

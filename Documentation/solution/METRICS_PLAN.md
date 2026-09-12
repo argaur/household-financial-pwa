@@ -318,7 +318,7 @@ No event here carries an instrument, an amount, a member, a goal name, or any pa
 | Event | Key properties | Fires when |
 |---|---|---|
 | `bulk_import_started` | (none) | User opens the import entry point |
-| `bulk_import_file_rejected` | `reason` (wrong_type / unreadable / wrong_shape / empty / too_many_rows) | The file fails before any row is parsed. Fixed enum, never a file name |
+| `bulk_import_file_rejected` | `reason` (wrong_type / unreadable / wrong_shape / empty / too_many_rows / multiple_files) | The file fails before any row is parsed. Fixed enum, never a file name |
 | `bulk_import_review_shown` | `rows_ready`, `rows_attention`, `rows_duplicate`, `rows_skipped` | The review screen renders. Counts only |
 | `bulk_import_rejects_downloaded` | `rows_rejected` | User downloads the fix-and-retry file. This is the event that says whether the loop closes |
 | `bulk_import_abandoned` | `stage` (disclosure / upload / review) | User leaves without committing |

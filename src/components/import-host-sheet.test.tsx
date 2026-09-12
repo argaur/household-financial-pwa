@@ -296,6 +296,18 @@ describe('ImportHostSheet — file rejection reasons (METRICS_PLAN.md line 321)'
     ])
   })
 
+  it('fires multiple_files when the drop zone refuses more than one file at once', async () => {
+    await reachUploadStep()
+
+    fireEvent.change(screen.getByLabelText(/choose an \.xlsx file to upload/i), {
+      target: { files: [xlsxFile(), xlsxFile()] },
+    })
+
+    expect(eventsNamed('bulk_import_file_rejected')).toEqual([
+      ['bulk_import_file_rejected', { reason: 'multiple_files' }],
+    ])
+  })
+
   it('fires unreadable when readImportWorkbook throws unreadable_file', async () => {
     readImportWorkbookMock.mockRejectedValue(new ImportWorkbookError('unreadable_file', 'nope'))
     await reachUploadStep()
