@@ -15,6 +15,21 @@ import { useTheme } from '@/lib/theme'
  * background, a hairline rule, quiet text links with the mint reserved for
  * the active section. No icons in the nav, no elevation.
  *
+ * Translucent, not solid (`bg-background/[.84] backdrop-blur-md`, matching
+ * the approved folio's `color-mix(... 84%, transparent)` + `blur(12px)`,
+ * 2026-09-12). A solid header cut the Landing hero's guilloché rosette off
+ * with a hard rectangular edge where it bleeds up past the hero card, since
+ * `GuillocheMotif` sits behind the sticky header in stacking order but the
+ * header painted over it as an opaque block. The folio was never solid here;
+ * this restores that.
+ *
+ * Dark mode drops the hairline (`dark:border-b-transparent`, 2026-09-11).
+ * The vault room and the header now share one colour, so the rule was the
+ * only thing still drawing a bar across the top; without it the wordmark,
+ * nav and toggle sit directly on the same surface as the page. Light mode
+ * keeps the rule: on currency paper the running head is supposed to be
+ * ruled off, and light never had the black-base problem this fixes.
+ *
  * The product is named Vittam, set in Yatra One: a Devanagari/Latin
  * companion typeface whose brush terminals nod to the name's Sanskrit
  * origin without setting it in Devanagari script. Reserved for the wordmark
@@ -74,7 +89,7 @@ export function SiteHeader() {
   const { theme, toggleTheme } = useTheme()
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/[.84] backdrop-blur-md dark:border-b-transparent">
       <div className="container flex flex-wrap items-center gap-x-2 py-1.5">
         <Link
           to="/"
