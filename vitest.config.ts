@@ -16,6 +16,12 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    exclude: ['**/node_modules/**', '**/.vercel/**', '**/dist/**', '**/.claude/worktrees/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/.vercel/**',
+      '**/dist/**',
+      '**/.claude/worktrees/**',
+      '**/.worktrees/**',
+    ],
   },
 })
