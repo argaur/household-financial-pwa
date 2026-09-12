@@ -361,9 +361,17 @@ Every screen with dynamic data. Design must produce layouts for every non-dash c
 
 **Compare strip (D-018 §2):** computed, not stored — three numbers per non-baseline ledger, each diffed against Current: `SUM(current_value)`, `SUM(current_value WHERE asset_class='equity') / SUM(current_value)`, `SUM(monthly_sip)`. Query scoped by `ledger_id`, no new columns.
 
-### instruments — amended
+### instruments — amended — WITHDRAWN, NEVER BUILT
 
-**`is_active`** (`boolean`, default `true`) and **`updated_at`** (`timestamptz`, auto) added. Instruments are now soft-deleted, never hard-deleted, so a ledger's historical holding reference never dangles (D-017 §6). **Drift detection:** on ledger view, for each holding, compare `instrument.is_active = false` OR `instrument.updated_at > holding.created_at`. If either is true, render the bold red-toned warning banner naming what changed — the holding row itself stays untouched, per D-017 §6's "never delete or silently reconcile" rule.
+> **Corrected 2026-09-12. This section described a schema change that does not exist and never did.** It is kept rather than deleted so a future reader who finds drift detection referenced elsewhere learns why it is absent, instead of assuming it regressed.
+>
+> **Ground truth:** `instruments` has **no `is_active` column and no `updated_at` column** — neither appears in `drizzle/schema.ts` (the `instruments` table is lines 54-79) nor in **any** migration SQL, including the held `0008`. Instrument drift detection is therefore **not implemented in any form**.
+>
+> **Why:** the work was drafted and then withdrawn at the erd-gate review on 2026-08-24 — see `Documentation/plan/IMPLEMENTATION_PLAN.md` lines 277 and 308: "Chunk 4 (Instrument drift detection) drafted then withdrawn from this plan... its `instruments.updated_at` seed-upsert semantics were a load-bearing `[H]` with no resolution... Becomes its own chunk once that hypothesis is resolved." The doc was never updated to match, so it asserted the change as done for roughly three weeks.
+>
+> **Soft-delete is likewise not in force.** Instruments are not soft-deleted today, so D-017 §6's "a ledger's historical holding reference never dangles" guarantee is **not** currently provided by the schema. Anything relying on it needs to re-establish it when this chunk is rebuilt.
+
+The withdrawn design, for whoever resumes it: add **`is_active`** (`boolean`, default `true`) and **`updated_at`** (`timestamptz`, auto). Instruments would be soft-deleted, never hard-deleted. **Drift detection:** on ledger view, for each holding, compare `instrument.is_active = false` OR `instrument.updated_at > holding.created_at`. If either is true, render the bold red-toned warning banner naming what changed — the holding row itself stays untouched, per D-017 §6's "never delete or silently reconcile" rule.
 
 ### ledger_projection_settings (new)
 
@@ -477,7 +485,9 @@ Catalog data, plaintext, served by the existing `GET /api/instruments`.
 |---|---|---|---|
 | assumed_annual_rate_pct | numeric(5,2) | no | The long-run nominal annual return this instrument is projected at. Populated for the 6 instruments that have a defensible published rate (D-024 decision 1); null for the other 24, which fall back to their asset class default in `ledger_projection_settings` |
 | rate_source | text | no | Where the number came from, in plain words, rendered verbatim in the "See the maths" panel. Null wherever `assumed_annual_rate_pct` is null |
-| rate_as_of | date | no | The date the rate was last checked. Drives a staleness note in the maths panel rather than any automatic behaviour. Null wherever the rate is null |
+| assumed_rate_as_of | date | no | The date the rate was last checked. Drives a staleness note in the maths panel rather than any automatic behaviour. Null wherever the rate is null |
+
+> **Column name corrected 2026-09-12.** This row previously read `rate_as_of`, which is **a different, pre-existing column** on the same table (documented separately at the `instruments` entry above, populated for 5 rows, used for library display). The live column added by D-024 is **`assumed_rate_as_of`** — confirmed in `drizzle/migrations/0006_outstanding_gorgon.sql` ("`ALTER TABLE "instruments" ADD COLUMN "assumed_rate_as_of" date;`", applied to production) and in `drizzle/schema.ts:75` (`assumedRateAsOf: date('assumed_rate_as_of')`), whose inline comment records the naming as deliberate "rather than reusing `rate_as_of`, since that name is already taken". As written, the doc named two semantically different columns identically.
 
 **These three are display-and-audit fields, not a pricing feed.** D-002's "no live price feeds in v1" is untouched: nothing fetches these, they are seeded in the same migration that adds them and change only when a human edits the seed.
 
