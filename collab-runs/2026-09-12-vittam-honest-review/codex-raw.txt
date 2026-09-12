@@ -1,0 +1,53 @@
+## 1. Consumer POV
+
+The promise is clear; the reason to switch is weak. "See your family's money on one page" describes an outcome. Vittam still asks the household to gather, enter and maintain everything required to produce it. For someone already using a spreadsheet, the dashboard risks being another representation of the same unpaid administrative work.
+
+The plausible audience is narrow: a financially engaged household organiser who accepts manual updates and wants to compare alternatives. Saved what-if ledgers offer a more specific benefit than the allocation donut or 30-instrument library.
+
+First-five-minute bounce risks: Google login followed by a separate passphrase, a recovery code with permanent-loss consequences, and collecting household holdings before seeing meaningful value. Three onboarding steps do not mean three easy decisions.
+
+Manual values undermine interpretation. An available but stale number can produce a misleading allocation or health assessment. Avoiding market-data outages solves an engineering dependency; it does not establish that users prefer maintaining valuations themselves.
+
+Encryption creates responsibility as well as reassurance. A nontechnical user may hear: "Support cannot recover my family's records, but pressing this button sends readable financial information elsewhere." Disclosure is necessary, but comprehension at the moment of review matters more than accurate policy pages.
+
+"Exactly one nudge" is an unsupported constraint. It could reduce overload, or manufacture urgency when nothing deserves attention. Education-only content may also disappoint someone expecting a financial planner to help decide what to do.
+
+I would not infer household trust from the architecture. There is no external-user evidence of trust, comprehension or sustained usefulness.
+
+## 2. Recruiter/hiring-manager POV
+
+Credible implementation evidence; weak evidence of senior PM effectiveness. The project demonstrates that Gaurav can ship and reason through technical constraints. It does not yet demonstrate that he can discover demand, prioritise around it or produce customer outcomes.
+
+Strongest signal: the bounded AI workflow, explicit invocation, disclosed plaintext transfer, Apply creating a separate ledger, and correction of the retention claim. This is a concrete decision story about user control and tradeoffs.
+
+Weakest signal: months of additional functionality without one external interview. The obvious interview question is: "What justified building strategy ledgers and AI counsel before watching one household use the original dashboard?" "Live, unmarketed" describes distribution status; it does not explain the absence of discovery.
+
+Quality claims need restraint. Passing 2,114 tests cannot establish production readiness when import has never completed a real authenticated smoke test and the primary mobile width remains visually unverified. Zero axe violations do not establish overall usability. Free-tier spending at one user demonstrates little about operating economics.
+
+For AI-strategy roles: connecting a model is insufficient. The brief supplies no evidence that counsel outperforms the existing nudge, produces dependable suggestions or improves decisions. A call cap controls expenditure, not quality.
+
+For the 2026 comparison, current OpenAI PM postings explicitly seek user feedback and measured impact and evaluation-driven model requirements. These are examples, not a market census. My judgment: AI-assisted building neither discredits nor differentiates this project by itself. An excellent PM portfolio would show a narrowly identified problem, observed behaviour, a consequential scope cut and measured improvement. Vittam currently shows substantially more construction than learning.
+
+## 3. Three distinct honest framings (not three versions of the same opinion)
+
+1. Personal financial utility. Judge it by whether Gaurav repeatedly uses it and replaces an existing workflow. One user can justify personal software. On a resume, present it as a technical project; that framing makes no claim of market validation.
+
+2. Household decision rehearsal. Treat the saved ledgers as the central hypothesis: families may need help comparing a specific financial change more than maintaining another tracker. This implies episodic use and requires testing against their existing spreadsheet or conversation.
+
+3. Product judgment case study. Use the implementation to examine decisions that survived contact with users and decisions that failed. Today, it supports a case study in implementation tradeoffs. Calling it evidence of successful product strategy would outrun the facts.
+
+## 4. One non-obvious insight
+
+Ledger comparisons can confuse a changed baseline with a changed strategy. Saved snapshots remain fixed while Current changes. If the household later updates valuations or adds a holding, the delta strip can move even though the proposed plan has not changed. A user may interpret bookkeeping differences as consequences of the strategy. Snapshot isolation preserves records but does not automatically preserve meaningful comparisons.
+
+## 5. One concrete failure mode
+
+A household imports its holdings, sees a health tier and requests AI counsel. Months later, it returns without updating values and treats the fresh AI response as a current assessment. The response is newly generated; its financial premise is old. The brief establishes no safeguard that reliably prevents this interpretation.
+
+## 6. Smallest validation experiment
+
+First complete the builder's authenticated production import smoke test.
+
+Then observe one external household's financial organiser and partner, on their own phone, for 25 minutes. Use rounded holdings they are comfortable entering. Ask them to compare one real contemplated change against their existing method; explain nothing during the task.
+
+Record completion, misunderstandings and whether either person identifies a useful difference. Check seven days later for an unprompted return. Failure would materially weaken the proposition; success would justify another test, not a traction claim.

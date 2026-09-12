@@ -1,0 +1,41 @@
+## 1. Consumer POV
+
+A real Indian household would not adopt this as described. The core reason is the passphrase. A non-technical user on Google sign-in, asked to set a second secret and copy down a recovery code, hears "if you forget this, your data is gone forever." That is a bounce, not a feature. INDmoney, ET Money and Kuvera do not ask this. Nobody in the target segment wants their money tracker to behave like a crypto wallet.
+
+Second bounce: manual entry with no price feeds. The 3-step onboarding is fine, but the moment someone with 12 mutual funds realises every NAV is typed by hand, they leave. The "stale beats unavailable" argument is sound engineering. It is not a consumer argument. The Excel import helps the initial load but does nothing for monthly upkeep.
+
+"See your family's money on one page" is a clear promise, but Kuvera and INDmoney already show a household view with live values. The differentiator is the one nudge, the health tier and the what-if ledgers. Those are good ideas, but a consumer only reaches them after passing two gates the incumbents do not have.
+
+The AI proxy tradeoff is neither a selling point nor a red flag to a non-technical user. It is invisible. Nobody reads /privacy. The encryption itself is only a selling point to someone who has already been burned, which is a tiny slice.
+
+Who might genuinely want it: a privacy-conscious, spreadsheet-keeping household head who already tracks manually and wants structure. That person exists. Gaurav is that person. The problem is that segment is very small and hard to find.
+
+## 2. Recruiter/hiring-manager POV
+
+At a glance, it reads as a well-executed AI-assisted side project. In 2026 that is table stakes. 2,114 tests and zero axe violations are nice but the reader assumes an agent wrote most of it, and they are right.
+
+The strongest part is the decision quality, not the code. The recovery-code tradeoff, the "never zero, never a list" nudge rule, duplicate detection ignoring amounts, education-not-advice as a regulatory line, and correcting the Anthropic retention claim in your own decision log. Those show a PM who reasons about tradeoffs honestly. A sharp interviewer will notice that.
+
+The weakest part is one user. A senior PM interviewer will ask "what did you learn from users?" within two minutes. There is no answer. Then they will ask why you built encryption, four ledgers, AI counsel and Excel import before talking to a single person. The honest answer is that this was a builder's project, not a PM's project. That is fine for a builder role. It is a hole for a senior PM role.
+
+An excellent PM portfolio project has a small feature set, five to ten real users, one documented pivot from what those users said, and a metric that moved. Vittam has the opposite shape: a wide feature set, one user, no pivot, no metric. The engineering discipline is above average. The product discipline is absent from the evidence.
+
+## 3. Three distinct honest framings
+
+A. Frame it as engineering judgment, not a product. Put it on the resume as "designed and shipped a zero-knowledge household finance PWA." Lead with the encryption architecture, the regulatory boundary, and the decision log. Say nothing about traction. This works for technical PM or AI-strategy roles where the interviewer cares how you reason with AI tools in the loop.
+
+B. Frame it as a discovery vehicle and go get the missing evidence. Do not put it on the resume yet. Spend three weeks getting five households through onboarding and write up what broke. Then the story becomes "I built the wrong thing first, here is what I learned and cut." That is the strongest senior PM story available here, and the product is already built, so the cost is low.
+
+C. Frame it as a personal tool and leave it off. It solves Gaurav's own household problem. Keep it running, mention it in conversation as "I built my own because nothing did X," and put a different, user-validated project on the resume. This is the honest option if B is not going to happen.
+
+## 4. One non-obvious insight
+
+The encryption is doing double duty as the reason there are no users. It blocks the one thing that would make the product sticky (live valuation, needs server-side data) and it adds the one gate that makes onboarding fail (the second secret). The privacy decision and the zero-traction outcome are the same decision seen from two sides. A booster calls it principled. A skeptic calls it over-engineering. Both miss that it was a product-strategy choice that quietly picked a niche of one.
+
+## 5. One concrete failure mode
+
+An interviewer opens finance.gauravg.dev on their phone during the call. The 390px layout has never been visually confirmed. Something overlaps or truncates. Now the "2,114 tests, 0 axe violations" line on the resume looks like a claim the candidate did not check, and the whole quality story collapses in thirty seconds.
+
+## 6. Smallest validation experiment
+
+Sit two relatives or friends, not you, in front of the live site on their own phone. Give them nothing but the URL and a real folio statement. Watch silently for ten minutes. Count how many finish onboarding and set a passphrase without asking a question. If zero of two do, the consumer story is dead and framing A or C applies. If both do, the passphrase fear is overblown and framing B is worth three weeks. Cost: one evening.
