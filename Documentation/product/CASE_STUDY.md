@@ -105,13 +105,15 @@ Two boundary choices worth naming. **Multi-tenancy is enforced in the applicatio
 
 ## Metrics
 
-**No post-launch numbers yet.** The product is live but unmarketed, with no real user cohort, so reporting funnel percentages here would be reporting noise. The instrumentation is in place and the targets were set before launch — deliberately conservative, per D-006 — so they can be honestly cleared or missed:
+**Scored 2026-09-14, 44 days post-launch, in a Phase 7 postmortem (`Documentation/product/POSTMORTEM.md`).** The honest finding: the v1 success criteria were the wrong ones to have written, not just missed.
 
-| Metric | Target | Status |
-|---|---|---|
-| North Star — households raising Completeness tier by ≥1 within 30 days | 50% | Awaiting first cohort |
-| Onboarding completion (all 3 steps, first session) | 60% | Awaiting first cohort |
-| 14-day return rate | 25% | Awaiting first cohort |
-| Nudge click-through (`nudge_shown` → `learn_card_clicked`) | Research question, no target | Awaiting first cohort |
+| Metric | Target | Actual | Verdict |
+|---|---|---|---|
+| Onboarding completion (all 3 steps, first session) | 60% | 75% (3 of 4) | Not measurable — n = 4 in 44 days, almost certainly all test sessions, not real users |
+| 14-day return rate | 25% | 0 returns inside the 14-day window (2 returns recorded at 21–28 days) | Missed |
+| North Star — households raising Completeness tier by ≥1 within 30 days | 50% | Cannot be computed | Not measurable — the event properties this depends on were deliberately stripped the same day the tracking would have started (D-012), to protect the same client-side encryption this case study describes above |
+| Nudge click-through (`nudge_shown` → `learn_card_clicked`) | Research question, no target | Not queried this pass | — |
 
-What *is* measured today is build quality: 310/310 tests passing, clean typecheck and build, zero axe accessibility violations on all five screens in production, and ₹0/month infrastructure spend against a ₹0 ceiling.
+**The real finding isn't the numbers, it's what they were measuring.** Three of four criteria assumed a distribution motion this project was never going to run — they were written SaaS-style at intake, before it was explicit (even to me) that this is a closed-circle skills showcase with no budget to serve real households, not a market bid. The postmortem's verdict is Iterate: retire these four as the yardstick, and make the next real signal a single non-Gaurav user walking through onboarding cold. That is the cheapest test this product hasn't run yet, and it is what a 2026-09-12 blind two-model review (Fable and Codex, independently) both converged on as the top open question, unprompted by each other.
+
+What *is* measured continuously is build quality: 2137/2137 tests passing, clean typecheck and lint, and ₹0/month infrastructure spend against a ₹0 ceiling, all reverified same-session as this metrics update.

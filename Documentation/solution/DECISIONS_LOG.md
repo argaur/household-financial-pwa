@@ -542,3 +542,13 @@ Vitest will prove the parser against fixture files the generator itself wrote, w
 - **Revisit if:** Gaurav answers open question 2 in favour of dropdowns (then the template shape and the library both change and Phase 2 restarts from the template design), or real imports turn out to be hundreds of rows rather than tens (then batch sizing and bounded concurrency become a real design problem rather than a single insert).
 
 ---
+
+## D-026: Phase 7 postmortem verdict — Iterate, target corrected away from acquisition metrics (2026-09-14)
+
+**Decision:** Ran the overdue Blueprint Phase 7 postmortem (`Documentation/product/POSTMORTEM.md`), 44 days after the 2026-08-01 launch. Scored all four v1 falsifiable success criteria and the Health Metrics guardrails against real PostHog/Sentry data. Verdict: **Iterate**. The four v1 success criteria are retired as measurement targets, superseded by a single next target: get one real non-Gaurav user through onboarding.
+
+**Why:** Three of four v1 criteria came back unscoreable or negative — onboarding completion clears its 60% bar only on n=4 (almost certainly Gaurav's own test sessions across 44 days, not real users), the 14-day return-rate target shows zero returns inside its own window, and the Completeness-tier growth target has been structurally unmeasurable since D-012 (2026-08-01) stripped the event properties it depended on. None of this reflects a build defect: Phase 6's gate passed the same day with all six items ticked and cited. It reflects a measurement-design mismatch, traced to Phase 0 intake (2026-06-23) filling in SaaS-shaped success criteria (funnel completion, N-day return, tier growth) for a project whose real goal, per Gaurav's own 2026-09-12 correction, was never real-user distribution — Vittam is a closed-circle skills showcase with no infra or compliance budget to serve real households.
+
+**Consequence:** future Solution Stage passes on this project write recruiter-facing success criteria (decision-log depth, one real cold-user walkthrough, code/architecture craft) rather than acquisition-style metrics. The next investment slice's target is the one thing the 2026-09-12 council review, the D-024/D-025 build, and this postmortem all independently converged on: a real non-Gaurav user's actual friction point, likely the passphrase/recovery-code onboarding step per the council's blind convergence.
+
+**Revisit if:** a real non-Gaurav user is onboarded — their actual friction point becomes the next Solution Stage input, superseding this entry. One lesson from this postmortem logged in `memory/past-mistakes.md` (2026-09-14, project-root memory); full scorecard in `Documentation/product/POSTMORTEM.md`.
