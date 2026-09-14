@@ -14,7 +14,8 @@ import { fetchHousehold } from '@/lib/household-api'
 import { listFamilyMembers } from '@/lib/family-members-api'
 import { listHoldings } from '@/lib/holdings-api'
 import { listProtection } from '@/lib/protection-api'
-import { VaultLockedError } from '@/lib/encrypted-rows'
+import { classifyLoadFailure } from '@/lib/vault-lock'
+import { VaultLockedNotice } from '@/components/vault-locked-notice'
 import { computeCompleteness, type Completeness, type CompletenessTier } from '@/lib/dashboard'
 import { buildNudgeContext, selectNudge, type Nudge } from '@/lib/nudge'
 import { computeAllocation, type AllocationSlice } from '@/lib/allocation'
@@ -134,14 +135,10 @@ export function Dashboard() {
         if (cancelled) return
         // The vault being locked is not an error: it means this browser
         // simply doesn't hold the household's key yet (new device, cleared
-        // storage, or a future idle lock). Showing zeroes here would be
-        // lying about someone's finances — route back through the gate that
-        // owns the unlock flow instead of rendering anything dashboard-shaped.
-        if (err instanceof VaultLockedError) {
-          setState('locked')
-          return
-        }
-        setState('error')
+        // storage, or the idle lock). Showing zeroes here would be lying
+        // about someone's finances, so nothing dashboard-shaped renders.
+        // src/lib/vault-lock.ts owns the distinction for all three screens.
+        setState(classifyLoadFailure(err))
       }
     })()
     return () => {
@@ -172,7 +169,15 @@ export function Dashboard() {
     window.localStorage.setItem(key, data.completeness.tier)
   }, [state, data])
 
-  if (state === 'no-household' || state === 'locked') return <Navigate to="/" replace />
+  if (state === 'no-household') return <Navigate to="/" replace />
+
+  // Was a silent <Navigate to="/"> until 2026-09-13. It worked — RootGate
+  // routes a locked user to Unlock — but it bounced the user with no word of
+  // explanation, and it handled the same condition differently from Portfolio
+  // and Profile. Being told what happened is the whole point here: an
+  // unexplained redirect is exactly what made a second device feel like the
+  // account itself was device-bound.
+  if (state === 'locked') return <VaultLockedNotice surface="dashboard" />
 
   if (state === 'loading') {
     return (

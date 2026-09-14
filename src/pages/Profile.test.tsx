@@ -4,6 +4,7 @@ import { expectNoAxeViolations } from '@/test/axe'
 import { unlockTestVault } from '@/test/encrypted-fixtures'
 import { getVault } from '@/lib/crypto/key-store'
 import { Profile } from './Profile'
+import { VaultLockedError } from '@/lib/encrypted-rows'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
 const signOut = vi.fn().mockResolvedValue(undefined)
@@ -163,6 +164,22 @@ describe('Profile', () => {
     fetchHouseholdKeys.mockResolvedValue(householdKeys)
     listHoldings.mockReset()
     listHoldings.mockResolvedValue({ holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 })
+  })
+
+  /*
+    2026-09-13, same defect as Portfolio's: a locked vault reached the generic
+    error state. Profile is the screen that holds "change my passphrase" and
+    "reset my recovery code", so it is the worst place to tell someone whose
+    browser has no key that something went wrong.
+  */
+  it('names the locked vault instead of reporting a load failure', async () => {
+    fetchHousehold.mockRejectedValue(new VaultLockedError())
+    listFamilyMembers.mockRejectedValue(new VaultLockedError())
+    render(<Profile />)
+
+    await screen.findByRole('link', { name: /unlock/i })
+    expect(screen.queryByText(/couldn't load your profile/i)).not.toBeInTheDocument()
+    expect(document.body.textContent ?? '').not.toMatch(/₹/)
   })
 
   /**

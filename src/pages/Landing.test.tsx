@@ -30,6 +30,67 @@ function renderLanding() {
   )
 }
 
+describe('Landing — guilloché rosette placement', () => {
+  function motifClasses() {
+    const { container } = renderLanding()
+    const svg = container.querySelector('[data-testid="guilloche-motif"]')
+    if (!svg) throw new Error('Landing rendered no guilloché rosette')
+    return svg.getAttribute('class') ?? ''
+  }
+
+  /*
+    2026-09-13, reported from a real phone: the rosette rendered "trimmed",
+    not as a complete circle. Root cause is geometry, not paint order — the
+    motif was a FIXED 420px box inside the hero VaultFrame, which is
+    `overflow-hidden` and only 358px wide at the 390px breakpoint (390
+    viewport minus the container's 1rem gutters). A 420px circle in a 358px
+    clipping box loses 31px off BOTH vertical edges, so the outer hairline
+    ring was sliced flat left and right.
+
+    The folio's intent is that the plate trims the rosette at the TOP edge
+    only. These tests pin that: the motif's box may never be wider than the
+    frame that clips it, so only the deliberate upward offset does any
+    cutting.
+
+    WHAT THESE THREE TESTS CANNOT DO, STATED PLAINLY. They assert class names.
+    jsdom performs no layout and resolves no media query, so not one of them
+    measures a rendered pixel and none of them would fail if the rosette were
+    visibly clipped again by some other means (a parent's width, a transform
+    on an ancestor, a breakpoint that fires at the wrong width). They pin the
+    INTENT — a responsive box rather than a fixed pixel size — and nothing
+    more. That is the same blind spot that let the original bug ship: it was
+    invisible to 2,114 green tests and obvious on a phone in one second.
+
+    Real 390px verification needs a real device or Chrome's device toolbar and
+    is a standing, separately tracked gap in this project (app/CLAUDE.md,
+    "Still owed", plus D-022 and D-023 in the decisions log). Deliberately not
+    papered over here with a jsdom layout-measurement test, which would report
+    zeroes and pass for the wrong reason.
+  */
+  it('never draws a box wider than the frame that clips it (390px: frame is 358px)', () => {
+    const classes = motifClasses()
+    expect(classes).toContain('w-full')
+    // A fixed width larger than the mobile frame is exactly the defect.
+    expect(classes).not.toMatch(/(^|\s)w-\[\d+px\]/)
+    expect(classes).not.toMatch(/(^|\s)h-\[\d+px\]/)
+  })
+
+  it('offsets upward proportionally, so the top-edge bleed scales with the box', () => {
+    const classes = motifClasses()
+    // A percentage translate is relative to the element's own size, so the
+    // same fraction of the circle is trimmed at every width. A fixed -top
+    // pixel value is not: it trims a different fraction at each breakpoint.
+    expect(classes).toMatch(/-translate-y-\[\d+%\]/)
+    expect(classes).not.toMatch(/-top-\[\d+px\]/)
+  })
+
+  it('keeps the desktop rosette at its folio size', () => {
+    // md and up the frame is 672px+ wide, so the folio's 560px plate fits
+    // whole and must not shrink to the mobile rule.
+    expect(motifClasses()).toContain('md:w-[560px]')
+  })
+})
+
 describe('Landing', () => {
   it('leads with a headline that names the household, not an individual', () => {
     renderLanding()

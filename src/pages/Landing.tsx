@@ -35,18 +35,6 @@ import { WHY_REPO_URL } from '@/lib/why-decisions'
  * product visible before commitment; the build decisions behind it; and
  * finally the regulatory line and credit, in the footer.
  */
-const FADE_UP_STYLE = `
-  @keyframes landing-fade-up {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .landing-fade-up {
-      animation: landing-fade-up 0.5s ease-out both;
-    }
-  }
-`
-
 /**
  * "NN / Section title" — a numbered, ruled section header. The numeral sits
  * in a printed-document left gutter; the title carries the existing
@@ -80,8 +68,6 @@ export function Landing() {
 
   return (
     <main className="min-h-screen bg-background text-foreground font-sans paper-grain">
-      <style>{FADE_UP_STYLE}</style>
-
       {/* Hero + trust strip */}
       <section className="container max-w-lg md:max-w-2xl lg:max-w-5xl pt-12 pb-8 md:pt-16 md:pb-10">
         {/* The hero is plated: a vault frame (D-016 Slice 5's shared card
@@ -104,9 +90,24 @@ export function Landing() {
             currency paper the engraved certificate is the point, and the
             step from #F0F3EE to #FAFCF8 never read as an overlay. */}
         <VaultFrame className="relative overflow-hidden border-2 bg-card px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-14 dark:border-transparent dark:shadow-none dark:hover:translate-y-0 dark:hover:shadow-none">
+          {/* The rosette's box must never be wider than the frame that clips
+              it. It used to be a fixed 420px square offset a fixed -150px:
+              at the 390px breakpoint the frame is only 358px wide (390 less
+              the container's 1rem gutters), so `overflow-hidden` sliced 31px
+              off each vertical edge and the outer hairline ring rendered as
+              two flat sides. Reported from a real phone, 2026-09-13.
+
+              Now the box is `w-full` capped at the folio's 420px, height
+              from the 1:1 viewBox, and the upward bleed is a percentage of
+              the element's own size rather than a pixel constant — so the
+              same fraction of the circle is trimmed at every width and only
+              the TOP edge ever trims, which is the folio's intent.
+
+              Desktop is unchanged on purpose: md keeps the folio's 560px
+              plate, and -34% of 560 is 190.4px against the old -190px. */}
           <GuillocheMotif
             rings={30}
-            className="absolute left-1/2 -top-[150px] h-[420px] w-[420px] max-w-none -translate-x-1/2 md:-top-[190px] md:h-[560px] md:w-[560px]"
+            className="absolute left-1/2 top-0 aspect-square h-auto w-full max-w-[420px] -translate-x-1/2 -translate-y-[36%] md:w-[560px] md:max-w-none md:-translate-y-[34%]"
           />
           {/* items-center, not items-start: the sample card is roughly twice
             the height of the left column, and top-aligning the two left a

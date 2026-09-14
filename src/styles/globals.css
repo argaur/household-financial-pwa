@@ -277,3 +277,87 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ═══ One-shot reveals ═════════════════════════════════════════════════
+   Every entrance animation in this app lives here, under one convention, so
+   there is one place to read and one place to break:
+
+     - one-shot only, `both` fill, never `infinite` and never `alternate`
+     - `transform` and `opacity` only, so nothing costs layout or paint
+     - the whole rule gated on `prefers-reduced-motion: no-preference`
+
+   The gate is deliberately belt AND braces with the reduce block above. That
+   block clamps duration; gating means the rule never applies at all, which
+   matters for the rosette, whose static fallback is an SVG `transform`
+   attribute a CSS `transform` would otherwise replace.
+
+   `landing-fade-up` lived as an inline <style> inside Landing.tsx until
+   2026-09-13. Same keyframe, same class, same gate — moved here so the
+   convention exists once rather than in two files that could drift.       */
+
+/* Landing's staged copy entrance. Callers set `animation-delay` inline to
+   stagger the hero's blocks (src/pages/Landing.tsx). */
+@media (prefers-reduced-motion: no-preference) {
+  .landing-fade-up {
+    animation: landing-fade-up 0.5s ease-out both;
+  }
+}
+
+@keyframes landing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Guilloché rosette reveal (src/components/guilloche-motif.tsx) ──────
+   The landing rosette opens once on load: each ring swings the last few
+   degrees into its final angle and grows from 0.92 to full, centre outward,
+   16ms apart, with the outer hairline rim landing last. A bud opening, not
+   a spin.
+
+   Frequency tier: the signed-out front door, seen once per visit — the tier
+   where a decorative reveal is allowed at all. It is one-shot and never
+   loops.
+
+   The per-ring angle is computed in the component (180deg / ring count), so
+   the keyframe reads it back through `--ring-rotation`. Without holding the
+   rotation across both keyframes the rings would unwind to zero as they
+   opened, since a CSS `transform` replaces the element's `transform`
+   attribute outright.
+
+   Only `transform` and `opacity` animate: both are composited, so 31 shapes
+   animating at once costs no layout or paint. `transform-box: view-box` +
+   `transform-origin: 100px 100px` puts the origin at the rosette's centre in
+   viewBox units, which is what makes the rings open from the middle rather
+   than from the SVG's top-left corner.
+
+   Reduced motion: the whole rule is gated on `no-preference`, so a visitor
+   who asked for less motion gets the finished rosette immediately, drawn by
+   the `transform` attributes on the shapes. Nothing fades, nothing moves.
+   (Even without the gate the global reduce block above would clamp it, but
+   gating means the CSS transform never applies at all, which is what keeps
+   the static fallback correct.)                                          */
+@media (prefers-reduced-motion: no-preference) {
+  .guilloche-ring,
+  .guilloche-rim {
+    transform-box: view-box;
+    transform-origin: 100px 100px;
+    animation: guilloche-unfurl 520ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+}
+
+@keyframes guilloche-unfurl {
+  from {
+    opacity: 0;
+    transform: rotate(calc(var(--ring-rotation, 0deg) - 14deg)) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--ring-rotation, 0deg)) scale(1);
+  }
+}

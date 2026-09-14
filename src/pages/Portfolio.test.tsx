@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Portfolio } from './Portfolio'
 import { expectNoAxeViolations } from '@/test/axe'
 import { expectNoCallCarriesPortfolioShape } from '@/test/analytics-guard'
+import { VaultLockedError } from '@/lib/encrypted-rows'
 
 const getToken = vi.fn().mockResolvedValue('test-token')
 vi.mock('@clerk/clerk-react', () => ({
@@ -140,6 +141,46 @@ describe('Portfolio', () => {
     listFamilyMembers.mockResolvedValue({ members: [member], unreadableCount: 0, notYetEncryptedCount: 0 })
     listInstruments.mockResolvedValue([instrument])
     listLedgers.mockResolvedValue([baselineLedger])
+  })
+
+  /*
+    2026-09-13. A locked vault is not a load failure. Reaching /portfolio from
+    a device that has never unlocked this household (the masthead's "Holdings"
+    link does exactly that) used to render "We couldn't load your holdings.
+    Refresh to try again." — advice that cannot work, over data that is
+    perfectly intact. Dashboard has always branched on VaultLockedError; this
+    screen did not.
+  */
+  it('names the locked vault instead of reporting a load failure', async () => {
+    listHoldings.mockRejectedValue(new VaultLockedError())
+    render(<Portfolio />)
+
+    await screen.findByRole('link', { name: /unlock/i })
+    expect(screen.queryByText(/couldn't load your holdings/i)).not.toBeInTheDocument()
+    // Nothing portfolio-shaped, and above all no money, on a screen whose
+    // whole claim is that this browser cannot read the data.
+    expect(screen.queryByRole('heading', { name: /your holdings$/i })).not.toBeInTheDocument()
+    expect(document.body.textContent ?? '').not.toMatch(/₹/)
+  })
+
+  it('names the locked vault when it locks mid-session and the user switches ledger tabs', async () => {
+    // The vault can lock DURING a session: idle-lock-guard.tsx clears it
+    // after 15 minutes, and another tab can clear storage. The per-ledger
+    // fetch is a second, independent load path, and it used to swallow the
+    // lock into the same "refresh to try again" line the main load did.
+    listLedgers.mockResolvedValue([baselineLedger, nonBaselineLedger])
+    listHoldings.mockImplementation(async (_token: unknown, ledgerId?: string) => {
+      if (ledgerId === nonBaselineLedger.id) throw new VaultLockedError()
+      return { holdings: [holding], unreadableCount: 0, notYetEncryptedCount: 0 }
+    })
+    render(<Portfolio />)
+
+    await screen.findByText('Large Cap Index Fund')
+    fireEvent.click(screen.getByRole('tab', { name: 'Aggressive growth' }))
+
+    await screen.findByRole('link', { name: /unlock/i })
+    expect(screen.queryByText(/couldn't load/i)).not.toBeInTheDocument()
+    expect(document.body.textContent ?? '').not.toMatch(/₹/)
   })
 
   it('shows the empty state and a CTA when there are no holdings', async () => {

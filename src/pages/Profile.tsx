@@ -19,8 +19,10 @@ import { triggerTextDownload } from '@/lib/download'
 import * as Sentry from '@sentry/react'
 import { clearDashboardCache } from '@/lib/pwa-cache'
 import { clearVault } from '@/lib/crypto/key-store'
+import { classifyLoadFailure } from '@/lib/vault-lock'
+import { VaultLockedNotice } from '@/components/vault-locked-notice'
 
-type State = 'loading' | 'loaded' | 'error'
+type State = 'loading' | 'loaded' | 'error' | 'locked'
 
 const currency = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
 function formatInr(value: string): string {
@@ -108,9 +110,13 @@ export function Profile() {
         setProtectionRecords(protectionResult.protection)
         setHouseholdKeys(keysResult)
         setState('loaded')
-      } catch {
+      } catch (err) {
         if (cancelled) return
-        setState('error')
+        // A locked vault is not a load failure — see Portfolio.tsx's twin of
+        // this branch and src/components/vault-locked-notice.tsx. Profile is
+        // where the passphrase and recovery code are managed, so getting this
+        // wrong here is the most expensive place to get it wrong.
+        setState(classifyLoadFailure(err))
       }
     })()
     return () => {
@@ -305,6 +311,10 @@ export function Profile() {
   const groupedByMember = members
     .map((member) => ({ member, memberRecords: protectionRecords.filter((p) => p.memberId === member.id) }))
     .filter((group) => group.memberRecords.length > 0)
+
+  // Early return, same reasoning as Portfolio's: no account-shaped surface
+  // renders when this browser cannot read a single row of it.
+  if (state === 'locked') return <VaultLockedNotice surface="profile" />
 
   return (
     <main className="min-h-screen bg-background text-foreground font-sans">

@@ -384,17 +384,21 @@ describe('Dashboard', () => {
     expect(screen.queryByText('Your plan')).not.toBeInTheDocument()
   })
 
-  it('shows a single locked state and no monetary values when the vault is locked, routing to the unlock experience', async () => {
+  it('names the locked vault and offers the unlock route, with no monetary value on screen', async () => {
     fetchHousehold.mockRejectedValue(new VaultLockedError())
     listFamilyMembers.mockRejectedValue(new VaultLockedError())
     listHoldings.mockRejectedValue(new VaultLockedError())
     listProtection.mockRejectedValue(new VaultLockedError())
     renderDashboard()
 
-    await screen.findByTestId('root-redirect')
+    // 2026-09-13: this used to assert a silent <Navigate to="/">. It worked,
+    // but it told the user nothing and handled the same condition differently
+    // from Portfolio and Profile. All three now render VaultLockedNotice.
+    await screen.findByRole('link', { name: /unlock/i })
     // Not merely "no household screen" — nothing dashboard-shaped rendered at
     // all, and specifically no monetary value leaked onto the screen.
     expect(screen.queryByText('Your plan')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('root-redirect')).not.toBeInTheDocument()
     expect(document.body.textContent ?? '').not.toMatch(/₹/)
   })
 

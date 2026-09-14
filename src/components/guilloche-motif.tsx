@@ -1,4 +1,4 @@
-import { type SVGProps } from 'react'
+import { useMemo, type CSSProperties, type SVGProps } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -36,8 +36,36 @@ export type GuillocheMotifProps = Omit<SVGProps<SVGSVGElement>, 'children'> & {
 
 const DEFAULT_RINGS = 30
 
+/**
+ * Milliseconds between one ring's reveal and the next. 16ms across 30 rings
+ * is a 464ms sweep; with the 520ms per-ring duration the whole rosette is
+ * open in about a second. Small enough that the rings read as one opening
+ * flower rather than as thirty separate events.
+ */
+const RING_STAGGER_MS = 16
+
 export function GuillocheMotif({ rings = DEFAULT_RINGS, className, ...props }: GuillocheMotifProps) {
   const count = Math.max(1, Math.trunc(rings))
+
+  // Memoised on `count` alone, which is the only thing it depends on and is
+  // static in every current caller. Without this, 30 style objects and 30
+  // rotations are rebuilt on every render of the page that hosts the motif,
+  // and 30 new object identities defeat React's reconciliation for shapes
+  // that never actually change.
+  const ringProps = useMemo(
+    () =>
+      Array.from({ length: count }, (_, index) => {
+        const rotation = (index * 180) / count
+        return {
+          rotation,
+          style: {
+            '--ring-rotation': `${rotation}deg`,
+            animationDelay: `${index * RING_STAGGER_MS}ms`,
+          } as CSSProperties,
+        }
+      }),
+    [count],
+  )
 
   return (
     <svg
@@ -46,10 +74,11 @@ export function GuillocheMotif({ rings = DEFAULT_RINGS, className, ...props }: G
       height="100%"
       aria-hidden="true"
       focusable="false"
+      data-testid="guilloche-motif"
       className={cn('pointer-events-none select-none text-brass opacity-[var(--guilloche-opacity)]', className)}
       {...props}
     >
-      {Array.from({ length: count }, (_, index) => (
+      {ringProps.map(({ rotation, style }, index) => (
         <ellipse
           key={index}
           cx="100"
@@ -59,10 +88,25 @@ export function GuillocheMotif({ rings = DEFAULT_RINGS, className, ...props }: G
           fill="none"
           stroke="currentColor"
           strokeWidth="0.45"
-          transform={`rotate(${(index * 180) / count} 100 100)`}
+          // Kept as an attribute, not folded into the CSS keyframe: the
+          // keyframe only exists under `prefers-reduced-motion:
+          // no-preference`, so without it a reduced-motion visitor would
+          // get `count` identical un-rotated ellipses instead of a rosette.
+          transform={`rotate(${rotation} 100 100)`}
+          className="guilloche-ring"
+          style={style}
         />
       ))}
-      <circle cx="100" cy="100" r="97" fill="none" stroke="currentColor" strokeWidth="0.6" />
+      <circle
+        cx="100"
+        cy="100"
+        r="97"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="0.6"
+        className="guilloche-rim"
+        style={{ animationDelay: `${count * RING_STAGGER_MS}ms` }}
+      />
     </svg>
   )
 }

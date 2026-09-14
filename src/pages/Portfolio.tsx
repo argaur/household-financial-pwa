@@ -28,6 +28,8 @@ import {
 } from '@/lib/ai-suggestions-api'
 import { ReviewLedgerAction, type ReviewLedgerSuggestion } from '@/components/review-ledger-action'
 import { ImportHostSheet } from '@/components/import-host-sheet'
+import { VaultLockedNotice } from '@/components/vault-locked-notice'
+import { classifyLoadFailure } from '@/lib/vault-lock'
 import { computeAllocation } from '@/lib/allocation'
 import { useOnline } from '@/lib/use-online'
 
@@ -117,7 +119,7 @@ export function AiSuggestionSlot({
   return null
 }
 
-type State = 'loading' | 'loaded' | 'error'
+type State = 'loading' | 'loaded' | 'error' | 'locked'
 
 /** Insert-or-replace by id — shared by the Current and per-ledger holding lists. */
 function upsertHolding(prev: Holding[], holding: Holding): Holding[] {
@@ -233,9 +235,14 @@ export function Portfolio() {
         setLedgers(ledgersResult)
         setActiveLedgerId((prev) => prev ?? ledgersResult.find((l) => l.isBaseline)?.id ?? ledgersResult[0]?.id ?? null)
         setState('loaded')
-      } catch {
+      } catch (err) {
         if (cancelled) return
-        setState('error')
+        // A locked vault is not a load failure: this browser simply holds no
+        // key for the household yet (new device, new browser, cleared
+        // storage). "Refresh to try again" cannot fix it and the data is
+        // intact. src/lib/vault-lock.ts owns that distinction for all three
+        // signed-in screens.
+        setState(classifyLoadFailure(err))
       }
     })()
     return () => {
@@ -278,9 +285,16 @@ export function Portfolio() {
         if (cancelled) return
         setLedgerHoldings(result.holdings)
         setLedgerHoldingsState('loaded')
-      } catch {
+      } catch (err) {
         if (cancelled) return
-        setLedgerHoldingsState('error')
+        // Same classification as the main load, and for a reason the main
+        // load cannot cover: the vault can lock DURING a session (the idle
+        // lock in idle-lock-guard.tsx, or storage cleared in another tab).
+        // Switching ledger tabs after that would otherwise land on "refresh
+        // to try again", which is the exact message this whole fix exists to
+        // remove. `locked` is rendered by the page-level early return below,
+        // so this state never reaches the per-tab error line.
+        setLedgerHoldingsState(classifyLoadFailure(err))
       }
     })()
     return () => {
@@ -517,6 +531,10 @@ export function Portfolio() {
     () => Object.fromEntries(instruments.map((instrument) => [instrument.slug, instrument.name])),
     [instruments],
   )
+
+  // An early return, not a branch inside the shell: nothing holdings-shaped
+  // may render when the key to read the holdings is absent.
+  if (state === 'locked' || ledgerHoldingsState === 'locked') return <VaultLockedNotice surface="portfolio" />
 
   return (
     <main className="min-h-screen bg-background text-foreground font-sans">
