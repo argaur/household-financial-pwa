@@ -51,7 +51,7 @@ describe('LedgerCompareStrip', () => {
   it('renders the three totals with their deltas against Current', async () => {
     render(<LedgerCompareStrip ledger={copiedLedger} ledgerHoldings={ledgerHoldings} baselineHoldings={baselineHoldings} />)
 
-    expect(screen.getByText('Current value (₹)')).toBeInTheDocument()
+    expect(screen.getByText("This ledger's value (₹)")).toBeInTheDocument()
     expect(screen.getByText('₹2,00,000')).toBeInTheDocument()
     // ledger total 200000 vs baseline total 160000 -> +40000
     expect(screen.getByText('+₹40,000 vs Current')).toBeInTheDocument()

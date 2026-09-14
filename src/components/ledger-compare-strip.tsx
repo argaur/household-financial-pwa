@@ -65,7 +65,13 @@ export function LedgerCompareStrip({ ledger, ledgerHoldings, baselineHoldings }:
 
       <dl className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div>
-          <dt className="text-caption text-muted-foreground">Current value (₹)</dt>
+          {/* Not "Current value": `totals` is this VIEWED ledger's own total,
+              never the baseline's. "Current value (₹)" read as though it
+              named the baseline ledger (Current), when it was actually
+              labelling the number a row above the "vs Current" delta line
+              that makes the real comparison. Found 2026-09-14, flagged by
+              the 2026-09-12 council review. */}
+          <dt className="text-caption text-muted-foreground">This ledger's value (₹)</dt>
           <dd className="text-body font-medium">₹{currency.format(totals.totalValue)}</dd>
           <dd className={cn('text-caption', deltaColorClass(delta.totalValueDelta))}>
             {formatSignedDelta(delta.totalValueDelta, (n) => `₹${currency.format(n)}`)} vs Current
