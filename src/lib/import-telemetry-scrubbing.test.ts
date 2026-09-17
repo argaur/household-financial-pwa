@@ -482,7 +482,7 @@ describe('Console output during the import flow (BEHAVIOUR: every console method
   function consoleText(): string {
     return spies
       .flatMap((spy) => spy.mock.calls)
-      .map((args) => args.map((arg) => (typeof arg === 'string' ? arg : safeStringify(arg))).join(' '))
+      .map((args) => args.map((arg: unknown) => (typeof arg === 'string' ? arg : safeStringify(arg))).join(' '))
       .join(' ')
   }
 
